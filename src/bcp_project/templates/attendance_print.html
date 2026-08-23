@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Attendance Sheet — {{ meeting.title }}</title>
+<style>
+    :root {
+        --bcg: #006a4e;
+        --text: #10231d;
+        --muted: #5a6d66;
+        --border: #c5d4cc;
+        --soft: #eef4ef;
+    }
+    * { box-sizing: border-box; }
+    body {
+        font-family: "Source Sans 3", system-ui, -apple-system, sans-serif;
+        color: var(--text);
+        margin: 0;
+        padding: 2rem 2.5rem;
+        background: #fff;
+    }
+    .toolbar {
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.75rem;
+        margin-bottom: 1.5rem;
+    }
+    .toolbar button {
+        font: inherit;
+        font-weight: 700;
+        padding: 0.65rem 1.1rem;
+        border-radius: 10px;
+        border: 1px solid var(--bcg);
+        background: var(--bcg);
+        color: white;
+        cursor: pointer;
+        min-height: 40px;
+    }
+    header {
+        text-align: center;
+        border-bottom: 3px solid var(--bcg);
+        padding-bottom: 1rem;
+        margin-bottom: 1.5rem;
+    }
+    header .org {
+        font-size: 0.85rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+        font-weight: 700;
+    }
+    header h1 {
+        margin: 0.4rem 0 0;
+        font-size: 1.65rem;
+        letter-spacing: -0.02em;
+        color: var(--bcg);
+    }
+    .meta {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.5rem 2rem;
+        margin-bottom: 1.5rem;
+        font-size: 0.95rem;
+    }
+    .meta dt {
+        font-weight: 700;
+        display: inline;
+    }
+    .meta dd {
+        display: inline;
+        margin: 0;
+    }
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.9rem;
+    }
+    th, td {
+        border: 1px solid var(--border);
+        padding: 0.55rem 0.7rem;
+        text-align: left;
+        vertical-align: middle;
+    }
+    th {
+        background: var(--soft);
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--muted);
+    }
+    td.status-signed {
+        color: #0f4f2c;
+        font-weight: 700;
+    }
+    td.status-pending {
+        color: #8a1f1f;
+    }
+    .sig-cell img {
+        height: 42px;
+        display: block;
+    }
+    .sig-blank {
+        height: 42px;
+        border-bottom: 1px solid #333;
+    }
+    .col-no { width: 2.5rem; }
+    .col-sig { width: 220px; }
+    footer {
+        margin-top: 2rem;
+        font-size: 0.8rem;
+        color: var(--muted);
+        text-align: right;
+    }
+
+    @media print {
+        .no-print { display: none !important; }
+        body { padding: 0.5cm; }
+        @page { margin: 1.2cm; }
+    }
+
+    @media (max-width: 640px) {
+        body { padding: 1rem; }
+        .meta { grid-template-columns: 1fr; }
+        .col-sig { width: 120px; }
+    }
+</style>
+</head>
+<body>
+    <div class="toolbar no-print">
+        <button type="button" onclick="window.print()">Print</button>
+    </div>
+
+    <header>
+        <div class="org">Sonali Bank PLC</div>
+        <h1>Board Meeting Attendance Sheet</h1>
+    </header>
+
+    <dl class="meta">
+        <div><dt>Meeting:</dt> <dd>{{ meeting.title }}</dd></div>
+        <div><dt>Status:</dt> <dd>{{ meeting.status.value | capitalize }}</dd></div>
+        <div><dt>Date &amp; Time:</dt> <dd>{{ meeting.scheduled_at.strftime('%Y-%m-%d %H:%M') }}</dd></div>
+        <div><dt>Location:</dt> <dd>{{ meeting.location or '—' }}</dd></div>
+    </dl>
+
+    <table>
+        <thead>
+            <tr>
+                <th class="col-no">#</th>
+                <th>Board Member</th>
+                <th>Checked In At</th>
+                <th class="col-sig">Signature</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for invite in invitations %}
+            {% set record = attendance.get(invite.username) %}
+            <tr>
+                <td class="col-no">{{ loop.index }}</td>
+                <td>{{ invite.username }}</td>
+                {% if record %}
+                <td class="status-signed">{{ record.signed_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                <td class="sig-cell"><img src="/meetings/{{ meeting.id }}/attendance/{{ invite.username }}/signature" alt="Signature of {{ invite.username }}" /></td>
+                {% else %}
+                <td class="status-pending">Not signed in</td>
+                <td class="sig-cell"><div class="sig-blank"></div></td>
+                {% endif %}
+            </tr>
+            {% endfor %}
+            {% if not invitations %}
+            <tr><td colspan="4">No board members were invited to this meeting.</td></tr>
+            {% endif %}
+        </tbody>
+    </table>
+
+    <footer>
+        Generated by {{ generated_by }} on {{ generated_at.strftime('%Y-%m-%d %H:%M') }} UTC
+    </footer>
+</body>
+</html>

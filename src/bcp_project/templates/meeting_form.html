@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block title %}Schedule Meeting | Sonali Bank Archive System{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div class="title-group">
+        <h1>Schedule meeting</h1>
+        <p>Set the date, agenda, and invite board members and other users.</p>
+    </div>
+    <a class="button button-secondary" href="/meetings">Back</a>
+</div>
+
+<section class="panel">
+    <form action="/meetings" method="post" class="form-grid">
+        <div class="form-section">
+            <div class="form-section-label">Basics</div>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label for="title">Meeting title</label>
+                    <input id="title" type="text" name="title" required minlength="3" maxlength="200" placeholder="Q3 Board Review" />
+                </div>
+                <div class="form-group">
+                    <label for="scheduled_at">Date &amp; time</label>
+                    <input id="scheduled_at" type="datetime-local" name="scheduled_at" required />
+                </div>
+                <div class="form-group">
+                    <label for="location">Location / link</label>
+                    <input id="location" type="text" name="location" placeholder="Board Room, Sonali Bank HQ or video call link" />
+                </div>
+            </div>
+        </div>
+
+        <div class="form-section">
+            <div class="form-section-label">Agenda</div>
+            <div class="form-group">
+                <label for="agenda">Initial agenda</label>
+                <textarea id="agenda" name="agenda" rows="6" placeholder="Agenda items can be updated later from the meeting page."></textarea>
+            </div>
+        </div>
+
+        <div class="form-section">
+            <div class="form-section-label">Notifications</div>
+            <label class="checkbox-item">
+                <input type="checkbox" name="notifications_enabled" value="1" checked />
+                Enable email invitations &amp; reminders (48h / 24h) for invitees
+            </label>
+            <p class="muted" style="margin: 0.5rem 0 0;">Invitees with email addresses also get an in-app notification. Requires Resend for email delivery.</p>
+        </div>
+
+        <div class="form-section">
+            <div class="form-section-label">Invitees</div>
+            <p class="muted" style="margin: 0 0 0.75rem;">Select board members and any other roles you want at this meeting.</p>
+            {% if invitees_by_role %}
+            {% for group in invitees_by_role %}
+            <div class="form-group" style="margin-bottom: 1rem;">
+                <label>{{ group.label }}</label>
+                <div class="checkbox-list">
+                    {% for member in group.users %}
+                    <label class="checkbox-item">
+                        <input type="checkbox" name="invitees" value="{{ member.username }}"{% if member.username == user.username %} checked{% endif %} />
+                        {{ member.username }}{% if member.email %} <span class="muted">({{ member.email }})</span>{% endif %}
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+            {% else %}
+            <p class="muted">No active user accounts yet. Create users from <a class="doc-link" href="/admin/users">Manage users</a>.</p>
+            {% endif %}
+        </div>
+
+        <div class="form-actions-sticky">
+            <button type="submit" class="button-block">Create meeting</button>
+        </div>
+    </form>
+</section>
+{% endblock %}

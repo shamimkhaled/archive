@@ -1,0 +1,315 @@
+{% extends "base.html" %}
+
+{% block title %}Upload Document | Sonali Bank Archive System{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div class="title-group">
+        <h1>Upload document</h1>
+        <p>Submit a PDF to parse, summarize, and index in the archive.</p>
+    </div>
+    <div class="badge">{{ user.username }} · {{ user.role.value | replace('_', ' ') | title }}</div>
+</div>
+
+<section class="panel">
+    {% if status == 'success' %}
+    <div class="alert alert-success" role="status">
+      Upload complete. Summary is searchable now; deeper text indexing continues in the background for a few moments.
+    </div>
+    {% endif %}
+
+    <div id="uploadState" class="upload-flow{% if status == 'success' %} is-complete{% endif %}" aria-live="polite">
+        <div class="upload-flow-header">
+            <h2 class="upload-flow-title">{% if status == 'success' %}Ingestion complete{% else %}Ingestion pipeline{% endif %}</h2>
+            <p id="uploadMessage" class="upload-message">
+                {% if status == 'success' %}
+                Document uploaded, parsed, summarized, and indexed.
+                {% else %}
+                Waiting for document upload…
+                {% endif %}
+            </p>
+        </div>
+
+        <ol class="upload-steps" id="uploadSteps">
+            <li class="upload-step{% if status == 'success' %} is-done{% else %} is-pending{% endif %}" data-step="upload">
+                <span class="upload-step-index" aria-hidden="true">1</span>
+                <span class="upload-step-body">
+                    <strong>Upload</strong>
+                    <span>Send PDF to the server</span>
+                </span>
+            </li>
+            <li class="upload-step{% if status == 'success' %} is-done{% else %} is-pending{% endif %}" data-step="parse">
+                <span class="upload-step-index" aria-hidden="true">2</span>
+                <span class="upload-step-body">
+                    <strong>Parse</strong>
+                    <span>Extract text from the PDF</span>
+                </span>
+            </li>
+            <li class="upload-step{% if status == 'success' %} is-done{% else %} is-pending{% endif %}" data-step="summarize">
+                <span class="upload-step-index" aria-hidden="true">3</span>
+                <span class="upload-step-body">
+                    <strong>Summarize</strong>
+                    <span>Build summary &amp; keywords</span>
+                </span>
+            </li>
+            <li class="upload-step{% if status == 'success' %} is-done{% else %} is-pending{% endif %}" data-step="index">
+                <span class="upload-step-index" aria-hidden="true">4</span>
+                <span class="upload-step-body">
+                    <strong>Index</strong>
+                    <span>Store in search archive</span>
+                </span>
+            </li>
+        </ol>
+
+        <div class="progress-wrap">
+            <div class="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{% if status == 'success' %}100{% else %}0{% endif %}" id="progressBar">
+                <div class="progress-fill{% if status == 'success' %} is-complete{% endif %}" id="progressFill" style="width: {% if status == 'success' %}100%{% else %}0%{% endif %};">
+                    <span id="progressLabel">{% if status == 'success' %}100%{% endif %}</span>
+                </div>
+            </div>
+            <p id="progressHint" class="progress-hint muted">
+                {% if status == 'success' %}
+                Ready for another upload below.
+                {% else %}
+                Progress updates while the document is processed.
+                {% endif %}
+            </p>
+        </div>
+    </div>
+
+    <form id="uploadForm" action="/upload" method="post" enctype="multipart/form-data" class="form-grid" {% if status != 'success' %}{% endif %}>
+        <div class="form-section">
+            <div class="form-section-label">Document details</div>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label for="doc_date">Document date</label>
+                    <input id="doc_date" type="date" name="doc_date" required value="{{ default_doc_date }}" />
+                </div>
+                <div class="form-group">
+                    <label for="doc_id">Document ID</label>
+                    <input id="doc_id" type="text" name="doc_id" required
+                           value="{{ suggested_doc_id }}"
+                           placeholder="SB-2026-001" autocomplete="off"
+                           aria-describedby="docIdHelp" />
+                    <p class="field-hint" id="docIdHelp">Suggested automatically. Edit if you need a different ID.</p>
+                </div>
+                <div class="form-group">
+                    <label for="doc_type">Document type</label>
+                    <select id="doc_type" name="doc_type" required>
+                        <option value="meeting minutes">Meeting Minutes</option>
+                        <option value="agreement">Agreement</option>
+                        <option value="others">Others</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="form-section">
+            <div class="form-section-label">Indexing</div>
+            <div class="form-group">
+                <label for="keywords">Keywords</label>
+                <textarea id="keywords" name="keywords" rows="3" placeholder="Optional keywords or JSON list"></textarea>
+            </div>
+        </div>
+
+        <div class="form-section">
+            <div class="form-section-label">File</div>
+            <div class="form-group">
+                <label for="file">PDF file</label>
+                <input id="file" type="file" name="file" accept="application/pdf" required />
+            </div>
+        </div>
+
+        <div class="form-actions-sticky">
+            <button id="submitButton" type="submit" class="button-block">Upload document</button>
+        </div>
+    </form>
+</section>
+
+<script>
+(function () {
+    const uploadForm = document.getElementById('uploadForm');
+    const submitButton = document.getElementById('submitButton');
+    const uploadMessage = document.getElementById('uploadMessage');
+    const progressFill = document.getElementById('progressFill');
+    const progressBar = document.getElementById('progressBar');
+    const progressLabel = document.getElementById('progressLabel');
+    const progressHint = document.getElementById('progressHint');
+    const uploadState = document.getElementById('uploadState');
+    const steps = Array.from(document.querySelectorAll('.upload-step'));
+    const docIdInput = document.getElementById('doc_id');
+    const docDateInput = document.getElementById('doc_date');
+    let docIdManual = false;
+    let lastAutoId = docIdInput ? docIdInput.value : '';
+
+    function yearFromDate() {
+        if (!docDateInput || !docDateInput.value) {
+            return new Date().getFullYear();
+        }
+        const y = Number(docDateInput.value.slice(0, 4));
+        return y >= 1990 && y <= 2100 ? y : new Date().getFullYear();
+    }
+
+    async function refreshSuggestedId() {
+        if (!docIdInput || docIdManual) return;
+        try {
+            const res = await fetch('/api/documents/next-id?year=' + encodeURIComponent(yearFromDate()), {
+                credentials: 'same-origin',
+                headers: { Accept: 'application/json' },
+            });
+            if (!res.ok) return;
+            const data = await res.json();
+            if (data && data.doc_id) {
+                lastAutoId = data.doc_id;
+                docIdInput.value = data.doc_id;
+            }
+        } catch (err) {
+            // Keep current value if suggestion fails.
+        }
+    }
+
+    if (docIdInput) {
+        docIdInput.addEventListener('input', function () {
+            docIdManual = docIdInput.value.trim() !== lastAutoId;
+        });
+    }
+    if (docDateInput) {
+        docDateInput.addEventListener('change', refreshSuggestedId);
+    }
+
+    function setProgress(pct) {
+        const value = Math.max(0, Math.min(100, Math.round(Number(pct) || 0)));
+        progressFill.style.width = value + '%';
+        progressFill.classList.remove('indeterminate');
+        progressLabel.textContent = value + '%';
+        progressBar.setAttribute('aria-valuenow', String(value));
+    }
+
+    function setActiveStep(stepName) {
+        let found = false;
+        steps.forEach((el) => {
+            const name = el.getAttribute('data-step');
+            el.classList.remove('is-pending', 'is-active', 'is-done');
+            if (name === stepName) {
+                el.classList.add('is-active');
+                found = true;
+            } else if (!found) {
+                el.classList.add('is-done');
+            } else {
+                el.classList.add('is-pending');
+            }
+        });
+    }
+
+    function markComplete() {
+        steps.forEach((el) => {
+            el.classList.remove('is-pending', 'is-active');
+            el.classList.add('is-done');
+        });
+        setProgress(100);
+        progressFill.classList.add('is-complete');
+        uploadState.classList.remove('is-running');
+        uploadState.classList.add('is-complete');
+    }
+
+    function failUpload(message) {
+        uploadState.classList.remove('is-running');
+        uploadMessage.textContent = message || 'Upload failed';
+        progressHint.textContent = 'Fix the issue and try again.';
+        submitButton.disabled = false;
+        submitButton.textContent = 'Upload document';
+    }
+
+    function applyEvent(evt) {
+        if (evt.step) setActiveStep(evt.step);
+        if (typeof evt.pct === 'number') setProgress(evt.pct);
+        if (evt.title) uploadMessage.textContent = evt.title;
+        if (evt.hint) progressHint.textContent = evt.hint;
+        if (evt.error) {
+            failUpload(evt.error);
+            return false;
+        }
+        if (evt.done) {
+            markComplete();
+            submitButton.textContent = 'Complete';
+            window.location.href = evt.redirect || '/upload?status=success';
+            return false;
+        }
+        return true;
+    }
+
+    uploadForm.addEventListener('submit', async function (event) {
+        event.preventDefault();
+        if (submitButton.disabled) return;
+
+        submitButton.disabled = true;
+        submitButton.textContent = 'Processing…';
+        uploadState.classList.add('is-running');
+        uploadState.classList.remove('is-complete');
+        progressFill.classList.remove('is-complete');
+        setProgress(2);
+        setActiveStep('upload');
+        uploadMessage.textContent = 'Starting upload…';
+        progressHint.textContent = 'Connecting to the server.';
+
+        const headers = (window.BCPCsrf && window.BCPCsrf.headers)
+            ? window.BCPCsrf.headers()
+            : {};
+        headers['Accept'] = 'application/x-ndjson';
+
+        try {
+            const response = await fetch('/api/upload/stream', {
+                method: 'POST',
+                body: new FormData(uploadForm),
+                headers: headers,
+                credentials: 'same-origin',
+            });
+
+            if (!response.ok && !response.body) {
+                failUpload('Upload failed (' + response.status + ').');
+                return;
+            }
+
+            const reader = response.body && response.body.getReader
+                ? response.body.getReader()
+                : null;
+
+            if (!reader) {
+                failUpload('Live progress is unavailable in this browser. Use a modern browser, or disable JavaScript to use classic upload.');
+                return;
+            }
+
+            const decoder = new TextDecoder();
+            let buffer = '';
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+                for (let i = 0; i < lines.length; i += 1) {
+                    const line = lines[i].trim();
+                    if (!line) continue;
+                    let evt;
+                    try {
+                        evt = JSON.parse(line);
+                    } catch (err) {
+                        continue;
+                    }
+                    if (!applyEvent(evt)) return;
+                }
+            }
+            if (buffer.trim()) {
+                try {
+                    const evt = JSON.parse(buffer.trim());
+                    if (!applyEvent(evt)) return;
+                } catch (err) { /* ignore trailing partial */ }
+            }
+            failUpload('Upload ended without a completion signal. Check the server logs.');
+        } catch (err) {
+            failUpload((err && err.message) || 'Network error during upload.');
+        }
+    });
+})();
+</script>
+{% endblock %}

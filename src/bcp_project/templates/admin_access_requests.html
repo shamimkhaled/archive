@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}Review access requests | Sonali Bank Archive System{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div class="title-group">
+        <h1>Review access requests</h1>
+        <p>Approve or deny archive view/download requests.</p>
+    </div>
+    <a class="button button-secondary" href="/access-requests">My requests</a>
+</div>
+
+<section class="panel">
+    <form method="get" action="/admin/access-requests" class="search-control" style="margin-bottom:1rem;">
+        <label for="status_filter" class="muted">Filter</label>
+        <select id="status_filter" name="status_filter" onchange="this.form.submit()">
+            {% for s in statuses %}
+            <option value="{{ s.value }}" {% if status_filter == s.value %}selected{% endif %}>{{ s.value }}</option>
+            {% endfor %}
+        </select>
+    </form>
+
+    {% if not requests %}
+    <p class="muted">No requests in this filter.</p>
+    {% else %}
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Document</th>
+                    <th>Requester</th>
+                    <th>Mode</th>
+                    <th>Purpose</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in requests %}
+                <tr>
+                    <td>{{ row.doc_id }}</td>
+                    <td>{{ row.requester_username }}</td>
+                    <td>{{ row.requested_mode.value }}</td>
+                    <td>{{ row.purpose }}</td>
+                    <td><span class="badge">{{ row.status.value }}</span></td>
+                    <td>
+                        {% if row.status.value == 'pending' %}
+                        <form method="post" action="/admin/access-requests/{{ row.id }}/review" style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+                            <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token', '') }}" />
+                            <input type="number" name="grant_days" value="7" min="1" max="365" title="Grant days" style="width:4.5rem;" />
+                            <input type="text" name="review_note" placeholder="Note (optional)" />
+                            <button type="submit" name="decision" value="approve" class="button">Approve</button>
+                            <button type="submit" name="decision" value="deny" class="button button-secondary">Deny</button>
+                        </form>
+                        {% else %}
+                        <span class="muted">{{ row.reviewed_by or '—' }}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+</section>
+{% endblock %}

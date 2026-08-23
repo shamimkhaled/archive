@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block title %}Sign In | {{ brand.product_name }}{% endblock %}
+{% block body_class %}auth-page{% endblock %}
+
+{% block content %}
+<div class="login-shell">
+    <aside class="login-brand-panel" aria-label="{{ brand.product_name }}">
+        <img
+            class="login-brand-photo"
+            src="{{ brand.login_background_path }}"
+            alt=""
+            width="1920"
+            height="1280"
+            decoding="async"
+            fetchpriority="high"
+        />
+        <div class="login-brand-scrim login-brand-scrim--photo" aria-hidden="true"></div>
+        <div class="login-brand-stack">
+            <div class="login-brand-inner login-brand-inner--minimal">
+                <p class="brand-tagline-bn">{{ brand.tagline_bn }}</p>
+                <p class="brand-tagline">{{ brand.tagline_en }}</p>
+            </div>
+            <footer class="login-brand-footer">
+                <p class="login-brand-credit">
+                    Powered by
+                    <a href="https://alawaf.com.bd" target="_blank" rel="noopener noreferrer">Alawaf</a>
+                </p>
+                <a class="login-brand-credit-link" href="https://alawaf.com.bd" target="_blank" rel="noopener noreferrer">alawaf.com.bd</a>
+            </footer>
+        </div>
+    </aside>
+    <div class="login-form-panel">
+        <div class="auth-card">
+            <div class="brand-splash">
+                <img src="{{ brand.logo_path }}" alt="{{ brand.org_name }}" width="52" height="52" />
+                <div>
+                    <strong>{{ brand.product_name }}</strong>
+                    <span>{{ brand.org_name }}</span>
+                </div>
+            </div>
+            <h1>Sign in</h1>
+            <p class="auth-lead">Access meetings, the secure archive, and board workspace.</p>
+
+            {% if request.query_params.get('error') == 'invalid' %}
+            <div class="alert alert-error" role="alert">Incorrect username or password. Please try again.</div>
+            {% elif request.query_params.get('error') == 'inactive' %}
+            <div class="alert alert-error" role="alert">This account is inactive. Contact an administrator.</div>
+            {% elif request.query_params.get('error') == 'locked' %}
+            <div class="alert alert-error" role="alert">Too many failed attempts. Try again in a few minutes.</div>
+            {% endif %}
+
+            <form action="/login" method="post" class="form-grid" id="loginForm">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input id="username" type="text" name="username" required autocomplete="username" autofocus />
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input id="password" type="password" name="password" required autocomplete="current-password" />
+                </div>
+                <button type="submit" class="button-block" id="loginSubmit">
+                    <span class="login-submit-label">Sign In</span>
+                    <span class="login-submit-busy" hidden>Signing in…</span>
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var form = document.getElementById("loginForm");
+  var btn = document.getElementById("loginSubmit");
+  if (!form || !btn) return;
+  form.addEventListener("submit", function () {
+    if (btn.disabled) return;
+    btn.disabled = true;
+    btn.classList.add("is-loading");
+    var label = btn.querySelector(".login-submit-label");
+    var busy = btn.querySelector(".login-submit-busy");
+    if (label) label.hidden = true;
+    if (busy) busy.hidden = false;
+  });
+})();
+</script>
+{% endblock %}

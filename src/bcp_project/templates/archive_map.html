@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+
+{% block title %}Mind Map | {{ brand.product_name }}{% endblock %}
+
+{% block content %}
+<div class="neural-map-page mind-map-page" data-page="archive-map">
+    <div class="neural-map-header">
+        <div class="title-group">
+            <p class="neural-map-kicker">Archive workflow</p>
+            <h1>Document mind map</h1>
+            <p class="neural-map-lead">Select a document, follow the connection path, and explore related records grouped by how they link together.</p>
+        </div>
+        <div class="badge">{{ user.username }} · {{ 'Board Member' if user.role.value == 'board_member' else user.role.value | replace('_', ' ') | title }}</div>
+    </div>
+
+    <section class="neural-map-workspace panel">
+        <div class="neural-map-toolbar mind-map-toolbar">
+            <div class="mind-map-toolbar-meta">
+                <p class="mind-map-focus-label">Workflow focus</p>
+                <p class="mind-map-focus-value" id="mapFocusLabel">Select a document to start</p>
+            </div>
+            <div class="neural-toolbar-group">
+                <label for="mapLimit">Scope</label>
+                <select id="mapLimit">
+                    <option value="40">40 docs</option>
+                    <option value="80" selected>80 docs</option>
+                    <option value="120">120 docs</option>
+                </select>
+            </div>
+            <div class="neural-toolbar-group">
+                <label for="mapMinSimilarity">Similarity</label>
+                <select id="mapMinSimilarity">
+                    <option value="0.6">60%+</option>
+                    <option value="0.68" selected>68%+</option>
+                    <option value="0.75">75%+</option>
+                    <option value="0.82">82%+</option>
+                </select>
+            </div>
+            <button type="button" class="button button-secondary neural-toolbar-btn" id="mapClearFocusBtn">Clear focus</button>
+            <button type="button" class="button neural-toolbar-btn" id="mapReloadBtn">Refresh</button>
+        </div>
+
+        <ol class="mind-map-workflow-steps" id="mapWorkflowSteps" aria-label="Mind map workflow">
+            <li class="mind-map-step is-active" data-step="select"><span>1</span> Select document</li>
+            <li class="mind-map-step" data-step="connect"><span>2</span> Connection types</li>
+            <li class="mind-map-step" data-step="related"><span>3</span> Related documents</li>
+        </ol>
+
+        <div class="neural-map-body mind-map-layout" id="mindMapLayout">
+            <aside class="mind-map-doc-panel" aria-label="Document list">
+                <div class="mind-map-doc-panel-head">
+                    <label for="mapDocSearch">Search documents</label>
+                    <input id="mapDocSearch" type="search" placeholder="Search by ID, title, or type…" autocomplete="off" />
+                    <div class="mind-map-doc-filters" id="mapDocTypeFilters" aria-label="Filter by document type"></div>
+                    <p class="mind-map-doc-count" id="mapDocCount">Loading documents…</p>
+                </div>
+                <div class="mind-map-doc-list-wrap">
+                    <div class="mind-map-doc-list" id="mapDocList" role="listbox" aria-label="Archive documents"></div>
+                    <p class="mind-map-doc-empty" id="mapDocEmpty" hidden>No documents match your search.</p>
+                </div>
+            </aside>
+
+            <div class="mind-map-canvas-column">
+                <div class="mind-map-canvas-head">
+                    <div class="mind-map-view-tabs" role="tablist" aria-label="Mind map view">
+                        <button type="button" class="mind-map-view-tab is-active" data-view="workflow" role="tab" aria-selected="true">Workflow map</button>
+                        <button type="button" class="mind-map-view-tab" data-view="overview" role="tab" aria-selected="false">Archive overview</button>
+                    </div>
+                    <div class="mind-map-connection-stats" id="mapConnectionStats"></div>
+                </div>
+
+                <div class="mind-map-visual-panel is-active" data-panel="workflow">
+                    <div class="neural-tree-shell mind-map-canvas" id="archiveMapGraph">
+                        <div class="neural-tree-empty" id="neuralTreeEmpty" hidden>
+                            <div class="neural-tree-empty-icon" aria-hidden="true">◎</div>
+                            <h2>No connections yet</h2>
+                            <p>Select a document from the list to visualize its workflow, or upload more archive records to grow the map.</p>
+                        </div>
+                        <div class="neural-tree-controls" aria-label="Map zoom controls">
+                            <button type="button" id="neuralZoomIn" title="Zoom in">+</button>
+                            <button type="button" id="neuralZoomOut" title="Zoom out">−</button>
+                            <button type="button" id="neuralZoomFit" title="Fit to view">Fit</button>
+                        </div>
+                        <div class="neural-tree-legend">
+                            <span><i class="edge-dot edge-semantic"></i> Semantic</span>
+                            <span><i class="edge-dot edge-project"></i> Project</span>
+                            <span><i class="edge-dot edge-person"></i> Person</span>
+                            <span><i class="edge-dot edge-organization"></i> Org</span>
+                            <span><i class="edge-dot edge-keyword"></i> Keyword</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mind-map-visual-panel" data-panel="overview" hidden>
+                    <div class="mind-map-overview-grid" id="mapOverviewGrid" aria-label="Documents by type"></div>
+                </div>
+            </div>
+
+            <aside class="mind-map-workflow-panel" id="mapWorkflowPanel" aria-label="Organized connections">
+                <div class="mind-map-workflow-panel-head">
+                    <p class="neural-detail-kicker">Connection workflow</p>
+                    <h2 id="mapWorkflowTitle">Select a document</h2>
+                    <p class="mind-map-workflow-lead" id="mapWorkflowLead">Choose a document to see organized connection paths.</p>
+                </div>
+                <div class="mind-map-workflow-groups" id="mapWorkflowGroups"></div>
+            </aside>
+
+            <aside class="neural-detail-drawer" id="archiveMapSidebar" hidden>
+                <button type="button" class="neural-detail-close" id="mapSidebarClose" aria-label="Close details">×</button>
+                <p class="neural-detail-kicker">Document details</p>
+                <h2 id="mapSidebarTitle">Document</h2>
+                <p class="neural-detail-meta" id="mapSidebarMeta"></p>
+                <div class="neural-detail-tags" id="mapSidebarTags"></div>
+                <h3>Projects</h3>
+                <ul id="mapSidebarProjects" class="neural-detail-list"></ul>
+                <h3>All connections</h3>
+                <ul id="mapSidebarConnections" class="neural-detail-list"></ul>
+                <div class="neural-detail-actions">
+                    <a class="button button-block" id="mapSidebarView" href="#">Open document</a>
+                    <button type="button" class="button button-secondary button-block" id="mapSidebarFocus">Set as workflow focus</button>
+                </div>
+            </aside>
+        </div>
+
+        <footer class="neural-map-status" id="archiveMapStatus">Loading mind map…</footer>
+    </section>
+</div>
+<input type="hidden" id="mapFocusDoc" value="" />
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/archive-graph.js?v={{ static_version }}"></script>
+<script>
+(function () {
+  if (!window.BCPArchiveGraph) return;
+  var params = new URLSearchParams(window.location.search);
+  window.BCPArchiveGraph.initMapPage({
+    containerId: "archiveMapGraph",
+    emptyId: "neuralTreeEmpty",
+    statusId: "archiveMapStatus",
+    sidebarId: "archiveMapSidebar",
+    sidebarCloseId: "mapSidebarClose",
+    focusInputId: "mapFocusDoc",
+    focusLabelId: "mapFocusLabel",
+    limitSelectId: "mapLimit",
+    similaritySelectId: "mapMinSimilarity",
+    reloadBtnId: "mapReloadBtn",
+    clearFocusBtnId: "mapClearFocusBtn",
+    docSearchId: "mapDocSearch",
+    docListId: "mapDocList",
+    docCountId: "mapDocCount",
+    docEmptyId: "mapDocEmpty",
+    docTypeFiltersId: "mapDocTypeFilters",
+    workflowStepsId: "mapWorkflowSteps",
+    workflowPanelId: "mapWorkflowPanel",
+    workflowTitleId: "mapWorkflowTitle",
+    workflowLeadId: "mapWorkflowLead",
+    workflowGroupsId: "mapWorkflowGroups",
+    connectionStatsId: "mapConnectionStats",
+    overviewGridId: "mapOverviewGrid",
+    zoomInId: "neuralZoomIn",
+    zoomOutId: "neuralZoomOut",
+    zoomFitId: "neuralZoomFit",
+    initialFocus: params.get("focus") || "",
+  });
+})();
+</script>
+{% endblock %}

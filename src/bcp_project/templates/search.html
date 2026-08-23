@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}Search Documents | Sonali Bank Archive System{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div class="title-group">
+        <h1>Search Documents</h1>
+        <p>Search both extracted keywords and document summary content for related files.</p>
+    </div>
+    <div class="badge">{{ user.username }} · {{ 'Board Member' if user.role.value == 'board_member' else user.role.value | replace('_', ' ') | title }}</div>
+</div>
+
+<section class="panel" data-page="search" id="searchPage">
+    <div class="search-tabs" role="tablist">
+        <button id="tabKeyword" type="button" class="search-tab active" role="tab" aria-selected="true" data-search-tab="keyword" onclick="if(window.BCPNav)window.BCPNav.showSearchPanel('keyword')">Keyword Search</button>
+        <button id="tabMetadata" type="button" class="search-tab" role="tab" aria-selected="false" data-search-tab="metadata" onclick="if(window.BCPNav)window.BCPNav.showSearchPanel('metadata')">Metadata Search</button>
+    </div>
+
+    <div id="keywordPanel" class="search-panel" role="tabpanel" data-search-panel="keyword" aria-hidden="false">
+        <div class="search-control">
+            <input id="searchQuery" type="search" placeholder="Enter keyword or document summary phrase" enterkeyhint="search" autocomplete="off" />
+            <button id="searchButton" type="button">Search</button>
+        </div>
+    </div>
+
+    <div id="metadataPanel" class="search-panel is-hidden" role="tabpanel" data-search-panel="metadata" aria-hidden="true">
+        <div class="form-grid metadata-search-grid">
+            <div class="form-group">
+                <label for="metaDocId">Document ID</label>
+                <input id="metaDocId" type="text" placeholder="e.g. SB-2026-001" autocomplete="off" />
+            </div>
+            <div class="form-group">
+                <label for="metaDocType">Document Type</label>
+                <input id="metaDocType" type="text" placeholder="e.g. Minutes, Budget" autocomplete="off" />
+            </div>
+            <div class="form-group">
+                <label for="metaUploadedBy">Uploaded By</label>
+                <input id="metaUploadedBy" type="text" placeholder="Username" autocomplete="off" />
+            </div>
+            <div class="form-group">
+                <label for="metaDateFrom">Date From</label>
+                <input id="metaDateFrom" type="date" />
+            </div>
+            <div class="form-group">
+                <label for="metaDateTo">Date To</label>
+                <input id="metaDateTo" type="date" />
+            </div>
+        </div>
+        <button id="metadataSearchButton" type="button" class="button-block">Search</button>
+    </div>
+
+    <div id="searchResults" class="search-results" aria-live="polite">
+        <p class="muted">Search results will appear here after you submit a query.</p>
+    </div>
+</section>
+{% endblock %}

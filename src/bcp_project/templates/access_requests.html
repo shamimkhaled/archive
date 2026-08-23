@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block title %}My access requests | Sonali Bank Archive System{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div class="title-group">
+        <h1>Access requests</h1>
+        <p>Request archive access when your role does not already include direct viewing.</p>
+    </div>
+    {% if is_reviewer %}
+    <a class="button button-secondary" href="/admin/access-requests">Review queue</a>
+    {% endif %}
+</div>
+
+{% if status == 'submitted' %}
+<div class="banner success">Request submitted for review.</div>
+{% endif %}
+{% if error %}
+<div class="banner error">{{ error | replace('+', ' ') }}</div>
+{% endif %}
+
+{% if can_create_requests %}
+<section class="panel">
+    <h2>New request</h2>
+    <form method="post" action="/access-requests" class="form-grid">
+        <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token', '') }}" />
+        <div class="form-group">
+            <label for="doc_id">Document ID</label>
+            <input id="doc_id" name="doc_id" type="text" required placeholder="e.g. SB-2026-001" />
+        </div>
+        <div class="form-group">
+            <label for="requested_mode">Access type</label>
+            <select id="requested_mode" name="requested_mode">
+                {% for mode in modes %}
+                <option value="{{ mode.value }}">{{ mode.value | replace('_', ' ') | title }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group" style="grid-column: 1 / -1;">
+            <label for="purpose">Purpose</label>
+            <textarea id="purpose" name="purpose" rows="3" required></textarea>
+        </div>
+        <button type="submit" class="button">Submit</button>
+    </form>
+</section>
+{% else %}
+<section class="panel">
+    <h2>Archive access</h2>
+    <p class="muted">Your role already has watermarked archive viewing. Archive downloads remain admin-only, so no access request is needed here.</p>
+</section>
+{% endif %}
+
+<section class="panel" style="margin-top:1rem;">
+    <h2>Your requests</h2>
+    {% if not requests %}
+    <p class="muted">No requests yet.</p>
+    {% else %}
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Document</th>
+                    <th>Mode</th>
+                    <th>Status</th>
+                    <th>Expires</th>
+                    <th>Submitted</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in requests %}
+                <tr>
+                    <td>
+                        {% if row.status.value == 'approved' %}
+                        <a href="/view/{{ row.doc_id }}?from=/access-requests">{{ row.doc_id }}</a>
+                        {% else %}
+                        {{ row.doc_id }}
+                        {% endif %}
+                    </td>
+                    <td>{{ row.requested_mode.value }}</td>
+                    <td><span class="badge">{{ row.status.value }}</span></td>
+                    <td>{{ row.expires_at.strftime('%Y-%m-%d') if row.expires_at else '—' }}</td>
+                    <td>{{ row.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+</section>
+{% endblock %}

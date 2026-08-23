@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% from "macros/ui.html" import empty_state %}
+
+{% block title %}{{ meeting.title }} | Sonali Bank Archive System{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div class="title-group">
+        <h1>{{ meeting.title }}</h1>
+        <p>{{ meeting.scheduled_at.strftime('%Y-%m-%d %H:%M') }}{% if meeting.location %} · {{ meeting.location }}{% endif %}</p>
+    </div>
+    <div class="badge">{{ meeting.status.value | capitalize }}</div>
+</div>
+
+{% if status == 'signed' %}
+<div class="alert alert-success" role="status">You're checked in. Thanks for signing in.</div>
+{% endif %}
+
+<nav class="section-tabs" aria-label="Meeting sections">
+    <a href="#attendance">Check-in</a>
+    <a href="#agenda">Agenda</a>
+    <a href="#documents">Documents</a>
+</nav>
+
+<section class="panel" id="attendance">
+    <h2>Attendance</h2>
+    {% if my_attendance %}
+    <p class="muted">You checked in at {{ my_attendance.signed_at.strftime('%Y-%m-%d %H:%M') }}.</p>
+    {% elif meeting.attendance_open %}
+    <p>Sign below to record your attendance for this meeting.</p>
+    <div class="sig-wrap">
+        <canvas id="sig-pad" width="400" height="150" aria-label="Signature pad"></canvas>
+        <div class="sig-actions">
+            <button type="button" id="sig-clear" class="button-secondary">Clear</button>
+            <form id="sig-form" action="/board/meetings/{{ meeting.id }}/attendance" method="post" style="flex:1;">
+                <input type="hidden" name="signature" id="sig-data" />
+                <button type="submit" id="sig-submit" class="button-block" disabled>Sign &amp; check in</button>
+            </form>
+        </div>
+    </div>
+    {% else %}
+    <p class="muted">Attendance check-in has not been opened by the organizer yet.</p>
+    {% endif %}
+</section>
+
+<section class="panel" id="agenda">
+    <h2>Agenda</h2>
+    {% if meeting.agenda %}
+    <p style="white-space: pre-wrap; color: var(--text);">{{ meeting.agenda }}</p>
+    {% else %}
+    {{ empty_state("No agenda yet", "The organizer has not posted an agenda.") }}
+    {% endif %}
+</section>
+
+<section class="panel" id="documents">
+    <h2>Documents</h2>
+    {% if documents %}
+    <table class="data-table table-desktop">
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Uploaded at</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for doc in documents %}
+            <tr>
+                <td>{{ doc.title }}</td>
+                <td>{{ doc.uploaded_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                <td><a class="doc-link" href="/board/meetings/{{ meeting.id }}/documents/{{ doc.id }}/view">View</a></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <div class="mobile-card-list">
+        {% for doc in documents %}
+        <article class="mobile-card">
+            <h3>{{ doc.title }}</h3>
+            <dl>
+                <div><dt>Uploaded</dt><dd>{{ doc.uploaded_at.strftime('%Y-%m-%d %H:%M') }}</dd></div>
+            </dl>
+            <p style="margin-top: 0.75rem;"><a class="doc-link" href="/board/meetings/{{ meeting.id }}/documents/{{ doc.id }}/view">View document</a></p>
+        </article>
+        {% endfor %}
+    </div>
+    {% else %}
+    {{ empty_state("No documents", "No documents have been shared for this meeting yet.") }}
+    {% endif %}
+</section>
+{% endblock %}
+
+{% block scripts %}
+{% if my_attendance is none and meeting.attendance_open %}
+<script src="/static/js/signature-pad.js?v={{ static_version }}"></script>
+{% endif %}
+{% endblock %}

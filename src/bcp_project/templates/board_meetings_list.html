@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% from "macros/ui.html" import empty_state %}
+
+{% block title %}My Board Meetings | Sonali Bank Archive System{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div class="title-group">
+        <h1>My meetings</h1>
+        <p>Meetings you've been invited to, most recent first.</p>
+    </div>
+    <div class="badge">{{ user.username }} · Board Member</div>
+</div>
+
+<section class="panel">
+    {% if meetings %}
+    <div class="meeting-list">
+        {% for meeting in meetings %}
+        <a class="meeting-card" href="/board/meetings/{{ meeting.id }}">
+            <div class="meeting-card-header">
+                <h3>{{ meeting.title }}</h3>
+                <span class="badge">{{ meeting.status.value | capitalize }}</span>
+            </div>
+            <p><strong>When</strong> {{ meeting.scheduled_at.strftime('%Y-%m-%d %H:%M') }}</p>
+            {% if meeting.location %}<p><strong>Where</strong> {{ meeting.location }}</p>{% endif %}
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    {{ empty_state("No invitations yet", "When you're invited to a board meeting, it will show up here.") }}
+    {% endif %}
+</section>
+{% endblock %}

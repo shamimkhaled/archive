@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#1A1A54" />
+  <title>Offline · Sonali Bank Archive System</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root { --bcg: #1A1A54; --text: #12122e; --muted: #5a5a78; --bg: #F4F5FA; --surface: #fff; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100dvh; display: grid; place-items: center;
+      font-family: "Source Sans 3", system-ui, sans-serif;
+      background:
+        radial-gradient(ellipse at 20% 0%, rgba(26,26,84,0.08), transparent 45%),
+        var(--bg);
+      color: var(--text); padding: 1.5rem; text-align: center;
+    }
+    .card {
+      max-width: 400px; background: var(--surface); border-radius: 16px; padding: 2rem 1.5rem;
+      border: 1px solid #d8dae8; box-shadow: 0 8px 24px rgba(18, 18, 46, 0.06);
+    }
+    h1 {
+      margin: 0 0 0.5rem; font-family: "Cormorant Garamond", Georgia, serif;
+      font-size: 1.85rem; font-weight: 600; color: var(--bcg);
+    }
+    p { margin: 0 0 1.25rem; color: var(--muted); line-height: 1.55; }
+    button {
+      border: none; background: var(--bcg); color: #fff; font: inherit; font-weight: 700;
+      padding: 0.85rem 1.25rem; border-radius: 12px; cursor: pointer; min-height: 44px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>You're offline</h1>
+    <p>Sonali Bank Archive System needs a connection to load documents and meetings. Check your network and try again.</p>
+    <button type="button" onclick="location.reload()">Retry</button>
+  </div>
+</body>
+</html>

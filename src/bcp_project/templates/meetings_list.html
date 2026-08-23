@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% from "macros/ui.html" import empty_state %}
+
+{% block title %}Board Meetings | Sonali Bank Archive System{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div class="title-group">
+        <h1>Meetings</h1>
+        <p>Schedule board meetings, manage agendas, and share documents.</p>
+    </div>
+    <a class="button" href="/meetings/new">Schedule meeting</a>
+</div>
+
+{% if status == 'created' %}
+<div class="alert alert-success" role="status">Meeting created and invitations sent.</div>
+{% endif %}
+
+<section class="panel">
+    <h2>All meetings</h2>
+    {% if meetings %}
+    <div class="meeting-list">
+        {% for meeting in meetings %}
+        <a class="meeting-card" href="/meetings/{{ meeting.id }}">
+            <div class="meeting-card-header">
+                <h3>{{ meeting.title }}</h3>
+                <span class="badge">{{ meeting.status.value | capitalize }}</span>
+            </div>
+            <p><strong>When</strong> {{ meeting.scheduled_at.strftime('%Y-%m-%d %H:%M') }}</p>
+            {% if meeting.location %}<p><strong>Where</strong> {{ meeting.location }}</p>{% endif %}
+            <p class="muted">Created by {{ meeting.created_by }}</p>
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    {{ empty_state("No meetings yet", "Schedule the first board meeting to invite members and share agendas.", "/meetings/new", "Schedule meeting") }}
+    {% endif %}
+</section>
+{% endblock %}
+
+{% block fab %}
+<a class="fab" href="/meetings/new"><span class="fab-icon">+</span> Schedule</a>
+{% endblock %}

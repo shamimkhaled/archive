@@ -1,0 +1,26 @@
+__pycache__/
+.venv/
+venv/
+*.pyc
+*.pyo
+*.pyd
+.DS_Store
+.env
+.env.*
+!.env.example
+.qdrant/
+.pytest_cache/
+*.egg-info/
+.cursor/
+.claude/
+
+# Local upload storage — real board documents, not source code
+uploaded_pdfs/
+BCP01.pdf
+
+# Deploy / runtime
+FLY_DEPLOY.md.bak
+*.pem
+
+# Claude Code local-only settings (project settings.json is tracked)
+.claude/settings.local.json

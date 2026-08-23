@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+{% from "macros/ui.html" import empty_state %}
+
+{% block title %}{{ meeting.title }} | Sonali Bank Archive System{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div class="title-group">
+        <h1>{{ meeting.title }}</h1>
+        <p>{{ meeting.scheduled_at.strftime('%Y-%m-%d %H:%M') }}{% if meeting.location %} · {{ meeting.location }}{% endif %}</p>
+    </div>
+    <div class="badge">{{ meeting.status.value | capitalize }}</div>
+</div>
+
+{% if status == 'agenda_updated' %}
+<div class="alert alert-success" role="status">Agenda updated.</div>
+{% elif status == 'doc_uploaded' %}
+<div class="alert alert-success" role="status">Document uploaded.</div>
+{% elif status == 'created' %}
+<div class="alert alert-success" role="status">Meeting created{% if meeting.notifications_enabled %} and invitations queued{% endif %}.</div>
+{% elif status == 'attendance_opened' %}
+<div class="alert alert-success" role="status">Attendance check-in is now open.</div>
+{% elif status == 'attendance_closed' %}
+<div class="alert alert-success" role="status">Attendance check-in is now closed.</div>
+{% elif status == 'notifications_updated' %}
+<div class="alert alert-success" role="status">Notification settings saved.</div>
+{% elif status == 'invites_resent' %}
+<div class="alert alert-success" role="status">Invitation emails resent (where possible).</div>
+{% elif status == 'notifications_disabled' %}
+<div class="alert alert-error" role="alert">Enable notifications first, then resend invitations.</div>
+{% endif %}
+
+<nav class="section-tabs" aria-label="Meeting sections">
+    <a href="#notifications">Notifications</a>
+    <a href="#attendance">Attendance</a>
+    <a href="#agenda">Agenda</a>
+    <a href="#documents">Documents</a>
+    <a href="#invitees">Invitees</a>
+</nav>
+
+<section class="panel" id="notifications">
+    <h2>Notifications</h2>
+    <div class="attendance-status">
+        <p>
+            Email &amp; in-app notifications are
+            <strong>{% if meeting.notifications_enabled %}enabled{% else %}disabled{% endif %}</strong>
+            for this meeting (invites + 48h/24h reminders).
+        </p>
+        <form action="/meetings/{{ meeting.id }}/notifications" method="post">
+            <label class="checkbox-item" style="margin-bottom: 0.75rem;">
+                <input type="checkbox" name="notifications_enabled" value="1" {% if meeting.notifications_enabled %}checked{% endif %} />
+                Enable notifications
+            </label>
+            <button type="submit" class="button-secondary">Save setting</button>
+        </form>
+    </div>
+    {% if meeting.notifications_enabled %}
+    <form action="/meetings/{{ meeting.id }}/notifications/resend" method="post" style="margin-top: 0.75rem;">
+        <button type="submit" class="button-secondary">Resend invitation emails</button>
+    </form>
+    {% endif %}
+</section>
+
+<section class="panel" id="attendance">
+    <h2>Attendance check-in</h2>
+    <div class="attendance-status">
+        {% if meeting.attendance_open %}
+        <p>Check-in is <strong>open</strong>{% if meeting.attendance_opened_at %} since {{ meeting.attendance_opened_at.strftime('%Y-%m-%d %H:%M') }}{% endif %}.</p>
+        <form action="/meetings/{{ meeting.id }}/attendance/close" method="post">
+            <button type="submit" class="button-secondary">Close check-in</button>
+        </form>
+        {% else %}
+        <p>Check-in is <strong>closed</strong>{% if meeting.attendance_closed_at %} since {{ meeting.attendance_closed_at.strftime('%Y-%m-%d %H:%M') }}{% endif %}.</p>
+        <form action="/meetings/{{ meeting.id }}/attendance/open" method="post">
+            <button type="submit">Open check-in</button>
+        </form>
+        {% endif %}
+    </div>
+    <a class="button button-secondary" href="/meetings/{{ meeting.id }}/attendance/print" target="_blank" rel="noopener">Print attendance sheet</a>
+</section>
+
+<section class="panel" id="agenda">
+    <h2>Agenda</h2>
+    <form action="/meetings/{{ meeting.id }}/agenda" method="post" class="form-grid">
+        <div class="form-group">
+            <label for="agenda-text">Meeting agenda</label>
+            <textarea id="agenda-text" name="agenda" rows="8">{{ meeting.agenda }}</textarea>
+        </div>
+        <label class="checkbox-item">
+            <input type="checkbox" name="notify_invitees" value="1" {% if meeting.notifications_enabled %}checked{% endif %} />
+            Notify invitees about this agenda update
+        </label>
+        <button type="submit">Save agenda</button>
+    </form>
+</section>
+
+<section class="panel" id="documents">
+    <h2>Meeting documents</h2>
+    <form action="/meetings/{{ meeting.id }}/documents" method="post" enctype="multipart/form-data" class="form-grid">
+        <div class="form-group">
+            <label for="doc_title">Document title</label>
+            <input id="doc_title" type="text" name="title" required placeholder="Meeting Minutes - Draft" />
+        </div>
+        <div class="form-group">
+            <label for="doc_file">File</label>
+            <input id="doc_file" type="file" name="file" required />
+        </div>
+        <button type="submit">Upload document</button>
+    </form>
+
+    {% if documents %}
+    <table class="data-table table-desktop" style="margin-top: 1.25rem;">
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Uploaded by</th>
+                <th>Uploaded at</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for doc in documents %}
+            <tr>
+                <td>{{ doc.title }}</td>
+                <td>{{ doc.uploaded_by }}</td>
+                <td>{{ doc.uploaded_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                <td><a class="doc-link" href="/meetings/{{ meeting.id }}/documents/{{ doc.id }}/view">View</a></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <div class="mobile-card-list" style="margin-top: 1rem;">
+        {% for doc in documents %}
+        <article class="mobile-card">
+            <h3>{{ doc.title }}</h3>
+            <dl>
+                <div><dt>By</dt><dd>{{ doc.uploaded_by }}</dd></div>
+                <div><dt>At</dt><dd>{{ doc.uploaded_at.strftime('%Y-%m-%d %H:%M') }}</dd></div>
+            </dl>
+            <p style="margin-top: 0.75rem;"><a class="doc-link" href="/meetings/{{ meeting.id }}/documents/{{ doc.id }}/view">View document</a></p>
+        </article>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div style="margin-top: 1rem;">
+        {{ empty_state("No documents yet", "Upload the first file for this meeting.") }}
+    </div>
+    {% endif %}
+</section>
+
+<section class="panel" id="invitees">
+    <h2>Invitees</h2>
+    {% if invitations %}
+    <table class="data-table table-desktop">
+        <thead>
+            <tr>
+                <th>Username</th>
+                <th>Role</th>
+                <th>Invited at</th>
+                <th>Signed in</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for invite in invitations %}
+            <tr>
+                <td>{{ invite.username }}</td>
+                <td>{{ invite.role_label }}</td>
+                <td>{{ invite.invited_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                <td>{% if attendance.get(invite.username) %}{{ attendance[invite.username].signed_at.strftime('%Y-%m-%d %H:%M') }}{% else %}—{% endif %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <div class="mobile-card-list">
+        {% for invite in invitations %}
+        <article class="mobile-card">
+            <h3>{{ invite.username }}</h3>
+            <dl>
+                <div><dt>Role</dt><dd>{{ invite.role_label }}</dd></div>
+                <div><dt>Invited</dt><dd>{{ invite.invited_at.strftime('%Y-%m-%d %H:%M') }}</dd></div>
+                <div><dt>Signed in</dt><dd>{% if attendance.get(invite.username) %}{{ attendance[invite.username].signed_at.strftime('%Y-%m-%d %H:%M') }}{% else %}—{% endif %}</dd></div>
+            </dl>
+        </article>
+        {% endfor %}
+    </div>
+    {% else %}
+    {{ empty_state("No invitees", "No users were invited to this meeting.") }}
+    {% endif %}
+</section>
+{% endblock %}

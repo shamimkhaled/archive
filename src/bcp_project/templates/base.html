@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="green">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#1A1A54" id="metaThemeColor" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="{{ brand.product_name }}" />
+    <link rel="manifest" href="/static/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png" />
+    <link rel="icon" type="image/png" href="{{ brand.logo_path }}" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700&family=Source+Sans+3:wght@400;560;600;700&display=swap" rel="stylesheet" />
+    <title>{% block title %}{{ brand.product_name }}{% endblock %}</title>
+    <link rel="stylesheet" href="/static/css/style.css?v={{ static_version }}" />
+    <meta name="csrf-token" content="{{ request.cookies.get('csrf_token', '') }}" />
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("sb-theme") || localStorage.getItem("bcb-theme") || "green";
+          if (!/^(green|red|yellow|white|black)$/.test(t)) t = "green";
+          document.documentElement.setAttribute("data-theme", t);
+        } catch (e) {}
+      })();
+    </script>
+    <script>
+      (function () {
+        function readCookie(name) {
+          var match = document.cookie.match(new RegExp("(?:^|; )" + name.replace(/[$()*+.?[\\\]^{|}]/g, "\\$&") + "=([^;]*)"));
+          return match ? decodeURIComponent(match[1]) : "";
+        }
+        function csrfToken() {
+          // Cookie is source of truth (set by middleware/login); meta may be stale after SPA nav.
+          var fromCookie = readCookie("csrf_token");
+          if (fromCookie) return fromCookie;
+          var meta = document.querySelector('meta[name="csrf-token"]');
+          return meta && meta.content ? meta.content : "";
+        }
+        function injectForms() {
+          var t = csrfToken();
+          var meta = document.querySelector('meta[name="csrf-token"]');
+          if (meta && t) meta.setAttribute("content", t);
+          if (!t) return;
+          document.querySelectorAll("form").forEach(function (form) {
+            var method = (form.getAttribute("method") || "get").toLowerCase();
+            if (method !== "post") return;
+            var action = form.getAttribute("action") || "";
+            if (action === "/login" || action.indexOf("/login") !== -1) return;
+            var input = form.querySelector('input[name="csrf_token"]');
+            if (!input) {
+              input = document.createElement("input");
+              input.type = "hidden";
+              input.name = "csrf_token";
+              form.appendChild(input);
+            }
+            input.value = t;
+          });
+        }
+        window.BCPCsrf = {
+          token: csrfToken,
+          headers: function () {
+            var t = csrfToken();
+            return t ? { "X-CSRF-Token": t } : {};
+          },
+          injectForms: injectForms,
+        };
+        document.addEventListener("DOMContentLoaded", injectForms);
+        document.addEventListener(
+          "submit",
+          function () {
+            injectForms();
+          },
+          true
+        );
+      })();
+    </script>
+</head>
+{% set path = request.url.path %}
+{% set role = user.role.value if user else none %}
+{% set role_label = 'Board Member' if role == 'board_member' else (role | replace('_', ' ') | title if role else '') %}
+{% set hide_chrome = hide_app_chrome|default(false) %}
+{% set is_meeting_detail = path.startswith('/meetings/') and path != '/meetings/new' and '/attendance/' not in path and '/documents/' not in path %}
+{% set is_board_detail = path.startswith('/board/meetings/') and '/documents/' not in path %}
+{% set is_meeting_form = path == '/meetings/new' %}
+{% set contextual = contextual_page|default(false) or is_meeting_detail or is_board_detail or is_meeting_form %}
+{% set back_target = '/meetings' if (is_meeting_detail or is_meeting_form) else ('/board/meetings' if is_board_detail else '/') %}
+{% set home_href = '/' %}
+{% set show_chrome = user and not hide_chrome %}
+{% set show_bottom = show_chrome and not contextual %}
+{% set page_label = 'Mind Map' if path.startswith('/archive/map') else ('Archive' if path.startswith('/search') else ('Upload' if path.startswith('/upload') else ('Appearance' if path.startswith('/appearance') else ('Users' if path.startswith('/admin') else ('Meetings' if path.startswith('/meetings') or path.startswith('/board/meetings') else ('Notifications' if path.startswith('/notifications') else 'Home')))))) %}
+<body class="{% block body_class %}{% endblock %}{% if not user %} auth-page{% endif %}{% if hide_chrome %} viewer-mode{% endif %}">
+    <div id="nav-progress" class="nav-progress" aria-hidden="true"></div>
+
+    <div class="app-shell{% if hide_chrome %} is-viewer{% endif %}{% if not show_bottom %} no-bottom-pad{% endif %}{% if show_chrome %} has-sidebar{% endif %}" id="app-shell">
+        {% if show_chrome %}
+        <aside class="sidebar-nav" aria-label="Main navigation">
+            <a class="sidebar-brand" href="{{ home_href }}" data-nav>
+                <img src="{{ brand.logo_path }}" alt="{{ brand.org_name }}" width="48" height="48" />
+                <div class="sidebar-brand-text">
+                    <span class="brand-title">{{ brand.product_name }}</span>
+                    <span class="brand-subtitle">{{ brand.org_name }}</span>
+                </div>
+            </a>
+
+            <nav class="sidebar-menu">
+                <p class="sidebar-label">Workspace</p>
+                <a href="/" class="sidebar-link{% if path == '/' %} is-active{% endif %}" data-nav>
+                    <span class="sidebar-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 10.5L12 3l9 7.5V20a1 1 0 01-1 1h-5v-6H9v6H4a1 1 0 01-1-1v-9.5z"/></svg></span>
+                    Dashboard
+                </a>
+                {% if role == 'board_member' %}
+                <a href="/board/meetings" class="sidebar-link{% if path.startswith('/board/meetings') %} is-active{% endif %}" data-nav>
+                    <span class="sidebar-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>
+                    Meetings
+                </a>
+                <a href="/search" class="sidebar-link{% if path.startswith('/search') %} is-active{% endif %}" data-nav>
+                    <span class="sidebar-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></span>
+                    Archive
+                </a>
+                <a href="/archive/map" class="sidebar-link{% if path.startswith('/archive/map') %} is-active{% endif %}" data-nav>
+                    <span class="sidebar-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6" cy="6" r="2"/><circle cx="18" cy="8" r="2"/><circle cx="10" cy="18" r="2"/><path d="M8 6.8L16.5 7.8M7.6 7.8l2.2 9.5M16 9.8l-5.5 7.5"/></svg></span>
+                    Mind Map
+                </a>
+                <a href="/access-requests" class="sidebar-link{% if path.startswith('/access-requests') %} is-active{% endif %}" data-nav>
+                    <span class="sidebar-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></span>
+                    Access
+                </a>
+                {% else %}
+                {% if role in ['admin', 'uploader'] %}
+                <a href="/upload" class="sidebar-link{% if path.startswith('/upload') %} is-active{% endif %}" data-nav>
+                    <span class="sidebar-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 20h16"/></svg></span>
+                    Upload
+                </a>
+                {% endif %}
+                {% if role == 'uploader' %}
+                <a href="/board/meetings" class="sidebar-link{% if path.startswith('/board/meetings') %} is-active{% endif %}" data-nav>
+                    <span class="sidebar-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>
+                    My meetings
+                </a>
+                {% endif %}
+                {% if role in ['admin', 'board_secretary'] %}
+                <a href="/search" class="sidebar-link{% if path.startswith('/search') %} is-active{% endif %}" data-nav>
+                    <span class="sidebar-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></span>
+                    Archive
+                </a>
+                <a href="/archive/map" class="sidebar-link{% if path.startswith('/archive/map') %} is-active{% endif %}" data-nav>
+                    <span class="sidebar-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6" cy="6" r="2"/><circle cx="18" cy="8" r="2"/><circle cx="10" cy="18" r="2"/><path d="M8 6.8L16.5 7.8M7.6 7.8l2.2 9.5M16 9.8l-5.5 7.5"/></svg></span>
+                    Mind Map
+                </a>
+                <a href="/admin/access-requests" class="sidebar-link{% if path.startswith('/admin/access') %} is-active{% endif %}" data-nav>
+                    <span class="sidebar-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></span>
+                    Access
+                </a>
+                <a href="/meetings" class="sidebar-link{% if path.startswith('/meetings') %} is-active{% endif %}" data-nav>
+                    <span class="sidebar-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>
+                    Meetings
+                </a>
+                {% endif %}
+                {% if role == 'admin' %}
+                <a href="/admin/users" class="sidebar-link{% if path.startswith('/admin') %} is-active{% endif %}" data-nav>
+                    <span class="sidebar-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg></span>
+                    Admin
+                </a>
+                {% endif %}
+                {% endif %}
+
+                <p class="sidebar-label" style="margin-top:1rem;">Account</p>
+                <a href="/notifications" class="sidebar-link{% if path.startswith('/notifications') %} is-active{% endif %}" data-nav>
+                    <span class="sidebar-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg></span>
+                    Notifications
+                </a>
+                <a href="/appearance" class="sidebar-link{% if path.startswith('/appearance') %} is-active{% endif %}" data-nav>
+                    <span class="sidebar-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></span>
+                    Appearance
+                </a>
+            </nav>
+
+            <div class="sidebar-foot">
+                <div class="sidebar-user">
+                    <span class="sidebar-user-name">{{ user.username }}</span>
+                    <span class="sidebar-user-role">{{ role_label }}</span>
+                </div>
+                <a class="sidebar-logout" href="/logout">Sign out</a>
+            </div>
+        </aside>
+        {% endif %}
+
+        <div class="app-main{% if not show_chrome %} full-bleed{% endif %}">
+            {% if show_chrome %}
+            {% if not contextual %}
+            <header class="mobile-topbar" role="banner">
+                <a class="mobile-brand" href="{{ home_href }}" data-nav aria-label="Home">
+                    <img src="{{ brand.logo_path }}" alt="" width="34" height="34" />
+                </a>
+                <div class="mobile-topbar-meta">
+                    <span class="mobile-page-title">{{ page_label }}</span>
+                    <span class="mobile-page-sub">{{ brand.product_name }}</span>
+                </div>
+            </header>
+            {% else %}
+            <header class="mobile-topbar contextual" role="banner">
+                <a class="back-link" href="{{ back_target }}" data-nav aria-label="Go back">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 18l-6-6 6-6"/></svg>
+                </a>
+                <div class="mobile-topbar-meta">
+                    <span class="mobile-page-title">{% if is_meeting_form %}Schedule{% else %}Details{% endif %}</span>
+                    <span class="mobile-page-sub">{{ brand.product_name }}</span>
+                </div>
+            </header>
+            {% endif %}
+            {% endif %}
+
+            <div class="layout">
+                <main class="content" id="main-content">
+                    <div class="content-inner"{% if show_bottom and (path.startswith('/meetings') or path.startswith('/board/meetings') or path.startswith('/search') or path == '/' or path.startswith('/appearance')) %} data-pull-refresh{% endif %}>
+                        <div id="ptrIndicator" class="ptr-indicator" aria-hidden="true">Release to refresh</div>
+                        {% block content %}{% endblock %}
+                    </div>
+                </main>
+            </div>
+
+            {% if show_chrome %}
+            <footer class="footer">
+                <span>{{ brand.product_name }} · {{ brand.org_name }}</span>
+                <span class="footer-sep" aria-hidden="true">·</span>
+                <span>Powered by <a href="https://alawaf.com.bd" target="_blank" rel="noopener noreferrer">Alawaf</a></span>
+            </footer>
+            {% endif %}
+        </div>
+
+        {% if show_bottom %}
+        <nav class="bottom-nav" aria-label="Mobile primary">
+            {% if role == 'board_member' %}
+            <a href="/" class="{% if path == '/' %}is-active{% endif %}" data-nav>
+                <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10.5L12 3l9 7.5V20a1 1 0 01-1 1h-5v-6H9v6H4a1 1 0 01-1-1v-9.5z"/></svg></span>
+                Home
+            </a>
+            <a href="/board/meetings" class="{% if path.startswith('/board/meetings') %}is-active{% endif %}" data-nav>
+                <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>
+                Meetings
+            </a>
+            <a href="/search" class="{% if path.startswith('/search') %}is-active{% endif %}" data-nav>
+                <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></span>
+                Archive
+            </a>
+            <button type="button" class="nav-tab" id="moreNavToggle" aria-expanded="false" aria-controls="moreSheet">
+                <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg></span>
+                More
+            </button>
+            {% elif role == 'uploader' %}
+            <a href="/" class="{% if path == '/' %}is-active{% endif %}" data-nav>
+                <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10.5L12 3l9 7.5V20a1 1 0 01-1 1h-5v-6H9v6H4a1 1 0 01-1-1v-9.5z"/></svg></span>
+                Home
+            </a>
+            <a href="/upload" class="{% if path.startswith('/upload') %}is-active{% endif %}" data-nav>
+                <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 20h16"/></svg></span>
+                Upload
+            </a>
+            <a href="/board/meetings" class="{% if path.startswith('/board/meetings') %}is-active{% endif %}" data-nav>
+                <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>
+                Meetings
+            </a>
+            <button type="button" class="nav-tab" id="moreNavToggle" aria-expanded="false" aria-controls="moreSheet">
+                <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg></span>
+                More
+            </button>
+            {% else %}
+            <a href="/" class="{% if path == '/' %}is-active{% endif %}" data-nav>
+                <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10.5L12 3l9 7.5V20a1 1 0 01-1 1h-5v-6H9v6H4a1 1 0 01-1-1v-9.5z"/></svg></span>
+                Home
+            </a>
+            <a href="/search" class="{% if path.startswith('/search') %}is-active{% endif %}" data-nav>
+                <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></span>
+                Archive
+            </a>
+            <a href="/meetings" class="{% if path.startswith('/meetings') %}is-active{% endif %}" data-nav>
+                <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>
+                Meetings
+            </a>
+            {% if role == 'admin' %}
+            <a href="/upload" class="{% if path.startswith('/upload') %}is-active{% endif %}" data-nav>
+                <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 20h16"/></svg></span>
+                Upload
+            </a>
+            {% endif %}
+            <button type="button" class="nav-tab" id="moreNavToggle" aria-expanded="false" aria-controls="moreSheet">
+                <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg></span>
+                More
+            </button>
+            {% endif %}
+        </nav>
+
+        <div id="moreSheetBackdrop" class="sheet-backdrop" hidden></div>
+        <div id="moreSheet" class="more-sheet" hidden role="dialog" aria-label="More options">
+            <h2>Account</h2>
+            <p class="muted" style="margin: 0 0 0.75rem;">{{ user.username }} · {{ role_label }}</p>
+            <a href="/notifications" data-nav>Notifications</a>
+            <a href="/appearance" data-nav>Appearance</a>
+            {% if role == 'board_member' %}
+            <a href="/access-requests" data-nav>Access requests</a>
+            {% endif %}
+            {% if role in ['admin', 'board_secretary'] %}
+            <a href="/admin/access-requests" data-nav>Review access</a>
+            <a href="/board/meetings" data-nav>Meetings I’m invited to</a>
+            {% endif %}
+            {% if role == 'uploader' %}
+            <a href="/board/meetings" data-nav>My meetings</a>
+            {% endif %}
+            {% if role == 'admin' %}
+            <a href="/admin/users" data-nav>Manage users</a>
+            {% endif %}
+            <a class="danger" href="/logout">Sign out</a>
+        </div>
+
+        <div id="installBanner" class="install-banner" hidden>
+            <p id="installBannerText">Install {{ brand.product_name }} on your phone for a faster app experience.</p>
+            <button type="button" id="installAppBtn" class="button" hidden>Install</button>
+            <button type="button" id="installDismissBtn" class="button button-secondary">Not now</button>
+        </div>
+        {% endif %}
+
+        {% block fab %}{% endblock %}
+    </div>
+    <script src="/static/js/app.js?v={{ static_version }}" defer></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

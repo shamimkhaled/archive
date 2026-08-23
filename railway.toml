@@ -1,0 +1,43 @@
+# Railway deployment
+#
+# Build uses Dockerfile. The app listens on $PORT (default 8080).
+#
+# Required variables / secrets:
+#   APP_ENV=production
+#   JWT_SECRET_KEY   (min 32 chars)
+#   DATABASE_URL     (Neon postgresql://...)
+#   QDRANT_URL + QDRANT_API_KEY
+#   REDIS_URL=rediss://default:TOKEN@HOST:6379
+#     OR UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN
+#   OPENROUTER_API_KEY (or OPENAI_API_KEY)
+#
+# Optional email: RESEND_*
+# Required for PDF view/download on Railway (disk is ephemeral):
+#   STORAGE_BACKEND=s3
+#   AWS_REGION / AWS_DEFAULT_REGION
+#   AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
+#   AWS_BUCKET_NAME
+#   AWS_PREFIX=pdfs
+#   AWS_S3_ENDPOINT_URL=   (leave empty for AWS S3; set for R2/MinIO)
+# Optional: UPLOAD_DIR=/data/uploads, ALLOW_EPHEMERAL_UPLOADS=1 (demo only)
+#
+# Custom domain checklist (fixes "Application failed to respond" / 502):
+# 1) Railway → Service → Deployments: latest deploy must be ACTIVE (green).
+# 2) If status is Stopped/Crashed → Redeploy (do not rely on Shell session).
+# 3) Settings → Networking → Public Networking: generate/confirm *.up.railway.app
+# 4) Custom Domain (e.g. archive.sonalibank.com.bd) must be attached to THIS service.
+# 5) DNS CNAME must match the hostname Railway shows (not an old one).
+# 6) Health check path: /healthz
+#
+# Note: "Session terminated, killing shell" means a Railway Shell was closed.
+# That is separate from the web process — always use Redeploy/Restart for the app.
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+healthcheckPath = "/healthz"
+healthcheckTimeout = 100
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10

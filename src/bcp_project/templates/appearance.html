@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %}Appearance | {{ brand.product_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div class="title-group">
+        <h1>Appearance</h1>
+        <p>Choose a theme for web and installed app shells. Preference is saved on this device.</p>
+    </div>
+    <div class="badge">{{ user.username }} · {{ 'Board Member' if user.role.value == 'board_member' else user.role.value | replace('_', ' ') | title }}</div>
+</div>
+
+<section class="panel" data-page="appearance">
+    <h2>Theme</h2>
+    <p class="muted" style="margin-top:0;">Institutional palettes for boardroom reading — day and night.</p>
+    <div class="theme-grid" id="themeGrid" role="listbox" aria-label="Theme options">
+        <button type="button" class="theme-option" data-theme-choice="green" aria-selected="false">
+            <div class="theme-swatch" aria-hidden="true">
+                <span style="background:#1A1A54"></span>
+                <span style="background:#C5922F"></span>
+                <span style="background:#eef0f8"></span>
+            </div>
+            <strong>Green</strong>
+            <span class="theme-desc">Sonali default — navy &amp; gold</span>
+        </button>
+        <button type="button" class="theme-option" data-theme-choice="red" aria-selected="false">
+            <div class="theme-swatch" aria-hidden="true">
+                <span style="background:#c9182b"></span>
+                <span style="background:#f4c81f"></span>
+                <span style="background:#ffffff"></span>
+            </div>
+            <strong>Red</strong>
+            <span class="theme-desc">Crimson leadership with crisp white surfaces</span>
+        </button>
+        <button type="button" class="theme-option" data-theme-choice="yellow" aria-selected="false">
+            <div class="theme-swatch" aria-hidden="true">
+                <span style="background:#c9a016"></span>
+                <span style="background:#1a1810"></span>
+                <span style="background:#fbf6e4"></span>
+            </div>
+            <strong>Yellow</strong>
+            <span class="theme-desc">Warm gold surfaces with high-contrast text</span>
+        </button>
+        <button type="button" class="theme-option" data-theme-choice="white" aria-selected="false">
+            <div class="theme-swatch" aria-hidden="true">
+                <span style="background:#ffffff;border:1px solid #ddd"></span>
+                <span style="background:#1A1A54"></span>
+                <span style="background:#b8923e"></span>
+            </div>
+            <strong>White</strong>
+            <span class="theme-desc">Clean editorial light with thin accents</span>
+        </button>
+        <button type="button" class="theme-option" data-theme-choice="black" aria-selected="false">
+            <div class="theme-swatch" aria-hidden="true">
+                <span style="background:#0b1210"></span>
+                <span style="background:#2d9a72"></span>
+                <span style="background:#d4a84b"></span>
+            </div>
+            <strong>Black</strong>
+            <span class="theme-desc">Dark executive — night-friendly reading</span>
+        </button>
+    </div>
+</section>
+{% endblock %}
