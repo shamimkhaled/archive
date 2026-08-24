@@ -48,6 +48,10 @@ def _summary_entities(summary: Optional[dict]) -> Dict[str, Set[str]]:
     return entities
 
 
+def summary_entities(summary: Optional[dict]) -> Dict[str, Set[str]]:
+    """Public alias used by API routes when expanding related documents."""
+    return _summary_entities(summary)
+
 @dataclass
 class GraphDoc:
     doc_id: str
@@ -151,36 +155,29 @@ def build_entity_edges(docs: List[GraphDoc]) -> Dict[Tuple[str, str, str], dict]
     return edges
 
 
-def build_semantic_edges(
-    qdrant: QdrantIndexer,
-    doc_ids: Iterable[str],
+def build_semantic_edges_from_hits(
+    center_doc_id: str,
+    similar_hits: Iterable[dict],
     *,
-    neighbors: int = 5,
-    min_score: float = 0.68,
+    allowed: Optional[Set[str]] = None,
 ) -> Dict[Tuple[str, str, str], dict]:
+    """Build semantic edges from one Qdrant similarity result (no extra remote calls)."""
     edges: Dict[Tuple[str, str, str], dict] = {}
-    allowed = set(doc_ids)
-
-    for doc_id in allowed:
-        similar = qdrant.find_similar_documents(
-            doc_id,
-            limit=neighbors + 1,
-            min_score=min_score,
+    for row in similar_hits:
+        other = row.get("doc_id")
+        if not other or other == center_doc_id:
+            continue
+        if allowed is not None and other not in allowed:
+            continue
+        score = float(row.get("score") or 0)
+        _add_edge(
+            edges,
+            center_doc_id,
+            other,
+            "semantic",
+            weight=score,
+            label=f"Similar ({int(score * 100)}%)",
         )
-        for row in similar:
-            other = row.get("doc_id")
-            if not other or other not in allowed or other == doc_id:
-                continue
-            score = float(row.get("score") or 0)
-            _add_edge(
-                edges,
-                doc_id,
-                other,
-                "semantic",
-                weight=score,
-                label=f"Similar ({int(score * 100)}%)",
-            )
-
     return edges
 
 
@@ -193,55 +190,71 @@ def build_document_graph(
     min_similarity: float = 0.68,
     include_semantic: bool = True,
     include_entities: bool = True,
+    semantic_hits: Optional[List[dict]] = None,
+    use_provided_cluster: bool = False,
 ) -> GraphBuildResult:
+    """Build a document relationship graph.
+
+    Relation types (from document summaries):
+    - semantic: embedding similarity of summaries (Qdrant)
+    - project / person / organization / keyword: shared extracted entities
+
+    For large archives, pass a curated related cluster with
+    ``use_provided_cluster=True`` so the API can resolve neighbors across
+    the full corpus without scanning every row here.
+    """
     if not docs:
         return GraphBuildResult()
 
     doc_map = {d.doc_id: d for d in docs}
-    if center_doc_id and center_doc_id in doc_map:
-        working_docs = [doc_map[center_doc_id]]
-        doc_ids = {center_doc_id}
+    hits: List[dict] = list(semantic_hits or [])
 
-        if include_semantic and qdrant is not None:
-            for row in qdrant.find_similar_documents(
-                center_doc_id,
-                limit=semantic_neighbors + 8,
-                min_score=min_similarity,
-            ):
-                other = row.get("doc_id")
-                if other and other in doc_map:
-                    doc_ids.add(other)
+    if (
+        include_semantic
+        and not hits
+        and qdrant is not None
+        and center_doc_id
+        and center_doc_id in doc_map
+    ):
+        hits = qdrant.find_similar_documents(
+            center_doc_id,
+            limit=semantic_neighbors + 8,
+            min_score=min_similarity,
+        )
 
+    if center_doc_id and center_doc_id in doc_map and not use_provided_cluster:
+        related_ids = {center_doc_id}
+        for row in hits:
+            other = row.get("doc_id")
+            if other and other in doc_map:
+                related_ids.add(other)
         if include_entities:
             center_entities = _summary_entities(doc_map[center_doc_id].summary_json)
             for doc in docs:
                 if doc.doc_id == center_doc_id:
                     continue
                 other_entities = _summary_entities(doc.summary_json)
-                linked = False
                 for entity_type in ("organization", "project", "person", "keyword"):
                     if center_entities[entity_type] & other_entities[entity_type]:
-                        doc_ids.add(doc.doc_id)
-                        linked = True
+                        related_ids.add(doc.doc_id)
                         break
-                if len(doc_ids) >= semantic_neighbors + 12:
+                if len(related_ids) >= semantic_neighbors + 12:
                     break
-
-        working_docs = [doc_map[did] for did in doc_ids if did in doc_map]
+        working_docs = [doc_map[did] for did in related_ids if did in doc_map]
     else:
         working_docs = docs
-        doc_ids = {d.doc_id for d in docs}
+
+    doc_ids = {d.doc_id for d in working_docs}
 
     edge_map: Dict[Tuple[str, str, str], dict] = {}
     if include_entities:
         edge_map.update(build_entity_edges(working_docs))
-    if include_semantic and qdrant is not None:
+    if include_semantic and center_doc_id and hits:
         edge_map.update(
-            build_semantic_edges(
-                qdrant,
-                doc_ids,
-                neighbors=semantic_neighbors,
-                min_score=min_similarity,
+            build_semantic_edges_from_hits(
+                center_doc_id,
+                hits,
+                allowed=doc_ids,
             )
         )
 

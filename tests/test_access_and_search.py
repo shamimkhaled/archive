@@ -9,7 +9,12 @@ from bcp_project.access_control import (
     is_archive_privileged,
 )
 from bcp_project.models import AccessMode, AccessRequestStatus, DocumentAccessRequest, Role, User
-from bcp_project.qdrant_store import build_summary_embedding_text, _casefold_contains
+from bcp_project.qdrant_store import (
+    build_summary_embedding_text,
+    reciprocal_rank_fusion,
+    _casefold_contains,
+    _contains_bangla,
+)
 from bcp_project.security import LoginRateLimiter
 from datetime import datetime, timedelta
 from types import SimpleNamespace
@@ -112,6 +117,23 @@ def test_embedding_text_includes_structured_fields():
 def test_casefold_contains_unicode():
     assert _casefold_contains("বোর্ড সভা", "বোর্ড")
     assert _casefold_contains("Board Meeting", "board")
+
+
+def test_reciprocal_rank_fusion_prefers_shared_top_hits():
+    fused = reciprocal_rank_fusion(
+        [
+            ["A", "B", "C"],
+            ["B", "A", "D"],
+        ]
+    )
+    assert fused["A"] > fused["C"]
+    assert fused["B"] > fused["C"]
+    assert fused["B"] >= fused["A"]
+
+
+def test_contains_bangla_detects_script():
+    assert _contains_bangla("Board and বোর্ড")
+    assert not _contains_bangla("Board only")
 
 
 def test_login_rate_limiter_blocks_after_max():

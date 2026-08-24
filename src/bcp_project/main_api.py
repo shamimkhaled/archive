@@ -8,16 +8,16 @@ import shutil
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Set, Union
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Request, UploadFile, status
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import and_, func, select, text
+from sqlalchemy import and_, cast, func, or_, select, String, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .access_control import (
@@ -30,7 +30,14 @@ from .access_control import (
     is_archive_privileged,
     write_audit,
 )
-from .auth import ACCESS_TOKEN_EXPIRE_MINUTES, create_access_token, decode_access_token, get_password_hash, verify_password
+from .auth import (
+    ACCESS_TOKEN_EXPIRE_MINUTES,
+    create_access_token,
+    decode_access_token,
+    get_password_hash,
+    should_refresh_access_token,
+    verify_password,
+)
 from .brand import BRAND
 from .aws_utils import get_s3_client, probe_s3, storage_backend_name, store_pdf, use_local_storage
 from .cache import (
@@ -58,7 +65,14 @@ from .models import (
     Role,
     User,
 )
-from .graph_builder import GraphDoc, build_document_graph, document_summary_card, related_documents_payload
+from .graph_builder import (
+    GraphBuildResult,
+    GraphDoc,
+    build_document_graph,
+    document_summary_card,
+    related_documents_payload,
+    summary_entities,
+)
 from .chunker import chunk_documents
 from .notify import notify_meeting_email
 from .pdf_parser import parse_pdf
@@ -109,6 +123,44 @@ app.add_middleware(CsrfMiddleware)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
+
+@app.middleware("http")
+async def sliding_session_middleware(request: Request, call_next):
+    """Extend auth cookie while the user is actively using the app."""
+    response = await call_next(request)
+    if request.method == "OPTIONS":
+        return response
+    path = request.url.path or ""
+    if path.startswith("/static/") or path in {"/sw.js", "/healthz", "/readyz"}:
+        return response
+
+    token = request.cookies.get("access_token")
+    if not token:
+        return response
+    payload = decode_access_token(token)
+    if not payload or not should_refresh_access_token(payload):
+        return response
+    username = payload.get("sub")
+    role = payload.get("role")
+    if not username or not role:
+        return response
+    try:
+        _set_auth_cookie(response, create_access_token(subject=username, role=str(role)))
+    except Exception:
+        logger.exception("Failed to refresh access token cookie")
+    return response
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """Send full-page navigations to login on auth failure; keep JSON for APIs/SPA fetches."""
+    if exc.status_code == status.HTTP_401_UNAUTHORIZED:
+        is_spa = request.headers.get("X-Requested-With") == "BCPNav"
+        accept = (request.headers.get("accept") or "").lower()
+        wants_html = "text/html" in accept
+        if wants_html and not is_spa and not request.url.path.startswith("/api/"):
+            return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
 def _compute_static_version() -> str:
     candidates = [
@@ -603,51 +655,113 @@ async def search_documents(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
-    """Init-commit Archive search: summary vectors + keyword/project labeling."""
+    """Hybrid intelligent search: summary vectors + page chunks + keyword/project boosts."""
     require_role(current_user, [Role.admin, Role.board_secretary, Role.board_member])
     q = q.strip()
+    lang_hint = (lang or "").strip().lower() or None
+    if lang_hint not in (None, "en", "bn", "any"):
+        lang_hint = None
     if not q:
-        return {"results": [], "count": 0, "query": q}
+        return {"results": [], "count": 0, "query": q, "mode": "hybrid"}
 
-    cached = await get_cached_search(q)
+    cached = await get_cached_search(q, lang=lang_hint)
     if cached is not None:
         cached_results = await enrich_results_with_access(db, current_user, cached.get("results") or [])
-        return {**cached, "results": cached_results, "count": len(cached_results), "cached": True}
+        return {
+            **cached,
+            "results": cached_results,
+            "count": len(cached_results),
+            "cached": True,
+            "mode": cached.get("mode") or "hybrid",
+        }
 
     try:
         qdrant = make_qdrant_indexer()
-        results = qdrant.search_documents(query=q, limit=20)
+        results = await asyncio.to_thread(
+            qdrant.search_documents_hybrid,
+            q,
+            20,
+            lang_hint,
+            True,
+        )
     except Exception as exc:
         raise HTTPException(status_code=502, detail="Search backend unavailable") from exc
 
+    # Promote exact / partial Document ID matches from Postgres (works even if not in top vectors).
+    like = f"%{q}%"
+    id_rows = (
+        await db.execute(
+            select(DocumentRecord.doc_id, DocumentRecord.doc_type, DocumentRecord.keywords)
+            .where(DocumentRecord.doc_id.ilike(like))
+            .order_by(DocumentRecord.created_at.desc())
+            .limit(5)
+        )
+    ).all()
+    by_id = {row.get("doc_id"): row for row in results if row.get("doc_id")}
+    for doc_id, doc_type, keywords in id_rows:
+        if doc_id in by_id:
+            entry = by_id[doc_id]
+            reasons = list(entry.get("match_reasons") or [])
+            if "doc_id" not in reasons:
+                reasons.append("doc_id")
+            entry["match_reasons"] = reasons
+            entry["score"] = float(entry.get("score") or 0) + 0.35
+            if entry.get("source") != "hybrid":
+                entry["source"] = "doc_id"
+        else:
+            by_id[doc_id] = {
+                "doc_id": doc_id,
+                "doc_type": doc_type,
+                "searchable_keywords": keywords or [],
+                "score": 1.2,
+                "source": "doc_id",
+                "match_reasons": ["doc_id"],
+                "snippet": "",
+            }
+    results = sorted(by_id.values(), key=lambda row: (-(row.get("score") or 0), str(row.get("doc_id") or "")))[:20]
+
     document_ids = [row["doc_id"] for row in results if row.get("doc_id")]
     if document_ids:
-        statement = select(DocumentRecord.doc_id, DocumentRecord.doc_type, DocumentRecord.keywords).where(
-            DocumentRecord.doc_id.in_(document_ids)
-        )
+        statement = select(
+            DocumentRecord.doc_id,
+            DocumentRecord.doc_type,
+            DocumentRecord.keywords,
+            DocumentRecord.doc_date,
+        ).where(DocumentRecord.doc_id.in_(document_ids))
         stored_docs = await db.execute(statement)
-        stored_map = {doc_id: (doc_type, keywords) for doc_id, doc_type, keywords in stored_docs.all()}
+        stored_map = {
+            doc_id: (doc_type, keywords, doc_date)
+            for doc_id, doc_type, keywords, doc_date in stored_docs.all()
+        }
         filtered_results = []
         for row in results:
             doc_id = row.get("doc_id")
             if doc_id not in stored_map:
                 continue
-            doc_type, keywords = stored_map[doc_id]
+            doc_type, keywords, doc_date = stored_map[doc_id]
             filtered_results.append(
                 {
                     **row,
                     "doc_type": doc_type or row.get("doc_type", "Document"),
+                    "doc_date": doc_date.isoformat() if doc_date else row.get("doc_date"),
                     "searchable_keywords": row.get("searchable_keywords") or keywords or [],
                 }
             )
     else:
         filtered_results = []
 
-    payload = {"results": filtered_results, "count": len(filtered_results), "query": q}
-    await set_cached_search(q, payload)
+    payload = {
+        "results": filtered_results,
+        "count": len(filtered_results),
+        "query": q,
+        "mode": "hybrid",
+        "lang": lang_hint or "any",
+    }
+    await set_cached_search(q, payload, lang=lang_hint)
 
     enriched = await enrich_results_with_access(db, current_user, filtered_results)
-    return {"results": enriched, "count": len(enriched), "query": q, "cached": False}
+    return {"results": enriched, "count": len(enriched), "query": q, "cached": False, "mode": "hybrid", "lang": lang_hint or "any"}
+
 
 
 @app.get("/api/search/metadata")
@@ -722,58 +836,173 @@ async def _load_graph_documents(
     *,
     limit: int = 80,
     doc_ids: Optional[List[str]] = None,
+    max_limit: int = 500,
 ) -> List[GraphDoc]:
-    statement = select(DocumentRecord).order_by(DocumentRecord.created_at.desc())
+    # Column projection keeps payload smaller than full ORM entities.
+    statement = (
+        select(
+            DocumentRecord.doc_id,
+            DocumentRecord.doc_type,
+            DocumentRecord.doc_date,
+            DocumentRecord.summary_json,
+        )
+        .order_by(DocumentRecord.created_at.desc())
+    )
     if doc_ids:
         statement = statement.where(DocumentRecord.doc_id.in_(doc_ids))
     else:
-        statement = statement.limit(max(1, min(limit, 150)))
+        statement = statement.limit(max(1, min(limit, max_limit)))
     result = await db.execute(statement)
-    rows = result.scalars().all()
+    rows = result.all()
     return [
         GraphDoc(
-            doc_id=doc.doc_id,
-            doc_type=doc.doc_type,
-            doc_date=doc.doc_date.isoformat(),
-            summary_json=doc.summary_json,
+            doc_id=row.doc_id,
+            doc_type=row.doc_type,
+            doc_date=row.doc_date.isoformat(),
+            summary_json=row.summary_json,
         )
-        for doc in rows
+        for row in rows
     ]
 
 
-def _graph_response(graph: Any, *, center_doc_id: Optional[str] = None) -> Dict[str, Any]:
+async def _find_entity_related_doc_ids(
+    db: AsyncSession,
+    center: GraphDoc,
+    *,
+    exclude: Optional[Set[str]] = None,
+    limit: int = 40,
+) -> List[str]:
+    """Find related docs across the archive by shared keywords / summary entities.
+
+    Uses indexed-friendly text match on keywords JSON plus a few summary terms.
+    Limited result set — safe for 10k+ archives.
+    """
+    entities = summary_entities(center.summary_json)
+    terms: List[str] = []
+    for key in ("keyword", "project", "person", "organization"):
+        for value in list(entities[key])[:6]:
+            if value and value not in terms:
+                terms.append(value)
+    if not terms:
+        return []
+
+    conditions = []
+    keywords_text = cast(DocumentRecord.keywords, String)
+    for term in terms[:8]:
+        conditions.append(keywords_text.ilike(f"%{term}%"))
+
+    statement = (
+        select(DocumentRecord.doc_id)
+        .where(or_(*conditions))
+        .order_by(DocumentRecord.created_at.desc())
+        .limit(max(1, min(limit, 80)))
+    )
+    if exclude:
+        statement = statement.where(DocumentRecord.doc_id.notin_(list(exclude)))
+    result = await db.execute(statement)
+    return [row[0] for row in result.all()]
+
+
+def _graph_response(
+    graph: Any,
+    *,
+    center_doc_id: Optional[str] = None,
+    relation_guide: Optional[Dict[str, str]] = None,
+) -> Dict[str, Any]:
     return {
         "nodes": graph.nodes,
         "edges": graph.edges,
         "count": len(graph.nodes),
         "edge_count": len(graph.edges),
         "center": center_doc_id,
+        "relation_guide": relation_guide
+        or {
+            "semantic": "Similar meaning from document summaries (AI embeddings)",
+            "project": "Same major project named in the summary",
+            "person": "Same key person named in the summary",
+            "organization": "Same organization in core info",
+            "keyword": "Shared searchable keywords from the summary",
+        },
     }
 
 
 @app.get("/api/archive/documents")
 async def archive_documents(
     q: Optional[str] = None,
-    limit: int = 300,
+    doc_type: Optional[str] = None,
+    limit: int = 40,
+    offset: int = 0,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
+    """Search-first document picker — paginated for large archives (10k+)."""
     require_role(current_user, [Role.admin, Role.board_secretary, Role.board_member])
-    limit = max(10, min(limit, 500))
-    docs = await _load_graph_documents(db, limit=limit)
+    limit = max(10, min(limit, 100))
+    offset = max(0, offset)
+    needle = (q or "").strip()
+    type_filter = (doc_type or "").strip()
+
+    filters = []
+    if needle:
+        like = f"%{needle}%"
+        filters.append(
+            or_(
+                DocumentRecord.doc_id.ilike(like),
+                DocumentRecord.doc_type.ilike(like),
+                cast(DocumentRecord.keywords, String).ilike(like),
+            )
+        )
+    if type_filter:
+        filters.append(DocumentRecord.doc_type == type_filter)
+
+    count_stmt = select(func.count()).select_from(DocumentRecord)
+    if filters:
+        count_stmt = count_stmt.where(and_(*filters))
+    total = int(await db.scalar(count_stmt) or 0)
+
+    statement = (
+        select(
+            DocumentRecord.doc_id,
+            DocumentRecord.doc_type,
+            DocumentRecord.doc_date,
+            DocumentRecord.summary_json,
+        )
+        .order_by(DocumentRecord.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+    )
+    if filters:
+        statement = statement.where(and_(*filters))
+    rows = (await db.execute(statement)).all()
+    docs = [
+        GraphDoc(
+            doc_id=row.doc_id,
+            doc_type=row.doc_type,
+            doc_date=row.doc_date.isoformat(),
+            summary_json=row.summary_json,
+        )
+        for row in rows
+    ]
     items = [document_summary_card(doc) for doc in docs]
-    if q:
-        needle = q.strip().casefold()
-        if needle:
-            items = [
-                item
-                for item in items
-                if needle in item["doc_id"].casefold()
-                or needle in item["title"].casefold()
-                or needle in item["doc_type"].casefold()
-                or needle in item.get("organization", "").casefold()
-            ]
-    return {"documents": items, "count": len(items)}
+
+    type_rows = (
+        await db.execute(
+            select(DocumentRecord.doc_type, func.count())
+            .group_by(DocumentRecord.doc_type)
+            .order_by(func.count().desc())
+        )
+    ).all()
+    types = [{"doc_type": row[0], "count": int(row[1])} for row in type_rows]
+
+    return {
+        "documents": items,
+        "count": len(items),
+        "total": total,
+        "offset": offset,
+        "limit": limit,
+        "has_more": offset + len(items) < total,
+        "types": types,
+    }
 
 
 @app.get("/archive/map", response_class=HTMLResponse)
@@ -791,37 +1020,77 @@ async def archive_map_page(
 
 @app.get("/api/archive/graph")
 async def archive_graph(
-    limit: int = 80,
+    limit: int = 24,
     min_similarity: float = 0.68,
     focus: Optional[str] = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
+    """Focus-centric mind map across the full archive (scales to 10k+ docs).
+
+    Neighbors come from:
+    1) Qdrant summary similarity (semantic)
+    2) Shared keywords / projects / people / org in summaries
+    """
     require_role(current_user, [Role.admin, Role.board_secretary, Role.board_member])
-    limit = max(10, min(limit, 150))
+    max_related = max(8, min(limit, 60))
     min_similarity = max(0.5, min(min_similarity, 0.99))
+    focus = (focus or "").strip() or None
+    if not focus:
+        return _graph_response(GraphBuildResult(), center_doc_id=None)
 
-    docs = await _load_graph_documents(db, limit=limit)
-    if focus:
-        focus = focus.strip()
-        if not any(d.doc_id == focus for d in docs):
-            await _load_document_or_404(focus, db)
-            docs = await _load_graph_documents(db, limit=limit)
-            if not any(d.doc_id == focus for d in docs):
-                extra = await _load_graph_documents(db, doc_ids=[focus])
-                docs = extra + [d for d in docs if d.doc_id != focus]
+    document = await _load_document_or_404(focus, db)
+    center = GraphDoc(
+        doc_id=document.doc_id,
+        doc_type=document.doc_type,
+        doc_date=document.doc_date.isoformat(),
+        summary_json=document.summary_json,
+    )
 
+    related_ids: Set[str] = set()
+    semantic_hits: List[dict] = []
     try:
         qdrant = make_qdrant_indexer()
     except Exception as exc:
         raise HTTPException(status_code=502, detail="Search backend unavailable") from exc
 
+    semantic_task = asyncio.to_thread(
+        qdrant.find_similar_documents,
+        focus,
+        limit=max_related,
+        min_score=min_similarity,
+    )
+    entity_task = _find_entity_related_doc_ids(
+        db,
+        center,
+        exclude={focus},
+        limit=max_related,
+    )
+    try:
+        semantic_hits, entity_ids = await asyncio.gather(semantic_task, entity_task)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Search backend unavailable") from exc
+    for row in semantic_hits or []:
+        other = row.get("doc_id")
+        if other and other != focus:
+            related_ids.add(str(other))
+    related_ids.update(entity_ids or [])
+
+    # Cap neighborhood size for readable maps.
+    capped_ids = list(related_ids)[: max_related + 8]
+    neighbors = await _load_graph_documents(db, doc_ids=capped_ids) if capped_ids else []
+    docs = [center] + [d for d in neighbors if d.doc_id != focus]
+
     graph = build_document_graph(
         docs,
-        qdrant,
+        None,
         center_doc_id=focus,
-        semantic_neighbors=5,
+        semantic_neighbors=max_related,
         min_similarity=min_similarity,
+        include_semantic=True,
+        include_entities=True,
+        semantic_hits=semantic_hits,
+        use_provided_cluster=True,
     )
     return _graph_response(graph, center_doc_id=focus)
 
@@ -840,25 +1109,47 @@ async def document_related(
 
     limit = max(3, min(limit, 20))
     min_similarity = max(0.5, min(min_similarity, 0.99))
-    docs = await _load_graph_documents(db, limit=150)
-
-    try:
-        qdrant = make_qdrant_indexer()
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail="Search backend unavailable") from exc
-
     center = GraphDoc(
         doc_id=document.doc_id,
         doc_type=document.doc_type,
         doc_date=document.doc_date.isoformat(),
         summary_json=document.summary_json,
     )
+
+    related_ids: Set[str] = set()
+    semantic_hits: List[dict] = []
+    try:
+        qdrant = make_qdrant_indexer()
+        semantic_hits = qdrant.find_similar_documents(
+            doc_id,
+            limit=limit + 4,
+            min_score=min_similarity,
+        )
+        for row in semantic_hits:
+            other = row.get("doc_id")
+            if other and other != doc_id:
+                related_ids.add(str(other))
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Search backend unavailable") from exc
+
+    entity_ids = await _find_entity_related_doc_ids(
+        db, center, exclude={doc_id}, limit=limit + 8
+    )
+    related_ids.update(entity_ids)
+    capped_ids = list(related_ids)[: limit + 8]
+    neighbors = await _load_graph_documents(db, doc_ids=capped_ids) if capped_ids else []
+    docs = [center] + [d for d in neighbors if d.doc_id != doc_id]
+
     graph = build_document_graph(
         docs,
-        qdrant,
+        None,
         center_doc_id=doc_id,
-        semantic_neighbors=8,
+        semantic_neighbors=limit,
         min_similarity=min_similarity,
+        include_semantic=True,
+        include_entities=True,
+        semantic_hits=semantic_hits,
+        use_provided_cluster=True,
     )
     return related_documents_payload(center, graph, limit=limit)
 

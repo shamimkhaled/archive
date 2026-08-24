@@ -1,5 +1,5 @@
 /* Sonali Bank Archive System service worker — caches static shell only; never caches auth HTML/API. */
-const CACHE = "sonali-archive-static-v15";
+const CACHE = "sonali-archive-static-v20";
 const PRECACHE = [
   "/static/css/style.css",
   "/static/js/app.js",

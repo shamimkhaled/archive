@@ -8,7 +8,7 @@
     <div class="page-header">
         <div class="title-group">
             <h1>Document mind map</h1>
-            <p>Trace how archive records connect by meaning, project, people, and keywords.</p>
+            <p>Search a document, then explore links by summary meaning, projects, people, organization, and keywords — built for large archives.</p>
         </div>
         <div class="badge">{{ user.username }} · {{ 'Board Member' if user.role.value == 'board_member' else user.role.value | replace('_', ' ') | title }}</div>
     </div>
@@ -20,11 +20,11 @@
                 <p class="mind-map-focus-value" id="mapFocusLabel">None selected</p>
             </div>
             <div class="neural-toolbar-group">
-                <label for="mapLimit">Scope</label>
+                <label for="mapLimit">Max related</label>
                 <select id="mapLimit">
-                    <option value="40">40 docs</option>
-                    <option value="80" selected>80 docs</option>
-                    <option value="120">120 docs</option>
+                    <option value="16">16</option>
+                    <option value="24" selected>24</option>
+                    <option value="40">40</option>
                 </select>
             </div>
             <div class="neural-toolbar-group">
@@ -52,7 +52,7 @@
             <aside class="mind-map-doc-panel" aria-label="Document list">
                 <div class="mind-map-doc-panel-head">
                     <label for="mapDocSearch">Documents</label>
-                    <input id="mapDocSearch" type="search" placeholder="Search by ID, title, or type…" autocomplete="off" />
+                    <input id="mapDocSearch" type="search" placeholder="Search ID, type, or keyword…" autocomplete="off" />
                     <div class="mind-map-doc-filters" id="mapDocTypeFilters" aria-label="Filter by document type"></div>
                     <p class="mind-map-doc-count" id="mapDocCount">Loading documents…</p>
                 </div>
@@ -70,16 +70,17 @@
             </aside>
 
             <div class="mind-map-canvas-column">
-                <div class="mind-map-canvas-head">
-                    <div class="mind-map-view-tabs" role="tablist" aria-label="Mind map view">
-                        <button type="button" class="mind-map-view-tab is-active" data-view="workflow" role="tab" aria-selected="true">Workflow map</button>
-                        <button type="button" class="mind-map-view-tab" data-view="overview" role="tab" aria-selected="false">Archive overview</button>
-                    </div>
-                    <div class="mind-map-connection-stats" id="mapConnectionStats"></div>
-                </div>
-
                 <div class="mind-map-visual-panel is-active" data-panel="workflow">
-                    <div class="neural-tree-shell mind-map-canvas is-empty is-loading" id="archiveMapGraph">
+                    <div class="neural-tree-shell mind-map-canvas nlm-canvas is-empty is-loading" id="archiveMapGraph">
+                        <div class="nlm-canvas-header">
+                            <div class="mind-map-view-tabs nlm-pills" role="tablist" aria-label="Mind map view">
+                                <button type="button" class="mind-map-view-tab pill-btn is-active" data-view="workflow" role="tab" aria-selected="true">Workflow map</button>
+                                <button type="button" class="mind-map-view-tab pill-btn" data-view="overview" role="tab" aria-selected="false">Archive overview</button>
+                            </div>
+                        </div>
+                        <div class="nlm-keyword-tags" id="mapConnectionStats" hidden></div>
+                        <p class="nlm-canvas-hint">Drag empty space to pan · Scroll to zoom · Click node for details · Double-click to focus</p>
+
                         <div class="neural-tree-empty is-loading" id="neuralTreeEmpty">
                             <div class="neural-tree-empty-icon" aria-hidden="true">
                                 <span class="mind-map-spinner"></span>
@@ -90,38 +91,47 @@
                                     <path d="M8 6.8L16.5 7.8M7.6 7.8l2.2 9.5M16 9.8l-5.5 7.5"/>
                                 </svg>
                             </div>
-                            <h2 id="neuralTreeEmptyTitle">Loading documents</h2>
-                            <p id="neuralTreeEmptyLead">Fetching archive records and preparing the connection map.</p>
+                            <h2 id="neuralTreeEmptyTitle">Choose a document</h2>
+                            <p id="neuralTreeEmptyLead">Search or pick a record — the map shows links by summary meaning, projects, people, org, and keywords.</p>
                             {% if can_upload %}
                             <a class="button" id="neuralTreeEmptyAction" href="/upload" hidden>Upload a document</a>
                             {% endif %}
                         </div>
-                        <div class="neural-tree-controls" aria-label="Map zoom controls">
-                            <button type="button" id="neuralZoomIn" title="Zoom in" aria-label="Zoom in">+</button>
-                            <button type="button" id="neuralZoomOut" title="Zoom out" aria-label="Zoom out">−</button>
-                            <button type="button" id="neuralZoomFit" title="Fit to view">Fit</button>
+
+                        <div class="nlm-zoom-toolbar neural-tree-controls" aria-label="Map zoom controls">
+                            <button type="button" class="zoom-btn" id="neuralZoomIn" title="Zoom in" aria-label="Zoom in">+</button>
+                            <button type="button" class="zoom-btn" id="neuralZoomOut" title="Zoom out" aria-label="Zoom out">−</button>
+                            <button type="button" class="zoom-btn" id="neuralZoomFit" title="Fit to view">Fit</button>
                         </div>
-                        <p class="neural-tree-hint">Drag to pan · Scroll to zoom</p>
-                        <div class="neural-tree-legend">
-                            <span><i class="edge-dot edge-semantic"></i> Semantic</span>
-                            <span><i class="edge-dot edge-project"></i> Project</span>
-                            <span><i class="edge-dot edge-person"></i> Person</span>
-                            <span><i class="edge-dot edge-organization"></i> Org</span>
-                            <span><i class="edge-dot edge-keyword"></i> Keyword</span>
+
+                        <div class="nlm-legend-bar neural-tree-legend">
+                            <span class="legend-item"><i class="edge-dot edge-semantic"></i> Semantic</span>
+                            <span class="legend-item"><i class="edge-dot edge-project"></i> Project</span>
+                            <span class="legend-item"><i class="edge-dot edge-person"></i> Person</span>
+                            <span class="legend-item"><i class="edge-dot edge-organization"></i> Org</span>
+                            <span class="legend-item"><i class="edge-dot edge-keyword"></i> Keyword</span>
                         </div>
                     </div>
                 </div>
 
                 <div class="mind-map-visual-panel" data-panel="overview" hidden>
-                    <div class="mind-map-overview-grid" id="mapOverviewGrid" aria-label="Documents by type"></div>
+                    <div class="nlm-overview-shell">
+                        <div class="nlm-canvas-header">
+                            <div class="mind-map-view-tabs nlm-pills" role="tablist" aria-label="Mind map view">
+                                <button type="button" class="mind-map-view-tab pill-btn" data-view="workflow" role="tab" aria-selected="false">Workflow map</button>
+                                <button type="button" class="mind-map-view-tab pill-btn is-active" data-view="overview" role="tab" aria-selected="true">Archive overview</button>
+                            </div>
+                        </div>
+                        <div class="mind-map-overview-grid" id="mapOverviewGrid" aria-label="Documents by type"></div>
+                    </div>
                 </div>
             </div>
 
             <aside class="mind-map-workflow-panel" id="mapWorkflowPanel" aria-label="Organized connections">
                 <div class="mind-map-workflow-panel-head">
                     <p class="neural-detail-kicker">Connection path</p>
-                    <h2 id="mapWorkflowTitle">Loading…</h2>
-                    <p class="mind-map-workflow-lead" id="mapWorkflowLead">Related records will appear here after the archive loads.</p>
+                    <h2 id="mapWorkflowTitle">How relations work</h2>
+                    <p class="mind-map-workflow-lead" id="mapWorkflowLead">Pick a document to map links across the full archive.</p>
                 </div>
                 <div class="mind-map-workflow-groups" id="mapWorkflowGroups">
                     <div class="mind-map-skeleton" aria-hidden="true">

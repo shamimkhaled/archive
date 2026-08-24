@@ -14,7 +14,8 @@ if is_production():
 else:
     SECRET_KEY = os.getenv("JWT_SECRET_KEY", "supersecretlocalkey")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "120"))
+# Default 8 hours; override with ACCESS_TOKEN_EXPIRE_MINUTES in .env
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "480"))
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -39,3 +40,23 @@ def decode_access_token(token: str) -> Optional[dict]:
         return payload
     except JWTError:
         return None
+
+
+def token_seconds_remaining(payload: dict) -> Optional[float]:
+    """Return seconds until JWT expiry, or None if missing/invalid."""
+    exp = payload.get("exp")
+    if exp is None:
+        return None
+    try:
+        return float(exp) - datetime.utcnow().timestamp()
+    except (TypeError, ValueError):
+        return None
+
+
+def should_refresh_access_token(payload: dict) -> bool:
+    """Refresh when less than half the session lifetime remains."""
+    remaining = token_seconds_remaining(payload)
+    if remaining is None or remaining <= 0:
+        return False
+    lifetime = ACCESS_TOKEN_EXPIRE_MINUTES * 60
+    return remaining < (lifetime * 0.5)

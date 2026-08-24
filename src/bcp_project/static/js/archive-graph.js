@@ -2,12 +2,12 @@
   "use strict";
 
   var BRANCH_META = {
-    semantic: { label: "Semantic similarity", short: "Semantic", color: "#c5922f" },
-    project: { label: "Shared project", short: "Project", color: "#2d9a72" },
-    person: { label: "Shared people", short: "People", color: "#5b7cfa" },
-    organization: { label: "Organization", short: "Org", color: "#1a1a54" },
-    keyword: { label: "Shared keywords", short: "Keywords", color: "#8a7010" },
-    type: { label: "Document type", short: "Type", color: "#6b7280" },
+    semantic: { label: "Semantic similarity", short: "Semantic", color: "#dc2626" },
+    project: { label: "Shared project", short: "Project", color: "#16a34a" },
+    person: { label: "Shared people", short: "Person", color: "#2563eb" },
+    organization: { label: "Organization", short: "Org", color: "#9333ea" },
+    keyword: { label: "Shared keywords", short: "Keyword", color: "#d97706" },
+    type: { label: "Document type", short: "Type", color: "#64748b" },
   };
 
   var BRANCH_ORDER = ["semantic", "project", "person", "organization", "keyword", "type"];
@@ -149,6 +149,15 @@
     });
   }
 
+  function splitTitleLines(title, maxLen) {
+    var text = String(title || "").trim();
+    if (!text) return ["", ""];
+    if (text.length <= maxLen) return [text, ""];
+    var cut = text.lastIndexOf(" ", maxLen);
+    if (cut < maxLen * 0.45) cut = maxLen;
+    return [text.slice(0, cut).trim(), text.slice(cut).trim()];
+  }
+
   function NeuralTreeRenderer(container, options) {
     this.container = container;
     this.options = options || {};
@@ -181,6 +190,8 @@
 
   NeuralTreeRenderer.prototype._bindInteractions = function () {
     var self = this;
+    var pan = null;
+
     this.shell.addEventListener("wheel", function (event) {
       event.preventDefault();
       var delta = event.deltaY > 0 ? 0.92 : 1.08;
@@ -189,19 +200,42 @@
     }, { passive: false });
 
     this.shell.addEventListener("pointerdown", function (event) {
-      if (event.target.closest(".neural-node-card")) return;
-      self._drag = { x: event.clientX, y: event.clientY, ox: self.offsetX, oy: self.offsetY };
+      var nodeEl = event.target && event.target.closest
+        ? event.target.closest(".neural-node-card, .nlm-node, .nlm-hub")
+        : null;
+      if (nodeEl) return;
+      pan = {
+        pointerId: event.pointerId,
+        x: event.clientX,
+        y: event.clientY,
+        ox: self.offsetX,
+        oy: self.offsetY,
+        moved: false,
+      };
+      self._drag = pan;
       self.shell.classList.add("is-panning");
+      try {
+        self.shell.setPointerCapture(event.pointerId);
+      } catch (_err) {
+        /* ignore */
+      }
     });
 
-    window.addEventListener("pointermove", function (event) {
+    this.shell.addEventListener("pointermove", function (event) {
       if (!self._drag) return;
-      self.offsetX = self._drag.ox + (event.clientX - self._drag.x);
-      self.offsetY = self._drag.oy + (event.clientY - self._drag.y);
+      var dx = event.clientX - self._drag.x;
+      var dy = event.clientY - self._drag.y;
+      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) self._drag.moved = true;
+      self.offsetX = self._drag.ox + dx;
+      self.offsetY = self._drag.oy + dy;
       self._applyTransform();
     });
 
-    window.addEventListener("pointerup", function () {
+    this.shell.addEventListener("pointerup", function () {
+      self._drag = null;
+      self.shell.classList.remove("is-panning");
+    });
+    this.shell.addEventListener("pointercancel", function () {
       self._drag = null;
       self.shell.classList.remove("is-panning");
     });
@@ -225,11 +259,11 @@
     var branches = model.branches || [];
     var layoutNodes = [];
     var layoutLinks = [];
-    var centerX = compact ? 80 : 150;
-    var hubX = compact ? 230 : 380;
-    var leafX = compact ? 400 : 680;
-    var leafSpacing = compact ? 58 : 98;
-    var branchGap = compact ? 32 : 56;
+    var centerX = compact ? 90 : 160;
+    var hubX = compact ? 250 : 400;
+    var leafX = compact ? 420 : 670;
+    var leafSpacing = compact ? 72 : 108;
+    var branchGap = compact ? 28 : 40;
     var blockHeights = branches.map(function (branch) {
       return Math.max((branch.docs || []).length, 1) * leafSpacing;
     });
@@ -244,8 +278,8 @@
         x: centerX,
         y: 0,
         node: model.center,
-        width: compact ? 124 : 196,
-        height: compact ? 56 : 88,
+        width: compact ? 150 : 180,
+        height: compact ? 86 : 100,
       });
     }
 
@@ -261,8 +295,8 @@
         x: hubX,
         y: hubY,
         branch: branch,
-        width: compact ? 108 : 156,
-        height: compact ? 44 : 64,
+        width: compact ? 108 : 128,
+        height: compact ? 52 : 56,
       });
 
       if (model.center) {
@@ -270,7 +304,8 @@
           from: model.center.id,
           to: hubId,
           type: branch.type,
-          stroke: branch.meta.color,
+          stroke: "#cbd5e1",
+          dashed: true,
         });
       }
 
@@ -287,14 +322,15 @@
           branch: branch,
           weight: docRef.weight,
           reason: docRef.label,
-          width: compact ? 124 : 188,
-          height: compact ? 52 : 76,
+          width: compact ? 170 : 200,
+          height: compact ? 78 : 88,
         });
         layoutLinks.push({
           from: hubId,
           to: docNode.id,
           type: branch.type,
           stroke: branch.meta.color,
+          dashed: false,
         });
       });
 
@@ -376,15 +412,19 @@
     var positions = {};
     this.layout.nodes.forEach(function (item) { positions[item.id] = item; });
 
+    var skipAnim = this.container && this.container.classList.contains("is-updating");
     this.layout.links.forEach(function (link, index) {
       var from = positions[link.from];
       var to = positions[link.to];
       if (!from || !to) return;
       var path = document.createElementNS("http://www.w3.org/2000/svg", "path");
       path.setAttribute("d", self._curvePath(from.x, from.y, to.x, to.y, self.layout.mode));
-      path.setAttribute("class", "neural-tree-link neural-link-" + link.type);
-      path.setAttribute("stroke", link.stroke);
-      path.style.animationDelay = (index * 35) + "ms";
+      path.setAttribute(
+        "class",
+        "neural-tree-link neural-link-" + link.type + (link.dashed ? " is-dashed" : " is-solid")
+      );
+      path.setAttribute("stroke", link.stroke || "#cbd5e1");
+      if (!skipAnim) path.style.animationDelay = (index * 35) + "ms";
       self.linkLayer.appendChild(path);
     });
 
@@ -397,34 +437,69 @@
       group.setAttribute("class", "neural-tree-node-wrap");
 
       var card = document.createElement("div");
-      card.className = "neural-node-card neural-node-" + item.kind + (item.kind === "doc" ? " neural-node-" + (item.branch && item.branch.type) : "");
-      card.style.animationDelay = (index * 45) + "ms";
-      card.setAttribute("data-node-id", item.kind === "hub" && String(item.id).indexOf("type-") === 0 ? "" : (item.node && item.node.id) || "");
+      var branchType = item.branch && item.branch.type ? item.branch.type : "";
+      card.className =
+        "neural-node-card nlm-node neural-node-" + item.kind +
+        (item.kind === "doc" ? " neural-node-" + branchType : "") +
+        (item.kind === "hub" ? " nlm-hub" : "");
+      card.style.animationDelay = skipAnim ? "0ms" : (index * 45) + "ms";
+      card.setAttribute(
+        "data-node-id",
+        item.kind === "hub" && String(item.id).indexOf("type-") === 0
+          ? ""
+          : (item.node && item.node.id) || ""
+      );
 
       if (item.kind === "center") {
+        var centerLines = splitTitleLines(item.node.title || item.node.doc_type || "", 28);
         card.innerHTML =
-          '<span class="neural-node-eyebrow">' + escapeHtml(item.node.doc_type || "Focus") + "</span>" +
-          '<strong>' + escapeHtml(item.node.label) + '</strong>' +
-          '<span class="neural-node-sub">' + escapeHtml(item.node.title || "") + '</span>';
+          '<span class="neural-node-eyebrow">' + escapeHtml(item.node.doc_type || "Document") + "</span>" +
+          "<strong>" + escapeHtml(item.node.label) + "</strong>" +
+          '<span class="neural-node-sub">' + escapeHtml(centerLines[0]) + "</span>" +
+          (centerLines[1] ? '<span class="neural-node-sub">' + escapeHtml(centerLines[1]) + "</span>" : "");
       } else if (item.kind === "hub") {
         card.innerHTML =
           '<span class="neural-node-eyebrow">Connection</span>' +
-          '<strong>' + escapeHtml(item.branch.meta.label) + "</strong>" +
+          "<strong>" + escapeHtml(item.branch.meta.label) + "</strong>" +
           '<span class="neural-node-sub">' + (item.branch.docs ? item.branch.docs.length : 0) + " linked</span>";
       } else {
+        var leafLines = splitTitleLines(item.node.title || item.node.doc_type || "", 30);
         card.innerHTML =
-          '<span class="neural-node-eyebrow">' + escapeHtml(item.node.doc_type || "Related") + "</span>" +
+          '<div class="nlm-doc-top">' +
+            '<span class="neural-node-eyebrow">' + escapeHtml(item.node.doc_type || "Related") + "</span>" +
+            (item.weight
+              ? '<span class="neural-node-score">' + Math.round(item.weight * 100) + "% match</span>"
+              : "") +
+          "</div>" +
           "<strong>" + escapeHtml(item.node.label) + "</strong>" +
-          '<span class="neural-node-sub">' + escapeHtml(item.node.title || "") + "</span>" +
-          (item.weight ? '<span class="neural-node-score">' + Math.round(item.weight * 100) + "% match</span>" : "");
+          '<span class="neural-node-sub">' + escapeHtml(leafLines[0]) + "</span>" +
+          (leafLines[1] ? '<span class="neural-node-sub">' + escapeHtml(leafLines[1]) + "</span>" : "");
       }
 
       if (item.kind !== "hub" || (item.node && item.node.id)) {
         if (item.node && item.node.id) {
           card.tabIndex = 0;
+          card.setAttribute("role", "button");
+          card.setAttribute("aria-label", (item.node.label || item.node.id) + " — click details, double-click to focus");
           card.addEventListener("click", function (event) {
+            event.preventDefault();
             event.stopPropagation();
             self.selectNode(item.node.id);
+          });
+          card.addEventListener("dblclick", function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            if (typeof self.options.onFocus === "function") {
+              self.options.onFocus(item.node.id);
+            } else {
+              self.selectNode(item.node.id);
+            }
+          });
+          card.addEventListener("keydown", function (event) {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              self.selectNode(item.node.id);
+            }
           });
         }
       }
@@ -488,28 +563,43 @@
     }
   };
 
+  function redirectIfUnauthorized(res) {
+    if (res && res.status === 401) {
+      window.location.href = "/login";
+      throw new Error("Session expired — please sign in again");
+    }
+    return res;
+  }
+
   function fetchGraph(params) {
     var query = new URLSearchParams();
     if (params.limit) query.set("limit", String(params.limit));
     if (params.min_similarity) query.set("min_similarity", String(params.min_similarity));
     if (params.focus) query.set("focus", params.focus);
-    return fetch("/api/archive/graph?" + query.toString(), {
+    var opts = {
       credentials: "same-origin",
       headers: csrfHeaders(),
-    }).then(function (res) {
-      if (!res.ok) throw new Error("Could not load mind map (" + res.status + ")");
-      return res.json();
-    });
+    };
+    if (params.signal) opts.signal = params.signal;
+    return fetch("/api/archive/graph?" + query.toString(), opts)
+      .then(redirectIfUnauthorized)
+      .then(function (res) {
+        if (!res.ok) throw new Error("Could not load mind map (" + res.status + ")");
+        return res.json();
+      });
   }
 
-  function fetchArchiveDocuments(query) {
+  function fetchArchiveDocuments(options) {
+    var opts = options || {};
     var params = new URLSearchParams();
-    params.set("limit", "500");
-    if (query) params.set("q", query);
+    params.set("limit", String(opts.limit || 40));
+    params.set("offset", String(opts.offset || 0));
+    if (opts.q) params.set("q", opts.q);
+    if (opts.doc_type) params.set("doc_type", opts.doc_type);
     return fetch("/api/archive/documents?" + params.toString(), {
       credentials: "same-origin",
       headers: csrfHeaders(),
-    }).then(function (res) {
+    }).then(redirectIfUnauthorized).then(function (res) {
       if (!res.ok) throw new Error("Could not load documents (" + res.status + ")");
       return res.json();
     });
@@ -522,7 +612,7 @@
     return fetch("/api/documents/" + encodeURIComponent(docId) + "/related?" + query.toString(), {
       credentials: "same-origin",
       headers: csrfHeaders(),
-    }).then(function (res) {
+    }).then(redirectIfUnauthorized).then(function (res) {
       if (!res.ok) throw new Error("Could not load related documents (" + res.status + ")");
       return res.json();
     });
@@ -571,10 +661,20 @@
     var lastGraph = null;
     var allDocuments = [];
     var filteredDocuments = [];
+    var docTypes = [];
+    var archiveTotal = 0;
+    var listOffset = 0;
+    var listHasMore = false;
+    var listLoading = false;
+    var pageSize = 40;
     var activeDocTypeFilter = "";
     var activeView = "workflow";
     var focusedDocId = (config.initialFocus || "").trim();
     var searchTimer = null;
+    var searchQuery = "";
+    var loadMoreBtn = null;
+    var mapAbort = null;
+    var mapSeq = 0;
 
     if (focusInput && focusedDocId) {
       focusInput.value = focusedDocId;
@@ -591,8 +691,8 @@
       var actionEl = document.getElementById("neuralTreeEmptyAction");
       var copy = {
         loading: {
-          title: "Loading documents",
-          lead: "Fetching archive records and preparing the connection map.",
+          title: "Mapping connections",
+          lead: "Finding related records by meaning, project, people, and keywords.",
         },
         vacant: {
           title: "No archive records yet",
@@ -600,11 +700,11 @@
         },
         idle: {
           title: "Choose a document",
-          lead: "Select a record from the list to see how it connects across the archive.",
+          lead: "Search or pick a record — the map shows links by summary meaning, projects, people, org, and keywords.",
         },
         disconnected: {
           title: "No connections found",
-          lead: "Try a lower similarity threshold or a wider document scope.",
+          lead: "Try a lower similarity threshold or raise Max related.",
         },
       };
       if (!kind) {
@@ -662,15 +762,16 @@
       if (!connectionStatsEl) return;
       var stats = connectionStats(model);
       if (!stats.length) {
-        connectionStatsEl.innerHTML = focusedDocId
-          ? '<span class="mind-map-stat muted">No connections found for this document</span>'
-          : "";
+        connectionStatsEl.innerHTML = "";
+        connectionStatsEl.hidden = true;
         return;
       }
+      connectionStatsEl.hidden = false;
       connectionStatsEl.innerHTML = stats.map(function (stat) {
         return (
-          '<span class="mind-map-stat" style="--stat-color:' + stat.color + '">' +
-          '<i class="edge-dot"></i>' + escapeHtml(stat.label) + " · " + stat.count +
+          '<span class="nlm-keyword-tag" style="--stat-color:' + stat.color + '">' +
+          '<span class="nlm-keyword-dot"></span>' +
+          escapeHtml(stat.label) + " · " + stat.count +
           "</span>"
         );
       }).join("");
@@ -679,12 +780,21 @@
     function renderWorkflowPanel(model) {
       if (!workflowGroups) return;
       if (!model || !model.center) {
-        if (workflowTitle) workflowTitle.textContent = "No document selected";
-        if (workflowLead) workflowLead.textContent = "Pick a document to see related records grouped by how they link.";
+        if (workflowTitle) workflowTitle.textContent = "How relations work";
+        if (workflowLead) {
+          workflowLead.textContent = "Pick a document to map links across the full archive.";
+        }
         workflowGroups.innerHTML =
-          '<div class="mind-map-workflow-placeholder">' +
-          "<p>How to read this map</p>" +
-          "<ol><li>Choose a document in the left list</li><li>Follow connection types in the map</li><li>Open related records from this panel</li></ol>" +
+          '<div class="mind-map-workflow-placeholder mind-map-relation-guide">' +
+          "<p>Documents connect when they share:</p>" +
+          "<ul>" +
+          "<li><strong>Semantic</strong> — similar summary meaning (AI embeddings)</li>" +
+          "<li><strong>Project</strong> — same major project in the summary</li>" +
+          "<li><strong>Person</strong> — same key person named</li>" +
+          "<li><strong>Organization</strong> — same organization</li>" +
+          "<li><strong>Keyword</strong> — shared searchable keywords</li>" +
+          "</ul>" +
+          '<p class="mind-map-relation-tip">Click a related node for details · Double-click to make it the focus</p>' +
           "</div>";
         updateWorkflowSteps(null);
         renderConnectionStats(null);
@@ -699,13 +809,13 @@
       }
 
       if (!model.branches.length) {
-        workflowGroups.innerHTML = '<p class="mind-map-workflow-empty">No related documents found for the current scope and similarity settings.</p>';
+        workflowGroups.innerHTML = '<p class="mind-map-workflow-empty">No related documents found for the current Max related / similarity settings.</p>';
       } else {
         workflowGroups.innerHTML = model.branches.map(function (branch) {
           var docsHtml = branch.docs.map(function (docRef) {
             var node = model.nodeById[docRef.id] || {};
             return (
-              '<button type="button" class="mind-map-workflow-doc" data-doc-id="' + escapeHtml(docRef.id) + '">' +
+              '<button type="button" class="mind-map-workflow-doc" data-doc-id="' + escapeHtml(docRef.id) + '" title="Click to inspect · Double-click to focus">' +
               '<span class="mind-map-workflow-doc-id">' + escapeHtml(docRef.id) + "</span>" +
               '<span class="mind-map-workflow-doc-title">' + escapeHtml(node.title || node.doc_type || "Document") + "</span>" +
               '<span class="mind-map-workflow-doc-reason">' + escapeHtml(docRef.label || branch.meta.label) +
@@ -727,44 +837,39 @@
       renderConnectionStats(model);
     }
 
-    function renderOverviewGrid(documents) {
+    function renderOverviewGrid(types) {
       if (!overviewGrid) return;
-      var groups = groupDocumentsByType(documents);
+      var groups = types && types.length ? types : docTypes;
       if (!groups.length) {
         overviewGrid.innerHTML = '<p class="mind-map-overview-empty">No documents in the archive yet.</p>';
         return;
       }
-      overviewGrid.innerHTML = groups.map(function (group) {
-        var cards = group.docs.map(function (doc) {
-          var focused = doc.doc_id === focusedDocId ? " is-focused" : "";
+      overviewGrid.innerHTML =
+        '<p class="mind-map-overview-lead">Archive by type — click a type to filter the document list (works at 10k+ scale).</p>' +
+        '<div class="mind-map-overview-cards mind-map-overview-types">' +
+        groups.map(function (group) {
+          var type = group.doc_type || group.type;
+          var count = group.count != null ? group.count : (group.docs ? group.docs.length : 0);
+          var active = activeDocTypeFilter === type ? " is-focused" : "";
           return (
-            '<button type="button" class="mind-map-overview-card' + focused + '" data-doc-id="' + escapeHtml(doc.doc_id) + '">' +
-            '<span class="mind-map-doc-id">' + escapeHtml(doc.doc_id) + "</span>" +
-            '<span class="mind-map-doc-title">' + escapeHtml(doc.title || doc.doc_type) + "</span>" +
-            '<span class="mind-map-doc-meta">' + escapeHtml(doc.doc_date || "") + "</span></button>"
+            '<button type="button" class="mind-map-overview-card' + active + '" data-doc-type="' + escapeHtml(type) + '">' +
+            '<span class="mind-map-doc-title">' + escapeHtml(type) + "</span>" +
+            '<span class="mind-map-doc-meta">' + count + " documents</span></button>"
           );
-        }).join("");
-        return (
-          '<section class="mind-map-overview-section"><h3>' + escapeHtml(group.type) +
-          ' <span>' + group.docs.length + "</span></h3><div class=\"mind-map-overview-cards\">" +
-          cards + "</div></section>"
-        );
-      }).join("");
+        }).join("") +
+        "</div>";
     }
 
     function renderDocTypeFilters() {
       if (!docTypeFilters) return;
-      var types = [];
-      allDocuments.forEach(function (doc) {
-        var type = doc.doc_type || "Other";
-        if (types.indexOf(type) === -1) types.push(type);
-      });
-      types.sort();
+      var types = (docTypes || []).map(function (row) { return row.doc_type; }).filter(Boolean);
       docTypeFilters.innerHTML =
         '<button type="button" class="mind-map-type-chip' + (activeDocTypeFilter ? "" : " is-active") + '" data-type="">All types</button>' +
         types.map(function (type) {
           var active = activeDocTypeFilter === type ? " is-active" : "";
-          return '<button type="button" class="mind-map-type-chip' + active + '" data-type="' + escapeHtml(type) + '">' + escapeHtml(type) + "</button>";
+          var countRow = docTypes.find(function (row) { return row.doc_type === type; });
+          var label = type + (countRow ? " (" + countRow.count + ")" : "");
+          return '<button type="button" class="mind-map-type-chip' + active + '" data-type="' + escapeHtml(type) + '">' + escapeHtml(label) + "</button>";
         }).join("");
     }
 
@@ -784,7 +889,6 @@
 
     function setFocus(docId, reload) {
       var next = (docId || "").trim();
-      // Same focus already active — keep the tree, only refresh details.
       if (next && next === focusedDocId) {
         if (focusInput) focusInput.value = focusedDocId;
         updateFocusLabel();
@@ -797,8 +901,67 @@
       if (focusInput) focusInput.value = focusedDocId;
       updateFocusLabel();
       syncFocusUrl();
-      renderDocumentList(focusedDocId || undefined);
+      highlightDocumentList(focusedDocId);
+      setActiveView("workflow");
       if (reload !== false) loadMap();
+    }
+
+    function highlightDocumentList(docId) {
+      if (!docList) return;
+      docList.querySelectorAll(".mind-map-doc-item").forEach(function (btn) {
+        var id = btn.getAttribute("data-doc-id");
+        var isFocus = Boolean(docId) && id === docId;
+        btn.classList.toggle("is-focused", isFocus);
+        btn.classList.toggle("is-selected", isFocus);
+        btn.setAttribute("aria-selected", isFocus ? "true" : "false");
+      });
+    }
+
+    function cardToGraphNode(card, isCenter) {
+      return {
+        id: card.doc_id,
+        label: card.doc_id,
+        title: card.title || card.doc_type || "Document",
+        doc_type: card.doc_type || "Document",
+        doc_date: card.doc_date || "",
+        organization: card.organization || "",
+        projects: card.projects || [],
+        is_center: Boolean(isCenter),
+      };
+    }
+
+    function paintPreviewFocus(docId) {
+      var card = allDocuments.find(function (doc) { return doc.doc_id === docId; });
+      if (!card) return;
+      var preview = {
+        center: docId,
+        count: 1,
+        edge_count: 0,
+        nodes: [cardToGraphNode(card, true)],
+        edges: [],
+      };
+      if (!renderer) {
+        renderer = new NeuralTreeRenderer(container, bindRendererHandlers());
+      }
+      if (container) container.classList.add("is-updating");
+      renderer.render(preview, false, "workflow");
+      if (workflowTitle) workflowTitle.textContent = card.doc_id;
+      if (workflowLead) {
+        workflowLead.textContent = [card.doc_type, card.doc_date, card.title].filter(Boolean).join(" · ");
+      }
+    }
+
+    function bindRendererHandlers() {
+      return {
+        onSelect: function (node, model) {
+          lastModel = model;
+          showSidebar(node, model);
+        },
+        onFocus: function (docId) {
+          setFocus(docId);
+          setActiveView("workflow");
+        },
+      };
     }
 
     function inspectDocument(docId) {
@@ -868,7 +1031,7 @@
                 "<span>" + escapeHtml(link.label) + " · " + Math.round((link.weight || 0) * 100) + "%</span></li>"
               );
             }).join("")
-          : "<li class='muted'>No direct connections in current scope</li>";
+          : "<li class='muted'>No direct connections in current map</li>";
       }
       if (view) {
         view.href = "/view/" + encodeURIComponent(node.id) +
@@ -885,27 +1048,11 @@
       renderDocumentList(node.id);
     }
 
-    function filterDocuments() {
-      var needle = docSearch ? docSearch.value.trim().toLowerCase() : "";
-      filteredDocuments = allDocuments.filter(function (doc) {
-        if (activeDocTypeFilter && (doc.doc_type || "Other") !== activeDocTypeFilter) return false;
-        if (!needle) return true;
-        return (
-          doc.doc_id.toLowerCase().indexOf(needle) !== -1 ||
-          (doc.title || "").toLowerCase().indexOf(needle) !== -1 ||
-          (doc.doc_type || "").toLowerCase().indexOf(needle) !== -1 ||
-          (doc.organization || "").toLowerCase().indexOf(needle) !== -1
-        );
-      });
-      renderDocumentList();
-      renderOverviewGrid(filteredDocuments);
-    }
-
-    function renderDocumentList(activeId) {
+    function renderDocumentList(activeId, options) {
       if (!docList) return;
       var highlightId = activeId || focusedDocId;
       var groups = groupDocumentsByType(filteredDocuments);
-      docList.innerHTML = groups.map(function (group) {
+      var html = groups.map(function (group) {
         var items = group.docs.map(function (doc) {
           var selected = doc.doc_id === highlightId ? " is-selected" : "";
           var focused = doc.doc_id === focusedDocId ? " is-focused" : "";
@@ -926,17 +1073,30 @@
         );
       }).join("");
 
-      if (docCount) {
-        docCount.textContent = filteredDocuments.length + " of " + allDocuments.length + " documents visible";
+      if (listHasMore) {
+        html += '<button type="button" class="button button-secondary mind-map-load-more" id="mapDocLoadMore">Load more documents</button>';
       }
-      if (docEmpty) {
-        docEmpty.hidden = filteredDocuments.length > 0;
+      docList.innerHTML = html || "";
+      loadMoreBtn = document.getElementById("mapDocLoadMore");
+      if (loadMoreBtn) {
+        loadMoreBtn.addEventListener("click", function () {
+          loadDocuments({ append: true });
+        });
       }
 
-      if (highlightId) {
-        var activeBtn = docList.querySelector('.mind-map-doc-item[data-doc-id="' + highlightId + '"]');
+      if (docCount) {
+        docCount.textContent = filteredDocuments.length + " shown · " + archiveTotal + " in archive" +
+          (searchQuery || activeDocTypeFilter ? " (filtered)" : "");
+      }
+      if (docEmpty) {
+        docEmpty.hidden = filteredDocuments.length > 0 || listLoading;
+      }
+
+      if (highlightId && options && options.scroll) {
+        var escaped = highlightId.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+        var activeBtn = docList.querySelector('.mind-map-doc-item[data-doc-id="' + escaped + '"]');
         if (activeBtn && typeof activeBtn.scrollIntoView === "function") {
-          activeBtn.scrollIntoView({ block: "nearest", behavior: "smooth" });
+          activeBtn.scrollIntoView({ block: "nearest", behavior: "auto" });
         }
       }
     }
@@ -956,127 +1116,161 @@
       if (view === "workflow" && lastGraph && focusedDocId) {
         setEmptyState(null);
         if (!renderer) {
-          renderer = new NeuralTreeRenderer(container, {
-            onSelect: function (node, model) {
-              lastModel = model;
-              // Canvas click = inspect only; never change the focused root.
-              showSidebar(node, model);
-            },
-          });
+          renderer = new NeuralTreeRenderer(container, bindRendererHandlers());
+          renderer.render(lastGraph, false, "workflow");
         }
-        renderer.render(lastGraph, false, "workflow");
       } else if (view === "workflow" && !focusedDocId) {
-        if (!lastGraph && !allDocuments.length) setEmptyState("loading");
-        else setEmptyState(allDocuments.length ? "idle" : "vacant");
+        setEmptyState(archiveTotal ? "idle" : "vacant");
+      } else if (view === "overview") {
+        renderOverviewGrid(docTypes);
       }
     }
 
-    function loadDocuments() {
-      if (docCount) docCount.textContent = "Loading documents…";
-      return fetchArchiveDocuments("")
+    function applyDocumentPayload(payload, append) {
+      var incoming = payload.documents || [];
+      archiveTotal = payload.total != null ? payload.total : incoming.length;
+      listHasMore = Boolean(payload.has_more);
+      listOffset = (payload.offset || 0) + incoming.length;
+      if (payload.types) docTypes = payload.types;
+      if (append) {
+        var seen = {};
+        allDocuments.forEach(function (doc) { seen[doc.doc_id] = true; });
+        incoming.forEach(function (doc) {
+          if (!seen[doc.doc_id]) allDocuments.push(doc);
+        });
+      } else {
+        allDocuments = incoming.slice();
+      }
+      filteredDocuments = allDocuments.slice();
+      renderDocTypeFilters();
+      updateFocusLabel();
+      renderDocumentList(focusedDocId || undefined);
+      renderOverviewGrid(docTypes);
+    }
+
+    function loadDocuments(options) {
+      var opts = options || {};
+      var append = Boolean(opts.append);
+      if (listLoading) return Promise.resolve();
+      listLoading = true;
+      if (!append && docCount) docCount.textContent = "Loading documents…";
+      if (loadMoreBtn) {
+        loadMoreBtn.disabled = true;
+        loadMoreBtn.textContent = "Loading…";
+      }
+      return fetchArchiveDocuments({
+        q: searchQuery,
+        doc_type: activeDocTypeFilter,
+        limit: pageSize,
+        offset: append ? listOffset : 0,
+      })
         .then(function (payload) {
-          allDocuments = payload.documents || [];
-          filteredDocuments = allDocuments.slice();
-          renderDocTypeFilters();
-          if (focusedDocId && !allDocuments.some(function (d) { return d.doc_id === focusedDocId; })) {
-            updateFocusLabel();
+          applyDocumentPayload(payload, append);
+          if (!focusedDocId) {
+            setEmptyState(archiveTotal ? "idle" : "vacant");
+            renderWorkflowPanel(null);
+            setStatus(archiveTotal + " documents in archive · search or select one to map");
+            if (activeView !== "overview") setActiveView("overview");
           }
-          filterDocuments();
-          updateFocusLabel();
-          renderOverviewGrid(filteredDocuments);
         })
         .catch(function (err) {
           if (docCount) docCount.textContent = err.message || "Could not load documents";
-          if (docList) docList.innerHTML = "";
-          if (docEmpty) {
-            docEmpty.hidden = false;
-            docEmpty.textContent = err.message || "Could not load documents";
+          if (!append) {
+            if (docList) docList.innerHTML = "";
+            if (docEmpty) {
+              docEmpty.hidden = false;
+              docEmpty.textContent = err.message || "Could not load documents";
+            }
+            setEmptyState("vacant");
           }
+        })
+        .finally(function () {
+          listLoading = false;
         });
     }
 
     function loadMap() {
-      setStatus(lastGraph ? "Updating mind map…" : "Loading documents…");
-      if (!lastGraph) setEmptyState("loading");
-      if (!focusedDocId) hideSidebar();
+      if (mapAbort) {
+        try { mapAbort.abort(); } catch (err) {}
+      }
+      if (!focusedDocId) {
+        mapSeq += 1;
+        if (renderer) {
+          renderer.destroy();
+          renderer = null;
+        }
+        lastGraph = null;
+        lastModel = null;
+        if (container) container.classList.remove("is-updating");
+        setEmptyState(archiveTotal ? "idle" : "vacant");
+        renderWorkflowPanel(null);
+        setStatus(archiveTotal + " documents in archive · search or select one to map");
+        setActiveView("overview");
+        return;
+      }
+      var requestedFocus = focusedDocId;
+      var seq = ++mapSeq;
+      mapAbort = window.AbortController ? new AbortController() : null;
+      setActiveView("workflow");
+      paintPreviewFocus(requestedFocus);
+      setStatus("Mapping " + requestedFocus + "…");
+      if (!renderer) setEmptyState("loading");
+      else setEmptyState(null);
       fetchGraph({
-        limit: limitSelect ? Number(limitSelect.value) : 80,
+        limit: limitSelect ? Number(limitSelect.value) : 24,
         min_similarity: similaritySelect ? Number(similaritySelect.value) : 0.68,
-        focus: focusedDocId,
+        focus: requestedFocus,
+        signal: mapAbort ? mapAbort.signal : undefined,
       })
         .then(function (graph) {
+          if (seq !== mapSeq || focusedDocId !== requestedFocus) return;
           lastGraph = graph;
           if (!graph.count) {
-            if (renderer) renderer.destroy();
-            renderer = null;
-            setEmptyState("vacant");
-            hideSidebar();
-            renderWorkflowPanel(null);
-            setStatus("No documents in archive yet");
-            return;
-          }
-          if (focusedDocId) {
-            setEmptyState(null);
-            if (!renderer) {
-              renderer = new NeuralTreeRenderer(container, {
-                onSelect: function (node, model) {
-                  lastModel = model;
-                  // Canvas click = inspect only; never change the focused root.
-                  showSidebar(node, model);
-                },
-              });
-            }
-            renderer.render(graph, false, "workflow");
-          } else {
             if (renderer) {
               renderer.destroy();
               renderer = null;
             }
-            setEmptyState("idle");
+            setEmptyState("disconnected");
+            renderWorkflowPanel(null);
+            setStatus("No connections found for " + requestedFocus);
+            return;
           }
+          setEmptyState(null);
+          if (!renderer) {
+            renderer = new NeuralTreeRenderer(container, bindRendererHandlers());
+          }
+          renderer.render(graph, false, "workflow");
           lastModel = buildNeuralTreeModel(graph);
-          // Keep the user's chosen focus — do not overwrite with a different center.
-          if (focusedDocId) {
-            if (focusInput) focusInput.value = focusedDocId;
-            updateFocusLabel();
-            renderDocumentList(focusedDocId);
-            setEmptyState(null);
-          } else if (graph.center) {
-            focusedDocId = graph.center;
-            if (focusInput) focusInput.value = focusedDocId;
-            updateFocusLabel();
-            renderDocumentList(focusedDocId);
-            setEmptyState(null);
-          }
+          if (focusInput) focusInput.value = requestedFocus;
+          updateFocusLabel();
+          highlightDocumentList(requestedFocus);
           renderWorkflowPanel(lastModel);
-          renderOverviewGrid(filteredDocuments.length ? filteredDocuments : allDocuments);
           if (layoutEl) layoutEl.classList.add("has-workflow");
-          if (focusedDocId) {
-            setActiveView("workflow");
-            // Re-select the focused document after render so selection does not jump.
-            window.requestAnimationFrame(function () {
-              if (renderer && focusedDocId) {
-                renderer.selectNode(focusedDocId);
-              } else if (lastModel && lastModel.nodeById && lastModel.nodeById[focusedDocId]) {
-                showSidebar(lastModel.nodeById[focusedDocId], lastModel);
-              }
-            });
-          } else if (activeView !== "overview") {
-            setActiveView("overview");
-          }
-          var statusBits = [graph.count + " documents", graph.edge_count + " connections"];
-          if (focusedDocId) {
-            statusBits.push("focused on " + focusedDocId);
-            if (lastModel && !lastModel.branches.length) statusBits.push("no connections in current scope");
-          } else {
-            statusBits.push("choose a document to map");
-          }
+          window.requestAnimationFrame(function () {
+            if (renderer && focusedDocId === requestedFocus) {
+              renderer.selectedId = requestedFocus;
+              renderer.nodeLayer.querySelectorAll(".neural-node-card").forEach(function (card) {
+                card.classList.toggle("is-selected", card.getAttribute("data-node-id") === requestedFocus);
+              });
+            }
+          });
+          var statusBits = [
+            graph.count + " on map",
+            graph.edge_count + " links",
+            "focused on " + requestedFocus,
+          ];
+          if (lastModel && !lastModel.branches.length) statusBits.push("no connections in current settings");
           setStatus(statusBits.join(" · "));
         })
         .catch(function (err) {
+          if (err && (err.name === "AbortError" || err.message === "The user aborted a request.")) return;
+          if (seq !== mapSeq) return;
           setStatus(err.message || "Failed to load mind map");
-          setEmptyState(allDocuments.length ? "idle" : "vacant");
+          setEmptyState(archiveTotal ? "idle" : "vacant");
           renderWorkflowPanel(null);
+        })
+        .finally(function () {
+          if (seq === mapSeq && container) container.classList.remove("is-updating");
         });
     }
 
@@ -1086,7 +1280,6 @@
         if (!button) return;
         var docId = button.getAttribute("data-doc-id") || "";
         if (docId && docId === focusedDocId) {
-          // Already the focus root — inspect only, do not rebuild the map.
           inspectDocument(docId);
           setActiveView("workflow");
           return;
@@ -1097,11 +1290,17 @@
     }
 
     if (workflowGroups) {
+      var lastWorkflowClick = { id: "", at: 0 };
       workflowGroups.addEventListener("click", function (event) {
         var button = event.target.closest(".mind-map-workflow-doc");
         if (!button) return;
         var docId = button.getAttribute("data-doc-id") || "";
-        // Inspect related docs without changing the focused root document.
+        var now = Date.now();
+        if (docId && docId === lastWorkflowClick.id && now - lastWorkflowClick.at < 400) {
+          setFocus(docId);
+          return;
+        }
+        lastWorkflowClick = { id: docId, at: now };
         inspectDocument(docId);
       });
     }
@@ -1110,14 +1309,12 @@
       overviewGrid.addEventListener("click", function (event) {
         var button = event.target.closest(".mind-map-overview-card");
         if (!button) return;
-        var docId = button.getAttribute("data-doc-id") || "";
-        if (docId && docId === focusedDocId) {
-          inspectDocument(docId);
-          setActiveView("workflow");
-          return;
-        }
-        setFocus(docId);
-        setActiveView("workflow");
+        var type = button.getAttribute("data-doc-type") || "";
+        activeDocTypeFilter = type;
+        listOffset = 0;
+        renderDocTypeFilters();
+        loadDocuments({ append: false });
+        setActiveView("overview");
       });
     }
 
@@ -1126,8 +1323,9 @@
         var chip = event.target.closest(".mind-map-type-chip");
         if (!chip) return;
         activeDocTypeFilter = chip.getAttribute("data-type") || "";
+        listOffset = 0;
         renderDocTypeFilters();
-        filterDocuments();
+        loadDocuments({ append: false });
       });
     }
 
@@ -1140,11 +1338,24 @@
     if (docSearch) {
       docSearch.addEventListener("input", function () {
         window.clearTimeout(searchTimer);
-        searchTimer = window.setTimeout(filterDocuments, 120);
+        searchTimer = window.setTimeout(function () {
+          searchQuery = docSearch.value.trim();
+          listOffset = 0;
+          loadDocuments({ append: false });
+        }, 280);
       });
     }
 
-    if (reloadBtn) reloadBtn.addEventListener("click", loadMap);
+    if (reloadBtn) {
+      reloadBtn.addEventListener("click", function () {
+        listOffset = 0;
+        loadDocuments({ append: false }).then(function () {
+          if (focusedDocId) loadMap();
+        });
+      });
+    }
+    if (limitSelect) limitSelect.addEventListener("change", function () { if (focusedDocId) loadMap(); });
+    if (similaritySelect) similaritySelect.addEventListener("change", function () { if (focusedDocId) loadMap(); });
     if (clearFocusBtn) {
       clearFocusBtn.addEventListener("click", function () {
         setFocus("");
@@ -1165,8 +1376,15 @@
     });
 
     hideSidebar();
-    setEmptyState("loading");
-    loadDocuments().then(loadMap);
+    renderWorkflowPanel(null);
+    if (focusedDocId) {
+      setEmptyState("loading");
+    } else {
+      setEmptyState("idle");
+    }
+    loadDocuments({ append: false }).then(function () {
+      if (focusedDocId) loadMap();
+    });
   }
 
   function initViewerPanel(config) {

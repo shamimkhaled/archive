@@ -1,3 +1,4 @@
+import threading
 import uuid
 from typing import Any, Dict, List, Optional, Union
 
@@ -61,6 +62,27 @@ def _casefold_contains(haystack: str, needle: str) -> bool:
     return needle.casefold() in haystack.casefold()
 
 
+def _contains_bangla(text: str) -> bool:
+    return any("\u0980" <= ch <= "\u09FF" for ch in (text or ""))
+
+
+def reciprocal_rank_fusion(
+    ranked_lists: List[List[str]],
+    *,
+    k: int = 60,
+) -> Dict[str, float]:
+    """Merge multiple ranked doc-id lists with Reciprocal Rank Fusion."""
+    scores: Dict[str, float] = {}
+    for ranked in ranked_lists:
+        seen = set()
+        for rank, doc_id in enumerate(ranked):
+            if not doc_id or doc_id in seen:
+                continue
+            seen.add(doc_id)
+            scores[doc_id] = scores.get(doc_id, 0.0) + 1.0 / (k + rank + 1)
+    return scores
+
+
 def build_summary_embedding_text(summary: dict) -> str:
     """Concatenate structured summary fields for bilingual semantic retrieval."""
     parts: List[str] = []
@@ -94,9 +116,19 @@ def build_summary_embedding_text(summary: dict) -> str:
     return " \n ".join([p for p in parts if p and str(p).strip()])
 
 
+_indexer_lock = threading.Lock()
+_indexer: Optional["QdrantIndexer"] = None
+
+
 def make_qdrant_indexer() -> "QdrantIndexer":
-    url, api_key = resolve_qdrant_settings()
-    return QdrantIndexer(url=url, api_key=api_key)
+    global _indexer
+    if _indexer is not None:
+        return _indexer
+    with _indexer_lock:
+        if _indexer is None:
+            url, api_key = resolve_qdrant_settings()
+            _indexer = QdrantIndexer(url=url, api_key=api_key)
+    return _indexer
 
 
 class QdrantIndexer:
@@ -108,7 +140,12 @@ class QdrantIndexer:
         url: Optional[str] = None,
     ):
         resolved_url = url or f"http://{host}:{port}"
-        self.client = QdrantClient(url=resolved_url, api_key=api_key, check_compatibility=False)
+        self.client = QdrantClient(
+            url=resolved_url,
+            api_key=api_key,
+            check_compatibility=False,
+            timeout=12,
+        )
 
     def create_collections(
         self,
@@ -182,23 +219,35 @@ class QdrantIndexer:
         min_score: float = 0.0,
         collection_name: str = "document_summaries",
     ) -> List[Dict[str, Any]]:
+        fetch_limit = max(limit + 6, 12)
+        response = None
         try:
-            point = self.get_summary_by_doc_id(doc_id, collection_name=collection_name)
-            if point is None:
-                return []
-
-            vector = self._point_vector(point)
-            if not vector:
-                return []
-
             response = self.client.query_points(
                 collection_name=collection_name,
-                query=vector,
-                limit=max(limit * 3, 24),
+                query=self._normalize_point_id(doc_id),
+                limit=fetch_limit,
                 with_payload=True,
             )
         except Exception:
-            return []
+            response = None
+
+        if response is None or not getattr(response, "points", None):
+            try:
+                point = self.get_summary_by_doc_id(doc_id, collection_name=collection_name)
+                if point is None:
+                    return []
+                vector = self._point_vector(point)
+                if not vector:
+                    return []
+                response = self.client.query_points(
+                    collection_name=collection_name,
+                    query=vector,
+                    limit=fetch_limit,
+                    with_payload=True,
+                )
+            except Exception:
+                if response is None:
+                    return []
 
         points = response.points if getattr(response, "points", None) is not None else []
         results: List[Dict[str, Any]] = []
@@ -258,16 +307,16 @@ class QdrantIndexer:
         self.client.upsert(collection_name=collection_name, points=points)
 
     def _normalize_query_response(self, point: Any, query_lower: str) -> Dict[str, Any]:
-        """Init-commit labeling: keyword/project substring match vs summary hit."""
+        """Label keyword/project hits vs pure summary similarity."""
         payload = getattr(point, "payload", None) or {}
-        doc_id = payload.get("document_id") or payload.get("parent_doc_id") or str(point.id)
+        doc_id = payload.get("document_id") or payload.get("doc_id") or payload.get("parent_doc_id") or str(point.id)
         keywords = payload.get("searchable_keywords", []) or []
         projects = payload.get("major_projects", []) or []
 
-        keyword_hit = any(query_lower in str(kw).lower() for kw in keywords)
+        keyword_hit = any(_casefold_contains(str(kw), query_lower) for kw in keywords)
         project_hit = any(
-            query_lower in str(project.get("project_name", "")).lower()
-            or query_lower in str(project.get("brief_context", "")).lower()
+            _casefold_contains(str(project.get("project_name", "")), query_lower)
+            or _casefold_contains(str(project.get("brief_context", "")), query_lower)
             for project in projects
             if isinstance(project, dict)
         )
@@ -278,8 +327,13 @@ class QdrantIndexer:
             "doc_type": payload.get("doc_type", "Unknown"),
             "searchable_keywords": keywords,
             "major_projects": projects,
-            "score": getattr(point, "score", None),
+            "score": float(getattr(point, "score", 0) or 0),
             "source": "keyword" if (keyword_hit or project_hit) else "summary",
+            "match_reasons": (
+                (["keyword"] if keyword_hit else [])
+                + (["project"] if project_hit else [])
+                + (["summary"] if not (keyword_hit or project_hit) else [])
+            ),
         }
 
     def search_documents(
@@ -289,29 +343,14 @@ class QdrantIndexer:
         collection_name: str = "document_summaries",
         lang: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        """Init-commit search: embed query → summary vectors → prefer keyword hits."""
-        query = query.strip()
-        if not query:
-            return []
-
-        query_vector = embed_texts([query])[0]
-        query_lower = query.lower()
-
-        # Pull a wider candidate pool via vector similarity, then evaluate
-        # keyword/project matches client-side (same as first github commit).
-        response = self.client.query_points(
-            collection_name=collection_name,
-            query=query_vector,
-            limit=max(limit * 5, 50),
-            with_payload=True,
+        """Summary-vector search with keyword/project preference (legacy path)."""
+        return self.search_documents_hybrid(
+            query=query,
+            limit=limit,
+            lang=lang,
+            use_chunks=False,
+            summaries_collection=collection_name,
         )
-        points = response.points if getattr(response, "points", None) is not None else []
-
-        results = [self._normalize_query_response(point, query_lower) for point in points]
-
-        priority = {"keyword": 0, "summary": 1}
-        results.sort(key=lambda row: (priority.get(row["source"], 2), -(row["score"] or 0)))
-        return results[:limit]
 
     def search_documents_hybrid(
         self,
@@ -322,8 +361,179 @@ class QdrantIndexer:
         summaries_collection: str = "document_summaries",
         chunks_collection: str = "document_chunks",
     ) -> List[Dict[str, Any]]:
-        """Unused by Archive UI — kept for compatibility. Prefers summary-only init path."""
-        return self.search_documents(query=query, limit=limit, collection_name=summaries_collection, lang=lang)
+        """Hybrid archive search: summary vectors + chunk vectors + keyword boosts.
+
+        Aligns with README: ingest builds parent summaries and child chunks;
+        retrieval fuses both with Reciprocal Rank Fusion, then boosts exact
+        keyword / project / doc-id matches. Optional ``lang`` hint prefers
+        Bangla-script or Latin-script evidence when set to ``bn`` / ``en``.
+        """
+        query = (query or "").strip()
+        if not query:
+            return []
+
+        query_vector = embed_texts([query])[0]
+        query_lower = query.casefold()
+        lang_hint = (lang or "").strip().lower()
+
+        summary_response = self.client.query_points(
+            collection_name=summaries_collection,
+            query=query_vector,
+            limit=max(limit * 5, 40),
+            with_payload=True,
+        )
+        summary_points = (
+            summary_response.points if getattr(summary_response, "points", None) is not None else []
+        )
+        summary_rows = [self._normalize_query_response(point, query_lower) for point in summary_points]
+
+        chunk_best: Dict[str, Dict[str, Any]] = {}
+        if use_chunks:
+            try:
+                chunk_response = self.client.query_points(
+                    collection_name=chunks_collection,
+                    query=query_vector,
+                    limit=max(limit * 8, 60),
+                    with_payload=True,
+                )
+                chunk_points = (
+                    chunk_response.points if getattr(chunk_response, "points", None) is not None else []
+                )
+            except Exception:
+                chunk_points = []
+
+            for point in chunk_points:
+                payload = getattr(point, "payload", None) or {}
+                parent = (
+                    payload.get("parent_doc_id")
+                    or payload.get("document_id")
+                    or payload.get("doc_id")
+                )
+                if not parent:
+                    continue
+                score = float(getattr(point, "score", 0) or 0)
+                text = str(payload.get("text") or "")
+                snippet = " ".join(text.split())
+                if len(snippet) > 220:
+                    snippet = snippet[:217].rstrip() + "…"
+                existing = chunk_best.get(str(parent))
+                if existing is None or score > existing["score"]:
+                    chunk_best[str(parent)] = {
+                        "doc_id": str(parent),
+                        "score": score,
+                        "snippet": snippet,
+                        "page_number": payload.get("page_number"),
+                        "source": "chunk",
+                    }
+
+        summary_rank = [row["doc_id"] for row in summary_rows if row.get("doc_id")]
+        chunk_rank = sorted(chunk_best.keys(), key=lambda did: -chunk_best[did]["score"])
+        fused = reciprocal_rank_fusion([summary_rank, chunk_rank] if use_chunks else [summary_rank])
+
+        by_id: Dict[str, Dict[str, Any]] = {}
+        for row in summary_rows:
+            doc_id = row.get("doc_id")
+            if not doc_id:
+                continue
+            by_id[doc_id] = {
+                **row,
+                "match_reasons": list(row.get("match_reasons") or []),
+                "snippet": "",
+                "sources": [row.get("source") or "summary"],
+            }
+
+        for doc_id, chunk_row in chunk_best.items():
+            if doc_id not in by_id:
+                by_id[doc_id] = {
+                    "id": doc_id,
+                    "doc_id": doc_id,
+                    "doc_type": "Document",
+                    "searchable_keywords": [],
+                    "major_projects": [],
+                    "score": chunk_row["score"],
+                    "source": "chunk",
+                    "match_reasons": ["chunk"],
+                    "snippet": chunk_row.get("snippet") or "",
+                    "sources": ["chunk"],
+                }
+            else:
+                entry = by_id[doc_id]
+                if "chunk" not in entry["match_reasons"]:
+                    entry["match_reasons"].append("chunk")
+                if "chunk" not in entry["sources"]:
+                    entry["sources"].append("chunk")
+                if not entry.get("snippet"):
+                    entry["snippet"] = chunk_row.get("snippet") or ""
+                entry["score"] = max(float(entry.get("score") or 0), chunk_row["score"])
+
+        results: List[Dict[str, Any]] = []
+        for doc_id, entry in by_id.items():
+            rrf = fused.get(doc_id, 0.0)
+            vector_score = float(entry.get("score") or 0)
+            boost = 0.0
+            reasons = list(entry.get("match_reasons") or [])
+
+            if _casefold_contains(str(doc_id), query_lower):
+                boost += 0.28
+                if "doc_id" not in reasons:
+                    reasons.append("doc_id")
+
+            keywords = entry.get("searchable_keywords") or []
+            if any(_casefold_contains(str(kw), query_lower) for kw in keywords):
+                boost += 0.16
+                if "keyword" not in reasons:
+                    reasons.append("keyword")
+
+            projects = entry.get("major_projects") or []
+            if any(
+                isinstance(p, dict)
+                and (
+                    _casefold_contains(str(p.get("project_name") or ""), query_lower)
+                    or _casefold_contains(str(p.get("brief_context") or ""), query_lower)
+                )
+                for p in projects
+            ):
+                boost += 0.12
+                if "project" not in reasons:
+                    reasons.append("project")
+
+            evidence = " ".join(
+                [
+                    str(doc_id),
+                    " ".join(str(k) for k in keywords),
+                    entry.get("snippet") or "",
+                ]
+            )
+            has_bn = _contains_bangla(evidence)
+            if lang_hint == "bn" and has_bn:
+                boost += 0.06
+            elif lang_hint == "en" and evidence and not has_bn:
+                boost += 0.03
+
+            # Blend RRF (rank signal) with cosine similarity and lexical boosts.
+            final_score = (rrf * 4.0) + vector_score + boost
+            sources = entry.get("sources") or ["summary"]
+            if len(sources) > 1:
+                primary = "hybrid"
+            elif "keyword" in reasons:
+                primary = "keyword"
+            else:
+                primary = sources[0]
+
+            results.append(
+                {
+                    **entry,
+                    "score": round(final_score, 4),
+                    "vector_score": round(vector_score, 4),
+                    "rrf_score": round(rrf, 4),
+                    "source": primary,
+                    "match_reasons": reasons,
+                    "snippet": entry.get("snippet") or "",
+                }
+            )
+
+        results.sort(key=lambda row: (-(row.get("score") or 0), str(row.get("doc_id") or "")))
+        return results[:limit]
 
     def prepare_chunk_records(self, documents: List[Any], parent_doc_id: str) -> List[Dict[str, Any]]:
         records = []

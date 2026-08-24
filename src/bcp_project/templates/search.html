@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 
-{% block title %}Search Documents | Sonali Bank Archive System{% endblock %}
+{% block title %}Search Intelligence | {{ brand.product_name }}{% endblock %}
 
 {% block content %}
 <div class="page-header">
     <div class="title-group">
-        <h1>Search Documents</h1>
-        <p>Search both extracted keywords and document summary content for related files.</p>
+        <h1>Search intelligence</h1>
+        <p>Hybrid retrieval across document summaries and page text — the same pipeline that runs when you upload.</p>
     </div>
     <div class="page-header-actions">
         <a class="button button-secondary" href="/archive/map" data-nav>Open Mind Map</a>
@@ -14,17 +14,23 @@
     </div>
 </div>
 
-<section class="panel" data-page="search" id="searchPage">
+<section class="panel search-intel-panel" data-page="search" id="searchPage">
     <div class="search-tabs" role="tablist">
-        <button id="tabKeyword" type="button" class="search-tab active" role="tab" aria-selected="true" data-search-tab="keyword" onclick="if(window.BCPNav)window.BCPNav.showSearchPanel('keyword')">Keyword Search</button>
-        <button id="tabMetadata" type="button" class="search-tab" role="tab" aria-selected="false" data-search-tab="metadata" onclick="if(window.BCPNav)window.BCPNav.showSearchPanel('metadata')">Metadata Search</button>
+        <button id="tabKeyword" type="button" class="search-tab active" role="tab" aria-selected="true" data-search-tab="keyword">Intelligent search</button>
+        <button id="tabMetadata" type="button" class="search-tab" role="tab" aria-selected="false" data-search-tab="metadata">Metadata filters</button>
     </div>
 
     <div id="keywordPanel" class="search-panel" role="tabpanel" data-search-panel="keyword" aria-hidden="false">
+        <div class="search-lang-toggle" role="group" aria-label="Language preference">
+            <button type="button" id="langEn" class="search-lang-btn is-active" data-search-lang="en">English</button>
+            <button type="button" id="langBn" class="search-lang-btn" data-search-lang="bn">বাংলা</button>
+            <p id="searchLangHint" class="search-lang-hint">Prefers Latin-script evidence when ranking.</p>
+        </div>
         <div class="search-control">
-            <input id="searchQuery" type="search" placeholder="Enter keyword or document summary phrase" enterkeyhint="search" autocomplete="off" />
+            <input id="searchQuery" type="search" placeholder="Search by meaning, keyword, project, or document ID…" enterkeyhint="search" autocomplete="off" />
             <button id="searchButton" type="button">Search</button>
         </div>
+        <p class="search-intel-note">Matches <strong>summary meaning</strong>, <strong>page text chunks</strong>, and <strong>keywords / projects</strong> — then fuses ranks for one result list.</p>
     </div>
 
     <div id="metadataPanel" class="search-panel is-hidden" role="tabpanel" data-search-panel="metadata" aria-hidden="true">
@@ -50,7 +56,7 @@
                 <input id="metaDateTo" type="date" />
             </div>
         </div>
-        <button id="metadataSearchButton" type="button" class="button-block">Search</button>
+        <button id="metadataSearchButton" type="button" class="button-block">Search metadata</button>
     </div>
 
     <div id="searchResults" class="search-results" aria-live="polite">

@@ -404,7 +404,19 @@
     return fetch(url, {
       credentials: "same-origin",
       headers: { Accept: "text/html", "X-Requested-With": "BCPNav" },
+      redirect: "manual",
     }).then(function (res) {
+      if (res.status === 401 || res.status === 302 || res.status === 303) {
+        var loc = res.headers.get("Location") || "/login";
+        if (res.status === 401 || (loc && loc.indexOf("/login") !== -1)) {
+          window.location.href = "/login";
+          throw new Error("auth");
+        }
+      }
+      if (res.type === "opaqueredirect") {
+        window.location.href = "/login";
+        throw new Error("auth");
+      }
       if (!res.ok) throw new Error("nav failed");
       return res.text().then(function (text) {
         var finalUrl = res.url || url;
@@ -571,8 +583,8 @@
     }
     if (hint) {
       hint.textContent = isBn
-        ? "বাংলা ও ইংরেজি — দুই ভাষাতেই খোঁজা যাবে।"
-        : "Type in English or Bangla — both are supported.";
+        ? "বাংলা অগ্রাধিকার — hybrid search ranks Bangla evidence higher."
+        : "English preference — hybrid search ranks Latin-script evidence higher.";
     }
     try {
     writeStorage("sb-search-lang", isBn ? "bn" : "en");
@@ -638,18 +650,46 @@
   }
 
   function renderKeywordResults(results) {
+    var reasonLabels = {
+      summary: "Summary meaning",
+      chunk: "Page text",
+      keyword: "Keyword",
+      project: "Project",
+      doc_id: "Document ID",
+      hybrid: "Hybrid",
+    };
     return results
       .map(function (result) {
         var keywords = Array.isArray(result.searchable_keywords)
-          ? result.searchable_keywords.join(", ")
+          ? result.searchable_keywords.slice(0, 10).join(", ")
           : "";
         var score =
           result.score != null && !isNaN(Number(result.score))
             ? Number(result.score).toFixed(3)
             : "N/A";
         var source = result.source || "summary";
+        var reasons = Array.isArray(result.match_reasons) && result.match_reasons.length
+          ? result.match_reasons
+          : [source];
+        var reasonHtml = reasons
+          .map(function (reason) {
+            return (
+              '<span class="search-reason-chip search-reason-' +
+              escapeHtml(reason) +
+              '">' +
+              escapeHtml(reasonLabels[reason] || reason) +
+              "</span>"
+            );
+          })
+          .join("");
+        var snippet = result.snippet
+          ? '<p class="result-snippet">“' + escapeHtml(result.snippet) + '”</p>'
+          : "";
+        var metaBits = [];
+        if (result.doc_date) metaBits.push(result.doc_date);
+        metaBits.push("Score " + score);
         return (
-          '<article class="result-card list-row">' +
+          '<article class="result-card list-row search-result-card">' +
           '<div class="result-header">' +
           "<h3>" +
           renderAccessActions(result) +
@@ -657,15 +697,12 @@
           '<span class="badge">' +
           escapeHtml(result.doc_type || "Document") +
           "</span></div>" +
-          "<p><strong>Match type:</strong> " +
-          escapeHtml(source) +
+          '<div class="search-reason-row">' + reasonHtml + "</div>" +
+          snippet +
+          '<p class="result-meta">' +
+          escapeHtml(metaBits.join(" · ")) +
           "</p>" +
-          "<p><strong>Score:</strong> " +
-          escapeHtml(score) +
-          "</p>" +
-          "<p><strong>Keywords:</strong> " +
-          escapeHtml(keywords) +
-          "</p>" +
+          (keywords ? '<p class="result-meta"><strong>Keywords:</strong> ' + escapeHtml(keywords) + "</p>" : "") +
           "</article>"
         );
       })

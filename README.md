@@ -7,7 +7,7 @@ A secure bilingual (English + Bangla) document archive and board-meeting PWA for
 | Capability | Status |
 |---|---|
 | PDF ingest → structured summary → parent + chunk vectors in Qdrant | **Present** |
-| Hybrid semantic search (summaries + chunks) + metadata filters | **Present** |
+| Hybrid semantic search (summaries + chunks, RRF fusion) + metadata filters | **Present** |
 | Redis search/metadata cache (version bump on upload) | **Present** |
 | Request-gated view/download (`view_only` / `download`) | **Present** |
 | Server-stamped watermarked PDF stream + audited download | **Present** |
