@@ -8,7 +8,10 @@
         <h1>Search Documents</h1>
         <p>Search both extracted keywords and document summary content for related files.</p>
     </div>
-    <div class="badge">{{ user.username }} · {{ 'Board Member' if user.role.value == 'board_member' else user.role.value | replace('_', ' ') | title }}</div>
+    <div class="page-header-actions">
+        <a class="button button-secondary" href="/archive/map" data-nav>Open Mind Map</a>
+        <div class="badge">{{ user.username }} · {{ 'Board Member' if user.role.value == 'board_member' else user.role.value | replace('_', ' ') | title }}</div>
+    </div>
 </div>
 
 <section class="panel" data-page="search" id="searchPage">

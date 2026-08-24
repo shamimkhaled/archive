@@ -214,7 +214,7 @@
 
             <div class="layout">
                 <main class="content" id="main-content">
-                    <div class="content-inner"{% if show_bottom and (path.startswith('/meetings') or path.startswith('/board/meetings') or path.startswith('/search') or path == '/' or path.startswith('/appearance')) %} data-pull-refresh{% endif %}>
+                    <div class="content-inner"{% if show_bottom and (path.startswith('/meetings') or path.startswith('/board/meetings') or path.startswith('/search') or path.startswith('/archive/map') or path == '/' or path.startswith('/appearance')) %} data-pull-refresh{% endif %}>
                         <div id="ptrIndicator" class="ptr-indicator" aria-hidden="true">Release to refresh</div>
                         {% block content %}{% endblock %}
                     </div>
@@ -237,13 +237,17 @@
                 <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10.5L12 3l9 7.5V20a1 1 0 01-1 1h-5v-6H9v6H4a1 1 0 01-1-1v-9.5z"/></svg></span>
                 Home
             </a>
-            <a href="/board/meetings" class="{% if path.startswith('/board/meetings') %}is-active{% endif %}" data-nav>
-                <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>
-                Meetings
-            </a>
             <a href="/search" class="{% if path.startswith('/search') %}is-active{% endif %}" data-nav>
                 <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></span>
                 Archive
+            </a>
+            <a href="/archive/map" class="{% if path.startswith('/archive/map') %}is-active{% endif %}" data-nav>
+                <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="2"/><circle cx="18" cy="8" r="2"/><circle cx="10" cy="18" r="2"/><path d="M8 6.8L16.5 7.8M7.6 7.8l2.2 9.5M16 9.8l-5.5 7.5"/></svg></span>
+                Mind Map
+            </a>
+            <a href="/board/meetings" class="{% if path.startswith('/board/meetings') %}is-active{% endif %}" data-nav>
+                <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>
+                Meetings
             </a>
             <button type="button" class="nav-tab" id="moreNavToggle" aria-expanded="false" aria-controls="moreSheet">
                 <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg></span>
@@ -275,16 +279,14 @@
                 <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></span>
                 Archive
             </a>
+            <a href="/archive/map" class="{% if path.startswith('/archive/map') %}is-active{% endif %}" data-nav>
+                <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="2"/><circle cx="18" cy="8" r="2"/><circle cx="10" cy="18" r="2"/><path d="M8 6.8L16.5 7.8M7.6 7.8l2.2 9.5M16 9.8l-5.5 7.5"/></svg></span>
+                Mind Map
+            </a>
             <a href="/meetings" class="{% if path.startswith('/meetings') %}is-active{% endif %}" data-nav>
                 <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>
                 Meetings
             </a>
-            {% if role == 'admin' %}
-            <a href="/upload" class="{% if path.startswith('/upload') %}is-active{% endif %}" data-nav>
-                <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 20h16"/></svg></span>
-                Upload
-            </a>
-            {% endif %}
             <button type="button" class="nav-tab" id="moreNavToggle" aria-expanded="false" aria-controls="moreSheet">
                 <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg></span>
                 More
@@ -294,8 +296,17 @@
 
         <div id="moreSheetBackdrop" class="sheet-backdrop" hidden></div>
         <div id="moreSheet" class="more-sheet" hidden role="dialog" aria-label="More options">
-            <h2>Account</h2>
+            <h2>More</h2>
             <p class="muted" style="margin: 0 0 0.75rem;">{{ user.username }} · {{ role_label }}</p>
+            {% if role in ['admin', 'board_secretary', 'board_member'] %}
+            <p class="more-sheet-label">Workspace</p>
+            <a href="/archive/map" data-nav>Mind Map</a>
+            <a href="/search" data-nav>Archive search</a>
+            {% endif %}
+            {% if role == 'admin' %}
+            <a href="/upload" data-nav>Upload document</a>
+            {% endif %}
+            <p class="more-sheet-label">Account</p>
             <a href="/notifications" data-nav>Notifications</a>
             <a href="/appearance" data-nav>Appearance</a>
             {% if role == 'board_member' %}

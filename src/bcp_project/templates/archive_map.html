@@ -3,21 +3,21 @@
 {% block title %}Mind Map | {{ brand.product_name }}{% endblock %}
 
 {% block content %}
-<div class="neural-map-page mind-map-page" data-page="archive-map">
-    <div class="neural-map-header">
+{% set can_upload = user.role.value in ['admin', 'uploader'] %}
+<div class="mind-map-page" data-page="archive-map">
+    <div class="page-header">
         <div class="title-group">
-            <p class="neural-map-kicker">Archive workflow</p>
             <h1>Document mind map</h1>
-            <p class="neural-map-lead">Select a document, follow the connection path, and explore related records grouped by how they link together.</p>
+            <p>Trace how archive records connect by meaning, project, people, and keywords.</p>
         </div>
         <div class="badge">{{ user.username }} · {{ 'Board Member' if user.role.value == 'board_member' else user.role.value | replace('_', ' ') | title }}</div>
     </div>
 
-    <section class="neural-map-workspace panel">
-        <div class="neural-map-toolbar mind-map-toolbar">
+    <section class="panel mind-map-workspace">
+        <div class="mind-map-toolbar">
             <div class="mind-map-toolbar-meta">
-                <p class="mind-map-focus-label">Workflow focus</p>
-                <p class="mind-map-focus-value" id="mapFocusLabel">Select a document to start</p>
+                <p class="mind-map-focus-label">Focused document</p>
+                <p class="mind-map-focus-value" id="mapFocusLabel">None selected</p>
             </div>
             <div class="neural-toolbar-group">
                 <label for="mapLimit">Scope</label>
@@ -36,8 +36,10 @@
                     <option value="0.82">82%+</option>
                 </select>
             </div>
-            <button type="button" class="button button-secondary neural-toolbar-btn" id="mapClearFocusBtn">Clear focus</button>
-            <button type="button" class="button neural-toolbar-btn" id="mapReloadBtn">Refresh</button>
+            <div class="mind-map-toolbar-actions">
+                <button type="button" class="button button-secondary neural-toolbar-btn" id="mapClearFocusBtn">Clear focus</button>
+                <button type="button" class="button neural-toolbar-btn" id="mapReloadBtn">Refresh</button>
+            </div>
         </div>
 
         <ol class="mind-map-workflow-steps" id="mapWorkflowSteps" aria-label="Mind map workflow">
@@ -46,16 +48,23 @@
             <li class="mind-map-step" data-step="related"><span>3</span> Related documents</li>
         </ol>
 
-        <div class="neural-map-body mind-map-layout" id="mindMapLayout">
+        <div class="mind-map-layout" id="mindMapLayout">
             <aside class="mind-map-doc-panel" aria-label="Document list">
                 <div class="mind-map-doc-panel-head">
-                    <label for="mapDocSearch">Search documents</label>
+                    <label for="mapDocSearch">Documents</label>
                     <input id="mapDocSearch" type="search" placeholder="Search by ID, title, or type…" autocomplete="off" />
                     <div class="mind-map-doc-filters" id="mapDocTypeFilters" aria-label="Filter by document type"></div>
                     <p class="mind-map-doc-count" id="mapDocCount">Loading documents…</p>
                 </div>
                 <div class="mind-map-doc-list-wrap">
-                    <div class="mind-map-doc-list" id="mapDocList" role="listbox" aria-label="Archive documents"></div>
+                    <div class="mind-map-doc-list" id="mapDocList" role="listbox" aria-label="Archive documents">
+                        <div class="mind-map-skeleton" aria-hidden="true">
+                            <div class="skeleton-row"><div class="skeleton skeleton-line" style="width:42%"></div><div class="skeleton skeleton-line short" style="width:78%"></div></div>
+                            <div class="skeleton-row"><div class="skeleton skeleton-line" style="width:36%"></div><div class="skeleton skeleton-line short" style="width:64%"></div></div>
+                            <div class="skeleton-row"><div class="skeleton skeleton-line" style="width:48%"></div><div class="skeleton skeleton-line short" style="width:72%"></div></div>
+                            <div class="skeleton-row"><div class="skeleton skeleton-line" style="width:30%"></div><div class="skeleton skeleton-line short" style="width:58%"></div></div>
+                        </div>
+                    </div>
                     <p class="mind-map-doc-empty" id="mapDocEmpty" hidden>No documents match your search.</p>
                 </div>
             </aside>
@@ -70,17 +79,29 @@
                 </div>
 
                 <div class="mind-map-visual-panel is-active" data-panel="workflow">
-                    <div class="neural-tree-shell mind-map-canvas" id="archiveMapGraph">
-                        <div class="neural-tree-empty" id="neuralTreeEmpty" hidden>
-                            <div class="neural-tree-empty-icon" aria-hidden="true">◎</div>
-                            <h2>No connections yet</h2>
-                            <p>Select a document from the list to visualize its workflow, or upload more archive records to grow the map.</p>
+                    <div class="neural-tree-shell mind-map-canvas is-empty is-loading" id="archiveMapGraph">
+                        <div class="neural-tree-empty is-loading" id="neuralTreeEmpty">
+                            <div class="neural-tree-empty-icon" aria-hidden="true">
+                                <span class="mind-map-spinner"></span>
+                                <svg class="neural-tree-empty-mark" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+                                    <circle cx="6" cy="6" r="2.2"/>
+                                    <circle cx="18" cy="8" r="2.2"/>
+                                    <circle cx="10" cy="18" r="2.2"/>
+                                    <path d="M8 6.8L16.5 7.8M7.6 7.8l2.2 9.5M16 9.8l-5.5 7.5"/>
+                                </svg>
+                            </div>
+                            <h2 id="neuralTreeEmptyTitle">Loading documents</h2>
+                            <p id="neuralTreeEmptyLead">Fetching archive records and preparing the connection map.</p>
+                            {% if can_upload %}
+                            <a class="button" id="neuralTreeEmptyAction" href="/upload" hidden>Upload a document</a>
+                            {% endif %}
                         </div>
                         <div class="neural-tree-controls" aria-label="Map zoom controls">
-                            <button type="button" id="neuralZoomIn" title="Zoom in">+</button>
-                            <button type="button" id="neuralZoomOut" title="Zoom out">−</button>
+                            <button type="button" id="neuralZoomIn" title="Zoom in" aria-label="Zoom in">+</button>
+                            <button type="button" id="neuralZoomOut" title="Zoom out" aria-label="Zoom out">−</button>
                             <button type="button" id="neuralZoomFit" title="Fit to view">Fit</button>
                         </div>
+                        <p class="neural-tree-hint">Drag to pan · Scroll to zoom</p>
                         <div class="neural-tree-legend">
                             <span><i class="edge-dot edge-semantic"></i> Semantic</span>
                             <span><i class="edge-dot edge-project"></i> Project</span>
@@ -98,11 +119,16 @@
 
             <aside class="mind-map-workflow-panel" id="mapWorkflowPanel" aria-label="Organized connections">
                 <div class="mind-map-workflow-panel-head">
-                    <p class="neural-detail-kicker">Connection workflow</p>
-                    <h2 id="mapWorkflowTitle">Select a document</h2>
-                    <p class="mind-map-workflow-lead" id="mapWorkflowLead">Choose a document to see organized connection paths.</p>
+                    <p class="neural-detail-kicker">Connection path</p>
+                    <h2 id="mapWorkflowTitle">Loading…</h2>
+                    <p class="mind-map-workflow-lead" id="mapWorkflowLead">Related records will appear here after the archive loads.</p>
                 </div>
-                <div class="mind-map-workflow-groups" id="mapWorkflowGroups"></div>
+                <div class="mind-map-workflow-groups" id="mapWorkflowGroups">
+                    <div class="mind-map-skeleton" aria-hidden="true">
+                        <div class="skeleton-row"><div class="skeleton skeleton-line" style="width:55%"></div><div class="skeleton skeleton-line short" style="width:80%"></div></div>
+                        <div class="skeleton-row"><div class="skeleton skeleton-line" style="width:40%"></div><div class="skeleton skeleton-line short" style="width:68%"></div></div>
+                    </div>
+                </div>
             </aside>
 
             <aside class="neural-detail-drawer" id="archiveMapSidebar" hidden>

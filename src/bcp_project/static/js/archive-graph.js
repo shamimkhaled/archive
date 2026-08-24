@@ -225,11 +225,11 @@
     var branches = model.branches || [];
     var layoutNodes = [];
     var layoutLinks = [];
-    var centerX = compact ? 70 : 100;
-    var hubX = compact ? 210 : 300;
-    var leafX = compact ? 360 : 520;
-    var leafSpacing = compact ? 48 : 58;
-    var branchGap = compact ? 24 : 32;
+    var centerX = compact ? 80 : 150;
+    var hubX = compact ? 230 : 380;
+    var leafX = compact ? 400 : 680;
+    var leafSpacing = compact ? 58 : 98;
+    var branchGap = compact ? 32 : 56;
     var blockHeights = branches.map(function (branch) {
       return Math.max((branch.docs || []).length, 1) * leafSpacing;
     });
@@ -244,8 +244,8 @@
         x: centerX,
         y: 0,
         node: model.center,
-        width: compact ? 118 : 168,
-        height: compact ? 52 : 68,
+        width: compact ? 124 : 196,
+        height: compact ? 56 : 88,
       });
     }
 
@@ -261,8 +261,8 @@
         x: hubX,
         y: hubY,
         branch: branch,
-        width: compact ? 96 : 132,
-        height: compact ? 40 : 48,
+        width: compact ? 108 : 156,
+        height: compact ? 44 : 64,
       });
 
       if (model.center) {
@@ -287,8 +287,8 @@
           branch: branch,
           weight: docRef.weight,
           reason: docRef.label,
-          width: compact ? 108 : 148,
-          height: compact ? 46 : 56,
+          width: compact ? 124 : 188,
+          height: compact ? 52 : 76,
         });
         layoutLinks.push({
           from: hubId,
@@ -314,10 +314,10 @@
     });
     var typeKeys = Object.keys(groups).sort();
     var layoutNodes = [];
-    var colWidth = compact ? 130 : 170;
-    var rowHeight = compact ? 52 : 62;
-    var colGap = compact ? 24 : 36;
-    var rowGap = compact ? 10 : 12;
+    var colWidth = compact ? 136 : 196;
+    var rowHeight = compact ? 56 : 78;
+    var colGap = compact ? 28 : 48;
+    var rowGap = compact ? 14 : 20;
     var startX = -(typeKeys.length - 1) * (colWidth + colGap) / 2;
 
     typeKeys.forEach(function (type, colIndex) {
@@ -403,20 +403,19 @@
 
       if (item.kind === "center") {
         card.innerHTML =
-          '<span class="neural-node-eyebrow">Step 1 · Focus</span>' +
+          '<span class="neural-node-eyebrow">' + escapeHtml(item.node.doc_type || "Focus") + "</span>" +
           '<strong>' + escapeHtml(item.node.label) + '</strong>' +
-          '<span class="neural-node-sub">' + escapeHtml(item.node.title || item.node.doc_type) + '</span>';
+          '<span class="neural-node-sub">' + escapeHtml(item.node.title || "") + '</span>';
       } else if (item.kind === "hub") {
         card.innerHTML =
-          '<span class="neural-node-eyebrow">Step 2 · ' + escapeHtml(item.branch.meta.short) + "</span>" +
+          '<span class="neural-node-eyebrow">Connection</span>' +
           '<strong>' + escapeHtml(item.branch.meta.label) + "</strong>" +
           '<span class="neural-node-sub">' + (item.branch.docs ? item.branch.docs.length : 0) + " linked</span>";
       } else {
         card.innerHTML =
-          '<span class="neural-node-eyebrow">Step 3 · Related</span>' +
+          '<span class="neural-node-eyebrow">' + escapeHtml(item.node.doc_type || "Related") + "</span>" +
           "<strong>" + escapeHtml(item.node.label) + "</strong>" +
-          '<span class="neural-node-sub">' + escapeHtml(item.node.title || item.node.doc_type) + "</span>" +
-          (item.reason ? '<span class="neural-node-reason">' + escapeHtml(item.reason) + "</span>" : "") +
+          '<span class="neural-node-sub">' + escapeHtml(item.node.title || "") + "</span>" +
           (item.weight ? '<span class="neural-node-score">' + Math.round(item.weight * 100) + "% match</span>" : "");
       }
 
@@ -434,7 +433,12 @@
       self.nodeLayer.appendChild(group);
     });
 
-    this.fitToView();
+    var selfFit = this;
+    window.requestAnimationFrame(function () {
+      window.requestAnimationFrame(function () {
+        selfFit.fitToView();
+      });
+    });
   };
 
   NeuralTreeRenderer.prototype.selectNode = function (nodeId) {
@@ -461,10 +465,13 @@
       maxX = Math.max(maxX, node.x + node.width / 2);
       maxY = Math.max(maxY, node.y + node.height / 2);
     });
-    var graphW = maxX - minX + 80;
-    var graphH = maxY - minY + 80;
-    var scale = Math.min(rect.width / graphW, rect.height / graphH, 1.2);
-    this.scale = Math.max(0.45, Math.min(1.15, scale));
+    if (!rect.width || !rect.height) return;
+    var padX = 180;
+    var padY = 140;
+    var graphW = Math.max(maxX - minX + padX, 1);
+    var graphH = Math.max(maxY - minY + padY, 1);
+    var scale = Math.min((rect.width - 24) / graphW, (rect.height - 24) / graphH, 1.05);
+    this.scale = Math.max(0.38, Math.min(1.05, scale));
     this.offsetX = rect.width / 2 - ((minX + maxX) / 2) * this.scale;
     this.offsetY = rect.height / 2 - ((minY + maxY) / 2) * this.scale;
     this._applyTransform();
@@ -577,10 +584,51 @@
       if (statusEl) statusEl.textContent = text;
     }
 
+    function setEmptyState(kind) {
+      if (!emptyEl) return;
+      var titleEl = document.getElementById("neuralTreeEmptyTitle");
+      var leadEl = document.getElementById("neuralTreeEmptyLead");
+      var actionEl = document.getElementById("neuralTreeEmptyAction");
+      var copy = {
+        loading: {
+          title: "Loading documents",
+          lead: "Fetching archive records and preparing the connection map.",
+        },
+        vacant: {
+          title: "No archive records yet",
+          lead: "Upload documents to start mapping how records connect.",
+        },
+        idle: {
+          title: "Choose a document",
+          lead: "Select a record from the list to see how it connects across the archive.",
+        },
+        disconnected: {
+          title: "No connections found",
+          lead: "Try a lower similarity threshold or a wider document scope.",
+        },
+      };
+      if (!kind) {
+        emptyEl.hidden = true;
+        emptyEl.classList.remove("is-loading");
+        if (container) container.classList.remove("is-empty", "is-loading");
+        return;
+      }
+      var next = copy[kind] || copy.idle;
+      if (titleEl) titleEl.textContent = next.title;
+      if (leadEl) leadEl.textContent = next.lead;
+      if (actionEl) actionEl.hidden = kind !== "vacant";
+      emptyEl.hidden = false;
+      emptyEl.classList.toggle("is-loading", kind === "loading");
+      if (container) {
+        container.classList.add("is-empty");
+        container.classList.toggle("is-loading", kind === "loading");
+      }
+    }
+
     function updateFocusLabel() {
       if (!focusLabel) return;
       if (!focusedDocId) {
-        focusLabel.textContent = "Select a document to start";
+        focusLabel.textContent = "None selected";
         return;
       }
       var match = allDocuments.find(function (doc) { return doc.doc_id === focusedDocId; });
@@ -631,12 +679,12 @@
     function renderWorkflowPanel(model) {
       if (!workflowGroups) return;
       if (!model || !model.center) {
-        if (workflowTitle) workflowTitle.textContent = "Select a document";
-        if (workflowLead) workflowLead.textContent = "Choose a document to see organized connection paths.";
+        if (workflowTitle) workflowTitle.textContent = "No document selected";
+        if (workflowLead) workflowLead.textContent = "Pick a document to see related records grouped by how they link.";
         workflowGroups.innerHTML =
           '<div class="mind-map-workflow-placeholder">' +
-          "<p>Workflow path</p>" +
-          "<ol><li>Select a document from the list</li><li>Review connection types</li><li>Open related documents</li></ol>" +
+          "<p>How to read this map</p>" +
+          "<ol><li>Choose a document in the left list</li><li>Follow connection types in the map</li><li>Open related records from this panel</li></ol>" +
           "</div>";
         updateWorkflowSteps(null);
         renderConnectionStats(null);
@@ -735,17 +783,55 @@
     }
 
     function setFocus(docId, reload) {
-      focusedDocId = (docId || "").trim();
+      var next = (docId || "").trim();
+      // Same focus already active — keep the tree, only refresh details.
+      if (next && next === focusedDocId) {
+        if (focusInput) focusInput.value = focusedDocId;
+        updateFocusLabel();
+        syncFocusUrl();
+        inspectDocument(next);
+        setActiveView("workflow");
+        return;
+      }
+      focusedDocId = next;
       if (focusInput) focusInput.value = focusedDocId;
       updateFocusLabel();
       syncFocusUrl();
-      renderDocumentList();
+      renderDocumentList(focusedDocId || undefined);
       if (reload !== false) loadMap();
+    }
+
+    function inspectDocument(docId) {
+      var id = (docId || "").trim();
+      if (!id) return;
+      var model = lastModel;
+      var node = model && model.nodeById ? model.nodeById[id] : null;
+      if (!node) {
+        var card = allDocuments.find(function (doc) { return doc.doc_id === id; });
+        if (card) {
+          node = {
+            id: card.doc_id,
+            label: card.doc_id,
+            title: card.title,
+            doc_type: card.doc_type,
+            doc_date: card.doc_date,
+            organization: card.organization || "",
+            projects: [],
+          };
+        }
+      }
+      if (node) showSidebar(node, model || { edges: [], nodeById: {} });
+      if (renderer && model && model.nodeById && model.nodeById[id]) {
+        renderer.selectNode(id);
+      } else {
+        renderDocumentList(id);
+      }
     }
 
     function hideSidebar() {
       if (sidebar) sidebar.hidden = true;
       if (layoutEl) layoutEl.classList.remove("has-detail");
+      renderDocumentList(focusedDocId || undefined);
     }
 
     function showSidebar(node, model) {
@@ -784,8 +870,14 @@
             }).join("")
           : "<li class='muted'>No direct connections in current scope</li>";
       }
-      if (view) view.href = "/view/" + encodeURIComponent(node.id) + "?from=/archive/map";
+      if (view) {
+        view.href = "/view/" + encodeURIComponent(node.id) +
+          "?from=" + encodeURIComponent("/archive/map" + (focusedDocId ? "?focus=" + focusedDocId : ""));
+      }
       if (focusBtn) {
+        var isAlreadyFocused = node.id === focusedDocId;
+        focusBtn.hidden = isAlreadyFocused;
+        focusBtn.textContent = "Set as workflow focus";
         focusBtn.onclick = function () {
           setFocus(node.id);
         };
@@ -862,15 +954,20 @@
         panel.hidden = !show;
       });
       if (view === "workflow" && lastGraph && focusedDocId) {
+        setEmptyState(null);
         if (!renderer) {
           renderer = new NeuralTreeRenderer(container, {
             onSelect: function (node, model) {
               lastModel = model;
+              // Canvas click = inspect only; never change the focused root.
               showSidebar(node, model);
             },
           });
         }
         renderer.render(lastGraph, false, "workflow");
+      } else if (view === "workflow" && !focusedDocId) {
+        if (!lastGraph && !allDocuments.length) setEmptyState("loading");
+        else setEmptyState(allDocuments.length ? "idle" : "vacant");
       }
     }
 
@@ -890,12 +987,18 @@
         })
         .catch(function (err) {
           if (docCount) docCount.textContent = err.message || "Could not load documents";
+          if (docList) docList.innerHTML = "";
+          if (docEmpty) {
+            docEmpty.hidden = false;
+            docEmpty.textContent = err.message || "Could not load documents";
+          }
         });
     }
 
     function loadMap() {
-      setStatus("Building mind map…");
-      if (emptyEl) emptyEl.hidden = true;
+      setStatus(lastGraph ? "Updating mind map…" : "Loading documents…");
+      if (!lastGraph) setEmptyState("loading");
+      if (!focusedDocId) hideSidebar();
       fetchGraph({
         limit: limitSelect ? Number(limitSelect.value) : 80,
         min_similarity: similaritySelect ? Number(similaritySelect.value) : 0.68,
@@ -906,46 +1009,74 @@
           if (!graph.count) {
             if (renderer) renderer.destroy();
             renderer = null;
-            if (emptyEl) emptyEl.hidden = false;
+            setEmptyState("vacant");
             hideSidebar();
             renderWorkflowPanel(null);
             setStatus("No documents in archive yet");
             return;
           }
-          if (emptyEl) emptyEl.hidden = Boolean(focusedDocId && graph.count);
           if (focusedDocId) {
+            setEmptyState(null);
             if (!renderer) {
               renderer = new NeuralTreeRenderer(container, {
                 onSelect: function (node, model) {
                   lastModel = model;
+                  // Canvas click = inspect only; never change the focused root.
                   showSidebar(node, model);
                 },
               });
             }
             renderer.render(graph, false, "workflow");
-          } else if (renderer) {
-            renderer.destroy();
-            renderer = null;
+          } else {
+            if (renderer) {
+              renderer.destroy();
+              renderer = null;
+            }
+            setEmptyState("idle");
           }
           lastModel = buildNeuralTreeModel(graph);
-          if (graph.center) {
+          // Keep the user's chosen focus — do not overwrite with a different center.
+          if (focusedDocId) {
+            if (focusInput) focusInput.value = focusedDocId;
+            updateFocusLabel();
+            renderDocumentList(focusedDocId);
+            setEmptyState(null);
+          } else if (graph.center) {
             focusedDocId = graph.center;
             if (focusInput) focusInput.value = focusedDocId;
             updateFocusLabel();
-            renderDocumentList();
+            renderDocumentList(focusedDocId);
+            setEmptyState(null);
           }
           renderWorkflowPanel(lastModel);
           renderOverviewGrid(filteredDocuments.length ? filteredDocuments : allDocuments);
           if (layoutEl) layoutEl.classList.add("has-workflow");
-          if (focusedDocId) setActiveView("workflow");
-          else if (activeView !== "overview") setActiveView("overview");
-          setStatus(
-            graph.count + " documents · " + graph.edge_count + " connections" +
-            (graph.center ? " · workflow focused on " + graph.center : " · archive overview")
-          );
+          if (focusedDocId) {
+            setActiveView("workflow");
+            // Re-select the focused document after render so selection does not jump.
+            window.requestAnimationFrame(function () {
+              if (renderer && focusedDocId) {
+                renderer.selectNode(focusedDocId);
+              } else if (lastModel && lastModel.nodeById && lastModel.nodeById[focusedDocId]) {
+                showSidebar(lastModel.nodeById[focusedDocId], lastModel);
+              }
+            });
+          } else if (activeView !== "overview") {
+            setActiveView("overview");
+          }
+          var statusBits = [graph.count + " documents", graph.edge_count + " connections"];
+          if (focusedDocId) {
+            statusBits.push("focused on " + focusedDocId);
+            if (lastModel && !lastModel.branches.length) statusBits.push("no connections in current scope");
+          } else {
+            statusBits.push("choose a document to map");
+          }
+          setStatus(statusBits.join(" · "));
         })
         .catch(function (err) {
           setStatus(err.message || "Failed to load mind map");
+          setEmptyState(allDocuments.length ? "idle" : "vacant");
+          renderWorkflowPanel(null);
         });
     }
 
@@ -953,7 +1084,14 @@
       docList.addEventListener("click", function (event) {
         var button = event.target.closest(".mind-map-doc-item");
         if (!button) return;
-        setFocus(button.getAttribute("data-doc-id") || "");
+        var docId = button.getAttribute("data-doc-id") || "";
+        if (docId && docId === focusedDocId) {
+          // Already the focus root — inspect only, do not rebuild the map.
+          inspectDocument(docId);
+          setActiveView("workflow");
+          return;
+        }
+        setFocus(docId);
         setActiveView("workflow");
       });
     }
@@ -963,9 +1101,8 @@
         var button = event.target.closest(".mind-map-workflow-doc");
         if (!button) return;
         var docId = button.getAttribute("data-doc-id") || "";
-        if (renderer) renderer.selectNode(docId);
-        var node = lastModel && lastModel.nodeById ? lastModel.nodeById[docId] : null;
-        if (node) showSidebar(node, lastModel);
+        // Inspect related docs without changing the focused root document.
+        inspectDocument(docId);
       });
     }
 
@@ -973,7 +1110,13 @@
       overviewGrid.addEventListener("click", function (event) {
         var button = event.target.closest(".mind-map-overview-card");
         if (!button) return;
-        setFocus(button.getAttribute("data-doc-id") || "");
+        var docId = button.getAttribute("data-doc-id") || "";
+        if (docId && docId === focusedDocId) {
+          inspectDocument(docId);
+          setActiveView("workflow");
+          return;
+        }
+        setFocus(docId);
         setActiveView("workflow");
       });
     }
@@ -1017,11 +1160,13 @@
     if (zoomOut) zoomOut.addEventListener("click", function () { if (renderer) renderer.zoomBy(0.88); });
     if (zoomFit) zoomFit.addEventListener("click", function () { if (renderer) renderer.fitToView(); });
 
-    loadDocuments().then(function () {
-      if (focusedDocId) setActiveView("workflow");
-      else setActiveView("overview");
-      loadMap();
+    window.addEventListener("resize", function () {
+      if (renderer) renderer.fitToView();
     });
+
+    hideSidebar();
+    setEmptyState("loading");
+    loadDocuments().then(loadMap);
   }
 
   function initViewerPanel(config) {

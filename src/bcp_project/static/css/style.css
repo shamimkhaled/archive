@@ -593,7 +593,32 @@ textarea:focus-visible {
   font-size: 0.75rem;
 }
 
-/* Bottom navigation */
+@media (display-mode: standalone), (display-mode: minimal-ui) {
+  body {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  input,
+  textarea,
+  [contenteditable="true"] {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
+  .mobile-topbar {
+    padding-top: max(0.55rem, env(safe-area-inset-top));
+  }
+
+  .bottom-nav {
+    padding-bottom: max(var(--safe-bottom), env(safe-area-inset-bottom));
+  }
+
+  .install-banner {
+    display: none !important;
+  }
+}
+
 .bottom-nav {
   position: fixed;
   left: 0;
@@ -620,16 +645,17 @@ textarea:focus-visible {
   justify-content: center;
   gap: 2px;
   min-height: var(--bottom-nav-h);
-  padding: var(--space-2) var(--space-1);
+  padding: var(--space-2) 2px;
   color: var(--muted);
   text-decoration: none;
-  font-size: 0.68rem;
+  font-size: 0.62rem;
   font-weight: 600;
   letter-spacing: 0.01em;
   background: none;
   border: none;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+  white-space: nowrap;
 }
 
 .bottom-nav a.is-active,
@@ -682,6 +708,19 @@ textarea:focus-visible {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--muted);
+}
+
+.more-sheet-label {
+  margin: 0.85rem 0 0.35rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.more-sheet-label:first-of-type {
+  margin-top: 0;
 }
 
 .more-sheet a {
@@ -800,6 +839,13 @@ body.sheet-open {
   justify-content: space-between;
   gap: var(--space-4);
   margin-bottom: var(--space-5);
+}
+
+.page-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
 }
 
 .page-header .title-group h1 {
@@ -2763,149 +2809,139 @@ body.auth-page .content-inner {
 }
 
 /* Document mind map */
-.neural-map-page,
 .mind-map-page {
   display: grid;
   gap: var(--space-4);
 }
 
-.neural-map-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-4);
+.mind-map-page .page-header {
+  margin-bottom: 0;
 }
 
-.neural-map-kicker,
 .neural-detail-kicker,
 .viewer-related-kicker {
-  margin: 0 0 0.35rem;
+  margin: 0 0 0.4rem;
   font-size: 0.72rem;
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--accent);
+  color: var(--bcg-gold);
 }
 
-.neural-map-lead {
-  margin: 0.35rem 0 0;
-  max-width: 52ch;
-  color: var(--text-secondary);
-  font-size: 0.92rem;
-  line-height: 1.55;
-}
-
-.neural-map-workspace {
+.mind-map-workspace.panel {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
   overflow: hidden;
+  min-height: calc(100dvh - 11.5rem);
+  margin-bottom: 0;
 }
 
-.neural-map-toolbar,
 .mind-map-toolbar {
   display: grid;
-  grid-template-columns: minmax(180px, 1.2fr) repeat(2, minmax(110px, auto)) repeat(2, auto);
-  gap: var(--space-3);
+  grid-template-columns: minmax(200px, 1.4fr) repeat(2, minmax(120px, 150px)) auto;
+  gap: var(--space-4);
   align-items: end;
-  padding-bottom: var(--space-4);
+  padding: var(--space-4) var(--space-5);
   border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bcg-soft) 55%, var(--surface));
 }
 
 .mind-map-toolbar-meta {
   display: grid;
   gap: 0.2rem;
+  min-width: 0;
 }
 
-.mind-map-focus-label {
+.mind-map-focus-label,
+.neural-toolbar-group label,
+.mind-map-doc-panel-head label {
   margin: 0;
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--muted);
 }
 
 .mind-map-focus-value {
   margin: 0;
-  font-size: 0.92rem;
-  font-weight: 600;
-  color: var(--text);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--bcg-dark);
   line-height: 1.35;
   word-break: break-word;
 }
 
 .neural-toolbar-group {
   display: grid;
-  gap: 0.35rem;
+  gap: 0.4rem;
 }
 
-.neural-toolbar-group label {
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--muted);
+.neural-toolbar-group select {
+  min-height: 40px;
+  width: 100%;
+}
+
+.mind-map-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: end;
+  justify-content: flex-end;
 }
 
 .neural-toolbar-btn {
-  align-self: end;
   white-space: nowrap;
-}
-
-.neural-map-body,
-.mind-map-layout {
-  display: grid;
-  grid-template-columns: minmax(240px, 280px) minmax(0, 1fr) minmax(260px, 300px);
-  gap: 0;
-  min-height: 560px;
-}
-
-.mind-map-layout.has-detail .mind-map-workflow-panel {
-  display: none;
-}
-
-.mind-map-layout.has-detail .neural-detail-drawer {
-  display: block;
+  min-height: 40px;
+  padding: 0.55rem 0.95rem;
 }
 
 .mind-map-workflow-steps {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-2);
+  gap: var(--space-3);
   list-style: none;
   margin: 0;
-  padding: var(--space-3) var(--space-4) 0;
+  padding: var(--space-3) var(--space-5);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
 }
 
 .mind-map-step {
   display: flex;
   align-items: center;
-  gap: 0.55rem;
-  padding: 0.65rem 0.75rem;
+  gap: 0.65rem;
+  padding: 0.7rem 0.85rem;
   border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--surface);
+  border-radius: var(--radius-md);
+  background: var(--bg);
   color: var(--muted);
-  font-size: 0.82rem;
+  font-size: 0.84rem;
+  font-weight: 600;
 }
 
 .mind-map-step span {
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 1.55rem;
+  height: 1.55rem;
+  flex-shrink: 0;
   display: grid;
   place-items: center;
   border-radius: 999px;
-  background: rgba(26, 26, 84, 0.08);
+  background: color-mix(in srgb, var(--bcg) 10%, transparent);
+  color: var(--bcg);
   font-size: 0.72rem;
   font-weight: 700;
 }
 
 .mind-map-step.is-active {
-  border-color: rgba(197, 146, 47, 0.45);
+  border-color: color-mix(in srgb, var(--bcg-gold) 50%, var(--border));
   color: var(--text);
-  background: rgba(197, 146, 47, 0.08);
+  background: color-mix(in srgb, var(--bcg-gold) 10%, var(--surface));
 }
 
 .mind-map-step.is-active span {
-  background: var(--accent);
+  background: var(--bcg-gold);
   color: #fff;
 }
 
@@ -2914,16 +2950,61 @@ body.auth-page .content-inner {
 }
 
 .mind-map-step.is-done span {
-  background: rgba(45, 154, 114, 0.15);
+  background: rgba(45, 154, 114, 0.16);
   color: #2d9a72;
 }
 
-.mind-map-canvas-column {
+.mind-map-layout {
+  display: grid;
+  grid-template-columns: minmax(240px, 300px) minmax(0, 1fr) minmax(260px, 320px);
+  gap: var(--space-4);
+  flex: 1;
+  min-height: 0;
+  padding: var(--space-4) var(--space-5);
+  background: var(--bg);
+}
+
+.mind-map-layout.has-detail .mind-map-workflow-panel {
+  display: none;
+}
+
+.mind-map-layout.has-detail .neural-detail-drawer:not([hidden]) {
+  display: flex;
+}
+
+.mind-map-doc-panel,
+.mind-map-canvas-column,
+.mind-map-workflow-panel {
   display: flex;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  border-right: 1px solid var(--border);
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.neural-detail-drawer {
+  display: none;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-5);
+}
+
+.neural-detail-drawer[hidden] {
+  display: none !important;
+}
+
+.mind-map-canvas-column {
+  min-height: 520px;
 }
 
 .mind-map-canvas-head {
@@ -2931,34 +3012,52 @@ body.auth-page .content-inner {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-  padding: var(--space-3);
+  padding: 0.85rem 1rem;
   border-bottom: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.5);
+  background: color-mix(in srgb, var(--bcg-soft) 40%, var(--surface));
 }
 
 .mind-map-view-tabs {
   display: inline-flex;
-  gap: 0.35rem;
+  gap: 0.25rem;
   padding: 0.2rem;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--surface);
 }
 
+.mind-map-page button.mind-map-view-tab,
+.mind-map-page button.mind-map-type-chip,
+.mind-map-page button.mind-map-doc-item,
+.mind-map-page button.mind-map-overview-card,
+.mind-map-page button.mind-map-workflow-doc,
+.mind-map-page .neural-tree-controls button,
+.mind-map-page .neural-detail-close {
+  min-height: 0;
+  box-shadow: none;
+}
+
 .mind-map-view-tab {
-  border: none;
+  border: 0;
   background: transparent;
   color: var(--muted);
   font-size: 0.78rem;
-  font-weight: 600;
-  padding: 0.45rem 0.8rem;
+  font-weight: 700;
+  padding: 0.4rem 0.9rem;
   border-radius: 999px;
   cursor: pointer;
 }
 
-.mind-map-view-tab.is-active {
-  background: var(--accent);
-  color: #fff;
+.mind-map-page button.mind-map-view-tab:hover {
+  background: var(--bcg-soft);
+  color: var(--bcg-dark);
+}
+
+.mind-map-view-tab.is-active,
+.mind-map-page button.mind-map-view-tab.is-active,
+.mind-map-page button.mind-map-view-tab.is-active:hover {
+  background: var(--bcg);
+  color: var(--on-primary);
 }
 
 .mind-map-connection-stats {
@@ -2972,21 +3071,24 @@ body.auth-page .content-inner {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  padding: 0.3rem 0.55rem;
+  padding: 0.28rem 0.6rem;
   border-radius: 999px;
   border: 1px solid var(--border);
   background: var(--surface);
   font-size: 0.72rem;
+  font-weight: 600;
   color: var(--text-secondary);
 }
 
 .mind-map-stat .edge-dot {
-  background: var(--stat-color, var(--accent));
+  background: var(--stat-color, var(--bcg-gold));
 }
 
 .mind-map-visual-panel {
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .mind-map-visual-panel[hidden] {
@@ -2994,125 +3096,151 @@ body.auth-page .content-inner {
 }
 
 .mind-map-canvas {
+  flex: 1;
   min-height: 480px;
   height: 100%;
 }
 
 .mind-map-overview-grid {
+  flex: 1;
   min-height: 480px;
   overflow: auto;
-  padding: var(--space-3);
+  padding: var(--space-5);
   display: grid;
-  gap: var(--space-3);
-  background: linear-gradient(180deg, var(--surface), var(--bg));
+  gap: var(--space-5);
+  align-content: start;
+  background:
+    radial-gradient(circle at 12% 0%, color-mix(in srgb, var(--bcg-gold) 8%, transparent), transparent 36%),
+    var(--surface);
 }
 
 .mind-map-overview-section h3 {
-  margin: 0 0 0.65rem;
-  font-size: 0.82rem;
-  letter-spacing: 0.05em;
+  margin: 0 0 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--muted);
 }
 
 .mind-map-overview-section h3 span {
-  color: var(--accent);
+  color: var(--bcg-gold);
 }
 
 .mind-map-overview-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 0.55rem;
+  grid-template-columns: repeat(auto-fill, minmax(188px, 1fr));
+  gap: 0.75rem;
 }
 
 .mind-map-overview-card {
   text-align: left;
-  padding: 0.7rem 0.8rem;
+  padding: 0.85rem 0.9rem;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   background: var(--surface);
+  color: inherit;
   cursor: pointer;
 }
 
-.mind-map-overview-card.is-focused,
-.mind-map-overview-card:hover {
-  border-color: rgba(197, 146, 47, 0.45);
-  background: rgba(197, 146, 47, 0.08);
+.mind-map-page button.mind-map-overview-card:hover,
+.mind-map-overview-card.is-focused {
+  border-color: color-mix(in srgb, var(--bcg-gold) 55%, var(--border));
+  background: color-mix(in srgb, var(--bcg-gold) 10%, var(--surface));
+  color: inherit;
 }
 
 .mind-map-overview-empty,
-.mind-map-workflow-empty {
+.mind-map-workflow-empty,
+.mind-map-doc-empty {
   margin: 0;
-  padding: 1rem;
+  padding: var(--space-5) var(--space-4);
   color: var(--muted);
   text-align: center;
+  line-height: 1.5;
 }
 
-.mind-map-workflow-panel {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  overflow: hidden;
-  background: var(--surface);
-}
-
-.mind-map-workflow-panel-head {
-  padding: var(--space-3);
+.mind-map-workflow-panel-head,
+.mind-map-doc-panel-head {
+  display: grid;
+  gap: 0.5rem;
+  padding: 1rem 1.05rem;
   border-bottom: 1px solid var(--border);
 }
 
 .mind-map-workflow-panel-head h2 {
-  margin: 0 0 0.35rem;
-  font-size: 1rem;
+  margin: 0;
+  font-size: 1.02rem;
+  color: var(--bcg-dark);
+}
+
+.mind-map-workspace.panel .mind-map-workflow-lead,
+.mind-map-workspace.panel .mind-map-doc-count,
+.mind-map-workspace.panel .neural-map-status {
+  color: var(--text-secondary);
+}
+
+.mind-map-workflow-panel-head h2 {
+  color: var(--bcg-dark);
 }
 
 .mind-map-workflow-lead {
   margin: 0;
   color: var(--text-secondary);
   font-size: 0.82rem;
-  line-height: 1.45;
+  line-height: 1.5;
 }
 
 .mind-map-workflow-groups {
   flex: 1;
   overflow: auto;
-  padding: var(--space-3);
+  padding: 1rem;
   display: grid;
-  gap: var(--space-3);
+  gap: 0.85rem;
+  align-content: start;
 }
 
 .mind-map-workflow-placeholder {
-  padding: 0.75rem;
-  border: 1px dashed var(--border);
-  border-radius: 12px;
+  padding: 1rem 1.05rem;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bcg-soft) 55%, var(--surface));
   color: var(--text-secondary);
-  font-size: 0.84rem;
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.mind-map-workflow-placeholder p {
+  margin: 0;
+  font-weight: 700;
+  color: var(--bcg-dark);
 }
 
 .mind-map-workflow-placeholder ol {
-  margin: 0.5rem 0 0;
-  padding-left: 1.1rem;
+  margin: 0.65rem 0 0;
+  padding-left: 1.15rem;
 }
 
 .mind-map-workflow-group {
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: var(--radius-md);
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--surface);
 }
 
 .mind-map-workflow-group header {
   display: flex;
   align-items: center;
-  gap: 0.45rem;
-  padding: 0.65rem 0.75rem;
+  gap: 0.5rem;
+  padding: 0.7rem 0.85rem;
   border-bottom: 1px solid var(--border);
-  background: rgba(26, 26, 84, 0.03);
+  background: color-mix(in srgb, var(--bcg-soft) 70%, var(--surface));
   font-size: 0.8rem;
 }
 
 .mind-map-workflow-group header strong {
   flex: 1;
+  color: var(--text);
 }
 
 .mind-map-workflow-group header span {
@@ -3126,29 +3254,32 @@ body.auth-page .content-inner {
 
 .mind-map-workflow-doc {
   display: grid;
-  gap: 0.12rem;
+  gap: 0.18rem;
   width: 100%;
   text-align: left;
-  padding: 0.65rem 0.75rem;
-  border: none;
+  padding: 0.75rem 0.85rem;
+  border: 0;
   border-bottom: 1px solid var(--border);
   background: transparent;
+  color: inherit;
   cursor: pointer;
 }
 
 .mind-map-workflow-doc:last-child {
-  border-bottom: none;
+  border-bottom: 0;
 }
 
-.mind-map-workflow-doc:hover,
-.mind-map-workflow-doc:focus-visible {
-  background: rgba(197, 146, 47, 0.08);
+.mind-map-page button.mind-map-workflow-doc:hover,
+.mind-map-page button.mind-map-workflow-doc:focus-visible {
+  background: color-mix(in srgb, var(--bcg-gold) 10%, var(--surface));
+  color: inherit;
   outline: none;
 }
 
 .mind-map-workflow-doc-id {
   font-size: 0.78rem;
   font-weight: 700;
+  color: var(--text);
 }
 
 .mind-map-workflow-doc-title {
@@ -3164,7 +3295,7 @@ body.auth-page .content-inner {
 .mind-map-doc-filters {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.35rem;
+  gap: 0.4rem;
 }
 
 .mind-map-type-chip {
@@ -3172,35 +3303,43 @@ body.auth-page .content-inner {
   border-radius: 999px;
   background: var(--surface);
   color: var(--text-secondary);
-  font-size: 0.68rem;
-  font-weight: 600;
-  padding: 0.25rem 0.55rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.28rem 0.65rem;
   cursor: pointer;
 }
 
-.mind-map-type-chip.is-active {
-  border-color: var(--accent);
-  background: rgba(197, 146, 47, 0.12);
+.mind-map-page button.mind-map-type-chip:hover {
+  background: var(--bcg-soft);
+  color: var(--bcg-dark);
+}
+
+.mind-map-type-chip.is-active,
+.mind-map-page button.mind-map-type-chip.is-active,
+.mind-map-page button.mind-map-type-chip.is-active:hover {
+  border-color: var(--bcg-gold);
+  background: color-mix(in srgb, var(--bcg-gold) 14%, var(--surface));
   color: var(--text);
 }
 
 .mind-map-doc-group {
   display: grid;
-  gap: 0.45rem;
-  margin-bottom: 0.75rem;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
 }
 
 .mind-map-doc-group-title {
-  margin: 0 0 0.15rem;
-  padding: 0 0.25rem;
-  font-size: 0.72rem;
-  letter-spacing: 0.05em;
+  margin: 0;
+  padding: 0.15rem 0.2rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--muted);
 }
 
 .mind-map-doc-group-title span {
-  color: var(--accent);
+  color: var(--bcg-gold);
 }
 
 .neural-node-reason {
@@ -3212,34 +3351,12 @@ body.auth-page .content-inner {
 
 .mind-map-mode-workflow .neural-tree-link {
   stroke-dasharray: none;
-  opacity: 0.7;
-}
-
-.mind-map-doc-panel {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  border-right: 1px solid var(--border);
-  background: linear-gradient(180deg, rgba(26, 26, 84, 0.03), transparent);
-}
-
-.mind-map-doc-panel-head {
-  display: grid;
-  gap: 0.45rem;
-  padding: var(--space-3);
-  border-bottom: 1px solid var(--border);
-}
-
-.mind-map-doc-panel-head label {
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--muted);
+  opacity: 0.78;
 }
 
 .mind-map-doc-panel-head input {
   width: 100%;
+  min-height: 40px;
 }
 
 .mind-map-doc-count {
@@ -3252,7 +3369,7 @@ body.auth-page .content-inner {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 0.45rem;
+  padding: 0.85rem;
 }
 
 .mind-map-doc-list {
@@ -3260,36 +3377,39 @@ body.auth-page .content-inner {
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 0.45rem;
+  gap: 0.55rem;
 }
 
 .mind-map-doc-item {
   width: 100%;
   text-align: left;
-  padding: 0.65rem 0.75rem;
+  padding: 0.75rem 0.8rem;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   background: var(--surface);
   color: inherit;
   cursor: pointer;
-  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
 }
 
-.mind-map-doc-item:hover,
-.mind-map-doc-item:focus-visible {
-  border-color: rgba(197, 146, 47, 0.45);
+.mind-map-page button.mind-map-doc-item:hover,
+.mind-map-page button.mind-map-doc-item:focus-visible {
+  border-color: color-mix(in srgb, var(--bcg-gold) 50%, var(--border));
+  background: color-mix(in srgb, var(--bcg-gold) 8%, var(--surface));
+  color: inherit;
   outline: none;
-  transform: translateY(-1px);
+  transform: none;
 }
 
-.mind-map-doc-item.is-focused {
-  border-color: var(--accent);
-  box-shadow: inset 0 0 0 1px rgba(197, 146, 47, 0.25);
-  background: rgba(197, 146, 47, 0.08);
+.mind-map-doc-item.is-focused,
+.mind-map-page button.mind-map-doc-item.is-focused {
+  border-color: var(--bcg-gold);
+  background: color-mix(in srgb, var(--bcg-gold) 12%, var(--surface));
+  box-shadow: inset 3px 0 0 var(--bcg-gold);
 }
 
 .mind-map-doc-item.is-selected {
-  box-shadow: 0 0 0 2px rgba(26, 26, 84, 0.12);
+  box-shadow: inset 3px 0 0 var(--bcg);
 }
 
 .mind-map-doc-id {
@@ -3301,24 +3421,17 @@ body.auth-page .content-inner {
 
 .mind-map-doc-title {
   display: block;
-  margin-top: 0.15rem;
+  margin-top: 0.18rem;
   font-size: 0.82rem;
   color: var(--text-secondary);
-  line-height: 1.35;
+  line-height: 1.4;
 }
 
 .mind-map-doc-meta {
   display: block;
-  margin-top: 0.2rem;
+  margin-top: 0.22rem;
   font-size: 0.72rem;
   color: var(--muted);
-}
-
-.mind-map-doc-empty {
-  margin: 0.75rem;
-  text-align: center;
-  color: var(--muted);
-  font-size: 0.84rem;
 }
 
 .neural-tree-shell,
@@ -3327,8 +3440,8 @@ body.auth-page .content-inner {
   min-height: 560px;
   overflow: hidden;
   background:
-    radial-gradient(circle at 50% 42%, rgba(197, 146, 47, 0.08), transparent 42%),
-    radial-gradient(circle at 18% 18%, rgba(26, 26, 84, 0.06), transparent 28%),
+    radial-gradient(circle at 50% 42%, color-mix(in srgb, var(--bcg-gold) 11%, transparent), transparent 46%),
+    radial-gradient(circle at 14% 12%, color-mix(in srgb, var(--bcg) 8%, transparent), transparent 28%),
     linear-gradient(180deg, var(--surface), var(--bg));
 }
 
@@ -3351,6 +3464,10 @@ body.auth-page .content-inner {
   touch-action: none;
 }
 
+.mind-map-canvas .neural-tree-canvas {
+  inset: 12px 12px 56px 12px;
+}
+
 .neural-tree-canvas.is-panning {
   cursor: grabbing;
 }
@@ -3363,9 +3480,9 @@ body.auth-page .content-inner {
 
 .neural-tree-link {
   fill: none;
-  stroke-width: 2;
+  stroke-width: 2.25;
   stroke-linecap: round;
-  opacity: 0.55;
+  opacity: 0.6;
   stroke-dasharray: 6 8;
   animation: neural-link-draw 900ms ease forwards;
 }
@@ -3377,7 +3494,7 @@ body.auth-page .content-inner {
   }
   to {
     stroke-dashoffset: 0;
-    opacity: 0.55;
+    opacity: 0.6;
   }
 }
 
@@ -3387,14 +3504,15 @@ body.auth-page .content-inner {
 
 .neural-node-card {
   display: grid;
-  gap: 0.15rem;
+  align-content: center;
+  gap: 0.18rem;
   width: 100%;
   height: 100%;
-  padding: 0.55rem 0.65rem;
+  padding: 0.7rem 0.8rem;
   border-radius: 14px;
-  border: 1px solid rgba(26, 26, 84, 0.12);
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 10px 24px rgba(26, 26, 84, 0.08);
+  border: 1px solid color-mix(in srgb, var(--bcg) 14%, var(--border));
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--bcg-dark) 10%, transparent);
   color: var(--text);
   cursor: pointer;
   transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
@@ -3415,19 +3533,19 @@ body.auth-page .content-inner {
 .neural-node-card:hover,
 .neural-node-card:focus-visible {
   transform: translateY(-2px);
-  box-shadow: 0 14px 28px rgba(26, 26, 84, 0.12);
+  box-shadow: 0 14px 28px color-mix(in srgb, var(--bcg-dark) 14%, transparent);
   outline: none;
 }
 
 .neural-node-card.is-selected {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(197, 146, 47, 0.18), 0 14px 28px rgba(26, 26, 84, 0.12);
+  border-color: var(--bcg-gold);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--bcg-gold) 22%, transparent), 0 14px 28px color-mix(in srgb, var(--bcg-dark) 12%, transparent);
 }
 
 .neural-node-center {
-  background: linear-gradient(145deg, #1a1a54, #2a2a74);
+  background: linear-gradient(145deg, var(--bcg), var(--bcg-mid));
   color: #fff;
-  border-color: rgba(197, 146, 47, 0.45);
+  border-color: color-mix(in srgb, var(--bcg-gold) 50%, transparent);
 }
 
 .neural-node-center .neural-node-sub,
@@ -3436,7 +3554,7 @@ body.auth-page .content-inner {
 }
 
 .neural-node-hub {
-  background: rgba(255, 255, 255, 0.96);
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
   border-style: dashed;
   cursor: default;
   text-align: center;
@@ -3451,20 +3569,20 @@ body.auth-page .content-inner {
 }
 
 .neural-node-card strong {
-  font-size: 0.78rem;
-  line-height: 1.25;
+  font-size: 0.8rem;
+  line-height: 1.3;
   word-break: break-word;
 }
 
 .neural-node-sub,
 .neural-node-score {
-  font-size: 0.68rem;
+  font-size: 0.7rem;
   color: var(--text-secondary);
 }
 
 .neural-node-score {
-  color: var(--accent);
-  font-weight: 600;
+  color: var(--bcg-gold);
+  font-weight: 700;
 }
 
 .neural-tree-controls {
@@ -3472,25 +3590,45 @@ body.auth-page .content-inner {
   top: 1rem;
   right: 1rem;
   display: grid;
-  gap: 0.35rem;
+  gap: 0.4rem;
   z-index: 2;
 }
 
 .neural-tree-controls button {
-  width: 2.2rem;
-  height: 2.2rem;
+  width: 2.4rem;
+  height: 2.4rem;
   border: 1px solid var(--border);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.92);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
   color: var(--text);
   font-size: 0.95rem;
   cursor: pointer;
 }
 
+.mind-map-page .neural-tree-controls button:hover {
+  background: var(--bcg-soft);
+  color: var(--bcg-dark);
+}
+
 .neural-tree-controls button:last-child {
   width: auto;
-  min-width: 2.2rem;
-  padding: 0 0.55rem;
+  min-width: 2.4rem;
+  padding: 0 0.6rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.neural-tree-hint {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  margin: 0;
+  z-index: 2;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  color: var(--muted);
   font-size: 0.72rem;
   font-weight: 600;
 }
@@ -3498,17 +3636,75 @@ body.auth-page .content-inner {
 .neural-tree-legend {
   position: absolute;
   left: 1rem;
+  right: 1rem;
   bottom: 1rem;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.55rem 0.85rem;
-  padding: 0.55rem 0.75rem;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.88);
+  gap: 0.5rem 0.9rem;
+  padding: 0.6rem 0.85rem;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
   border: 1px solid var(--border);
-  font-size: 0.72rem;
+  font-size: 0.74rem;
   color: var(--text-secondary);
   z-index: 2;
+}
+
+.mind-map-canvas.is-empty .neural-tree-hint,
+.mind-map-canvas.is-empty .neural-tree-legend,
+.mind-map-canvas.is-empty .neural-tree-controls,
+.mind-map-canvas.is-loading .neural-tree-hint,
+.mind-map-canvas.is-loading .neural-tree-legend,
+.mind-map-canvas.is-loading .neural-tree-controls {
+  display: none;
+}
+
+.mind-map-skeleton {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.mind-map-page .skeleton {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--bcg-soft) 80%, var(--border)) 25%,
+    var(--surface) 50%,
+    color-mix(in srgb, var(--bcg-soft) 80%, var(--border)) 75%
+  );
+  background-size: 200% 100%;
+}
+
+.mind-map-page .skeleton-row {
+  padding: 0.75rem 0.8rem;
+}
+
+.mind-map-spinner {
+  width: 1.35rem;
+  height: 1.35rem;
+  border: 2px solid color-mix(in srgb, var(--bcg-gold) 25%, transparent);
+  border-top-color: var(--bcg-gold);
+  border-radius: 999px;
+  animation: mind-map-spin 0.8s linear infinite;
+}
+
+@keyframes mind-map-spin {
+  to { transform: rotate(360deg); }
+}
+
+.neural-tree-empty .mind-map-spinner {
+  display: none;
+}
+
+.neural-tree-empty.is-loading .mind-map-spinner {
+  display: block;
+}
+
+.neural-tree-empty.is-loading .neural-tree-empty-mark {
+  display: none;
+}
+
+.neural-tree-empty-mark {
+  display: block;
 }
 
 .edge-dot {
@@ -3528,49 +3724,56 @@ body.auth-page .content-inner {
 
 .neural-tree-empty {
   position: absolute;
-  inset: 0;
+  inset: 1.25rem;
   display: grid;
   place-content: center;
   justify-items: center;
   text-align: center;
-  padding: 2rem;
-  z-index: 1;
+  padding: 2rem 1.5rem;
+  z-index: 3;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
+}
+
+.neural-tree-empty[hidden] {
+  display: none !important;
 }
 
 .neural-tree-empty-icon {
-  width: 3.5rem;
-  height: 3.5rem;
+  width: 3.75rem;
+  height: 3.75rem;
   display: grid;
   place-items: center;
   border-radius: 999px;
-  background: rgba(197, 146, 47, 0.12);
-  color: var(--accent);
-  font-size: 1.5rem;
-  margin-bottom: 0.75rem;
+  background: color-mix(in srgb, var(--bcg-gold) 16%, var(--bcg-soft));
+  color: var(--bcg-gold);
+  margin-bottom: 1rem;
 }
 
 .neural-tree-empty h2 {
-  margin: 0 0 0.35rem;
+  margin: 0 0 0.45rem;
+  font-family: var(--font-display);
+  font-size: 1.45rem;
+  font-weight: 600;
+  color: var(--bcg-dark);
 }
 
 .neural-tree-empty p {
   margin: 0;
-  max-width: 36ch;
+  max-width: 38ch;
   color: var(--text-secondary);
+  line-height: 1.55;
 }
 
-.neural-detail-drawer {
-  border-left: 1px solid var(--border);
-  padding: var(--space-4);
-  background: var(--surface);
-  overflow: auto;
+.neural-tree-empty .button {
+  margin-top: var(--space-4);
 }
 
 .neural-detail-close {
-  float: right;
+  align-self: flex-end;
   width: 2rem;
   height: 2rem;
-  border: none;
+  border: 0;
   border-radius: 8px;
   background: transparent;
   color: var(--muted);
@@ -3578,9 +3781,15 @@ body.auth-page .content-inner {
   cursor: pointer;
 }
 
+.mind-map-page .neural-detail-close:hover {
+  background: var(--bcg-soft);
+  color: var(--bcg-dark);
+}
+
 .neural-detail-drawer h2 {
   margin: 0 0 0.35rem;
   font-size: 1.05rem;
+  color: var(--bcg-dark);
 }
 
 .neural-detail-meta {
@@ -3601,15 +3810,15 @@ body.auth-page .content-inner {
   align-items: center;
   padding: 0.2rem 0.55rem;
   border-radius: 999px;
-  background: rgba(26, 26, 84, 0.06);
+  background: var(--bcg-soft);
   color: var(--text-secondary);
   font-size: 0.72rem;
   font-weight: 600;
 }
 
 .neural-detail-drawer h3 {
-  margin: var(--space-3) 0 var(--space-2);
-  font-size: 0.78rem;
+  margin: var(--space-4) 0 var(--space-2);
+  font-size: 0.74rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--muted);
@@ -3636,8 +3845,9 @@ body.auth-page .content-inner {
 }
 
 .neural-map-status {
-  padding-top: var(--space-3);
+  padding: 0.85rem var(--space-5);
   border-top: 1px solid var(--border);
+  background: var(--surface);
   color: var(--muted);
   font-size: 0.82rem;
 }
@@ -3751,49 +3961,89 @@ body.auth-page .content-inner {
 
 @media (prefers-reduced-motion: reduce) {
   .neural-tree-link,
-  .neural-node-card {
+  .neural-node-card,
+  .mind-map-spinner {
     animation: none;
   }
 }
 
+@media (max-width: 1280px) {
+  .mind-map-toolbar {
+    grid-template-columns: minmax(180px, 1fr) repeat(2, minmax(110px, 140px)) auto;
+    padding: var(--space-4);
+  }
+
+  .mind-map-workflow-steps,
+  .mind-map-layout {
+    padding-left: var(--space-4);
+    padding-right: var(--space-4);
+  }
+
+  .mind-map-layout {
+    grid-template-columns: minmax(220px, 250px) minmax(0, 1fr) minmax(240px, 280px);
+    gap: var(--space-3);
+  }
+}
+
 @media (max-width: 960px) {
-  .neural-map-toolbar,
+  .mind-map-workspace.panel {
+    min-height: 0;
+  }
+
   .mind-map-toolbar {
     grid-template-columns: 1fr 1fr;
   }
 
-  .mind-map-toolbar-meta {
+  .mind-map-toolbar-meta,
+  .mind-map-toolbar-actions {
     grid-column: 1 / -1;
   }
 
-  .neural-map-body,
+  .mind-map-toolbar-actions {
+    justify-content: stretch;
+  }
+
+  .mind-map-toolbar-actions .button {
+    flex: 1;
+  }
+
   .mind-map-layout,
   .mind-map-layout.has-detail {
     grid-template-columns: 1fr;
+    padding-bottom: var(--space-4);
   }
 
   .mind-map-doc-panel {
-    border-right: none;
-    border-bottom: 1px solid var(--border);
     max-height: 280px;
   }
 
   .mind-map-workflow-steps {
-    grid-template-columns: 1fr;
+    display: flex;
+    overflow-x: auto;
+    gap: var(--space-2);
+  }
+
+  .mind-map-step {
+    flex: 1 0 160px;
+    padding: 0.55rem 0.7rem;
+    font-size: 0.78rem;
   }
 
   .mind-map-canvas-column {
-    border-right: none;
-    border-bottom: 1px solid var(--border);
+    min-height: 420px;
   }
 
-  .mind-map-workflow-panel {
-    max-height: 320px;
-  }
-
+  .mind-map-workflow-panel,
   .neural-detail-drawer {
-    border-left: none;
-    border-top: 1px solid var(--border);
+    max-height: 360px;
+  }
+
+  .neural-tree-hint {
+    display: none;
+  }
+
+  .mind-map-canvas .neural-tree-canvas {
+    inset: 8px 8px 52px 8px;
   }
 
   .viewer-panel-with-related .viewer-body {

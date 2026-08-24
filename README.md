@@ -45,7 +45,14 @@ Downloads are always server-watermarked and restricted to administrators.
 3. `docker compose up -d`
 4. `python scripts/create_database_and_tables.py` (or `python scripts/migrate_schema.py` for upgrades)
 5. `python scripts/create_admin_user.py --username admin`
-6. `uvicorn src.bcp_project.main_api:app --reload` → http://127.0.0.1:8000/login
+6. `PYTHONPATH=src uvicorn bcp_project.main_api:app --reload --host 127.0.0.1 --port 8000` → http://127.0.0.1:8000/login
+
+### Install as PWA (phone / desktop)
+
+1. Open the site in Chrome/Edge (or Safari on iOS).
+2. Sign in, then use **Install** / **Add to Home Screen**.
+3. On phones, use the bottom tabs: **Home · Archive · Mind Map · Meetings · More**.
+4. Long-press the app icon (Android) for shortcuts: Mind Map, Archive, Meetings.
 
 ## Project layout
 

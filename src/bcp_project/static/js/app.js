@@ -32,7 +32,18 @@
 
   function registerServiceWorker() {
     if (!("serviceWorker" in navigator)) return;
-    navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(function () {});
+    navigator.serviceWorker.register("/sw.js", { scope: "/" }).then(function (reg) {
+      if (reg && typeof reg.update === "function") {
+        try { reg.update(); } catch (e) {}
+      }
+    }).catch(function () {});
+  }
+
+  function markInstalledApp() {
+    if (isRunningAsInstalledApp()) {
+      document.documentElement.classList.add("is-pwa");
+      document.body.classList.add("is-pwa");
+    }
   }
 
   function initMoreSheet() {
@@ -888,6 +899,7 @@
     if (window.BCPCsrf && typeof window.BCPCsrf.injectForms === "function") {
       window.BCPCsrf.injectForms();
     }
+    markInstalledApp();
     initTheme();
     initMoreSheet();
     initPullToRefresh();
