@@ -129,23 +129,50 @@ def resolve_qdrant_settings() -> Tuple[str, Optional[str]]:
     return f"{scheme}://{host}:{port}", api_key or None
 
 
+def _is_openrouter_key(api_key: str) -> bool:
+    return api_key.strip().lower().startswith("sk-or-")
+
+
+def _normalize_openai_base_url(base_url: Optional[str]) -> Optional[str]:
+    if not base_url:
+        return None
+    cleaned = base_url.strip().rstrip("/")
+    return cleaned or None
+
+
 def resolve_openai_credentials() -> Tuple[str, Optional[str]]:
     """
     Return (api_key, base_url).
-    Uses OPENAI_API_KEY when real; otherwise OPENROUTER_API_KEY with OpenRouter base URL.
+
+    Priority:
+      1. Real OPENAI_API_KEY that is an official OpenAI key → OpenAI (or custom BASE_URL)
+      2. OpenRouter key in OPENAI_API_KEY (sk-or-…) or OPENROUTER_API_KEY → OpenRouter base URL
+      3. OPENAI_BASE_URL pointing at openrouter.ai with either key
+
+    ``invalid_issuer`` on Railway almost always means an OpenRouter key was sent to
+    api.openai.com — this resolver prevents that mismatch.
     """
-    openai_key = os.getenv("OPENAI_API_KEY")
-    openrouter_key = os.getenv("OPENROUTER_API_KEY")
-    base_url = os.getenv("OPENAI_BASE_URL")
+    openai_key = (os.getenv("OPENAI_API_KEY") or "").strip().strip('"')
+    openrouter_key = (os.getenv("OPENROUTER_API_KEY") or "").strip().strip('"')
+    base_url = _normalize_openai_base_url(os.getenv("OPENAI_BASE_URL"))
+    openrouter_base = "https://openrouter.ai/api/v1"
+    wants_openrouter = bool(base_url and "openrouter.ai" in base_url)
 
-    if openai_key and not _is_placeholder(openai_key):
-        return openai_key.strip(), (base_url.strip() if base_url else None)
+    # Official OpenAI key (not sk-or-) unless BASE_URL forces OpenRouter.
+    if openai_key and not _is_placeholder(openai_key) and not _is_openrouter_key(openai_key) and not wants_openrouter:
+        return openai_key, base_url
 
+    # OpenRouter key under either env name.
     if openrouter_key and not _is_placeholder(openrouter_key):
-        return openrouter_key.strip(), (base_url.strip() if base_url else "https://openrouter.ai/api/v1")
+        return openrouter_key, base_url or openrouter_base
+
+    if openai_key and not _is_placeholder(openai_key) and (_is_openrouter_key(openai_key) or wants_openrouter):
+        return openai_key, base_url or openrouter_base
 
     raise RuntimeError(
-        "Set a real OPENAI_API_KEY or OPENROUTER_API_KEY for embeddings and summarization."
+        "Set a real OPENAI_API_KEY or OPENROUTER_API_KEY for embeddings and summarization. "
+        "On Railway: use OPENROUTER_API_KEY=sk-or-v1-... (recommended) or a real OpenAI key; "
+        "do not put an OpenRouter key in OPENAI_API_KEY without OPENAI_BASE_URL=https://openrouter.ai/api/v1."
     )
 
 

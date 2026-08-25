@@ -9,7 +9,12 @@
 #   QDRANT_URL + QDRANT_API_KEY
 #   REDIS_URL=rediss://default:TOKEN@HOST:6379
 #     OR UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN
-#   OPENROUTER_API_KEY (or OPENAI_API_KEY)
+#   OPENROUTER_API_KEY=sk-or-v1-...   (recommended)
+#     + OPENAI_CHAT_MODEL=openai/gpt-4.1-mini
+#     + OPENAI_EMBEDDING_MODEL=openai/text-embedding-3-small
+#     + leave OPENAI_API_KEY empty / delete placeholder
+#   OR OPENAI_API_KEY=sk-... (official OpenAI only; no OpenRouter key/base URL mix)
+#   Mixing an OpenRouter key with api.openai.com causes: 401 invalid_issuer
 #
 # Optional email: RESEND_*
 # Required for PDF view/download on Railway (disk is ephemeral):
