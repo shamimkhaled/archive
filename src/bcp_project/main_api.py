@@ -50,6 +50,7 @@ from .cache import (
 from .calendar_utils import build_google_calendar_link, build_meeting_ics, new_meeting_uid
 from .config import cookie_secure, is_production, load_environment
 from .db import get_session, engine
+from .document_types import merge_document_types, normalize_document_type
 from .models import (
     AccessMode,
     AccessRequestStatus,
@@ -596,6 +597,7 @@ async def upload_page(
     require_role(current_user, [Role.admin, Role.uploader])
     today = datetime.utcnow().date()
     suggested_doc_id = await suggest_next_doc_id(db, today.year)
+    document_types = await list_document_types(db)
     return templates.TemplateResponse(
         request,
         "upload.html",
@@ -604,8 +606,35 @@ async def upload_page(
             "status": status,
             "suggested_doc_id": suggested_doc_id,
             "default_doc_date": today.isoformat(),
+            "document_types": document_types,
         },
     )
+
+
+@app.get("/api/document-types")
+async def api_document_types(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Dict[str, Any]:
+    """Suggested + previously used document types (dynamic catalog)."""
+    require_role(current_user, [Role.admin, Role.uploader, Role.board_secretary, Role.board_member])
+    types = await list_document_types(db)
+    return {"types": types, "count": len(types)}
+
+
+async def list_document_types(db: AsyncSession) -> List[str]:
+    """Defaults plus distinct types already stored in the archive."""
+    rows = (
+        await db.execute(
+            select(DocumentRecord.doc_type)
+            .where(DocumentRecord.doc_type.is_not(None))
+            .where(DocumentRecord.doc_type != "")
+            .distinct()
+            .order_by(DocumentRecord.doc_type.asc())
+        )
+    ).all()
+    used = [row[0] for row in rows if row[0]]
+    return merge_document_types(used)
 
 
 @app.get("/api/documents/next-id")
@@ -1364,6 +1393,14 @@ async def upload_document_stream(
 ) -> StreamingResponse:
     """NDJSON progress stream: real % as upload → parse → summarize → index complete."""
     require_role(current_user, [Role.admin, Role.uploader])
+    doc_type = normalize_document_type(doc_type)
+    if not doc_type:
+        async def _bad_type():
+            yield json.dumps(
+                {"pct": 0, "step": "upload", "title": "Upload failed", "error": "Document type is required"}
+            ) + "\n"
+
+        return StreamingResponse(_bad_type(), media_type="application/x-ndjson")
 
     import asyncio
 
@@ -1503,6 +1540,9 @@ async def upload_document(
 ) -> RedirectResponse:
     """Fallback non-stream upload (no-JS). Prefer /api/upload/stream from the UI."""
     require_role(current_user, [Role.admin, Role.uploader])
+    doc_type = normalize_document_type(doc_type)
+    if not doc_type:
+        raise HTTPException(status_code=400, detail="Document type is required")
 
     content_type = (file.content_type or "").lower()
     if content_type not in ("application/pdf", "application/x-pdf", ""):

@@ -95,11 +95,25 @@
                 </div>
                 <div class="form-group">
                     <label for="doc_type">Document type</label>
-                    <select id="doc_type" name="doc_type" required>
-                        <option value="meeting minutes">Meeting Minutes</option>
-                        <option value="agreement">Agreement</option>
-                        <option value="others">Others</option>
-                    </select>
+                    <input
+                        id="doc_type"
+                        name="doc_type"
+                        list="docTypeOptions"
+                        required
+                        maxlength="64"
+                        autocomplete="off"
+                        placeholder="Select or type a new type…"
+                        value="Meeting Minutes"
+                        aria-describedby="docTypeHelp"
+                    />
+                    <datalist id="docTypeOptions">
+                        {% for t in document_types %}
+                        <option value="{{ t }}"></option>
+                        {% endfor %}
+                    </datalist>
+                    <p class="field-hint" id="docTypeHelp">
+                        Pick a suggestion (e.g. Bank Statement) or type any new document type — it is saved with the upload and shown next time.
+                    </p>
                 </div>
             </div>
         </div>
