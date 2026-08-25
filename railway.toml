@@ -6,7 +6,9 @@
 #   APP_ENV=production
 #   JWT_SECRET_KEY   (min 32 chars)
 #   DATABASE_URL     (Neon postgresql://...)
-#   QDRANT_URL + QDRANT_API_KEY
+#   QDRANT_URL=https://XXXX.us-east-1-1.aws.cloud.qdrant.io:6333
+#   QDRANT_API_KEY=...
+#   (must be https — http://cloud.qdrant.io… returns 404 page not found)
 #   REDIS_URL=rediss://default:TOKEN@HOST:6379
 #     OR UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN
 #   OPENROUTER_API_KEY=sk-or-v1-...   (recommended)

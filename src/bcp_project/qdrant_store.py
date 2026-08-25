@@ -156,10 +156,22 @@ class QdrantIndexer:
         summary_config = rest.VectorParams(size=vector_size, distance=rest.Distance.COSINE)
         chunk_config = rest.VectorParams(size=vector_size, distance=rest.Distance.COSINE)
 
-        if not self.client.collection_exists(collection_name=summaries_collection):
+        try:
+            existing = {c.name for c in self.client.get_collections().collections}
+        except Exception as exc:
+            message = str(exc)
+            if "404" in message or "Not Found" in message:
+                raise RuntimeError(
+                    "Qdrant Cloud returned 404. Check Railway QDRANT_URL uses https:// "
+                    "(not http://) e.g. https://YOUR-CLUSTER.us-east-1-1.aws.cloud.qdrant.io:6333 "
+                    "and QDRANT_API_KEY is set."
+                ) from exc
+            raise
+
+        if summaries_collection not in existing:
             self.client.create_collection(collection_name=summaries_collection, vectors_config=summary_config)
 
-        if not self.client.collection_exists(collection_name=chunks_collection):
+        if chunks_collection not in existing:
             self.client.create_collection(collection_name=chunks_collection, vectors_config=chunk_config)
 
     def _normalize_id(self, point_id: str) -> Union[int, uuid.UUID]:

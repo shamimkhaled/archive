@@ -103,6 +103,38 @@ def resolve_redis_url() -> str:
     return "redis://127.0.0.1:6379/0"
 
 
+def normalize_qdrant_url(url: str, *, has_api_key: bool = False) -> str:
+    """Normalize Qdrant REST URL for local docker and Qdrant Cloud.
+
+    Cloud clusters reject plain HTTP (often as a bare ``404 page not found``).
+    Force https:// for *.cloud.qdrant.io and strip trailing slashes.
+    """
+    cleaned = (url or "").strip().strip('"').rstrip("/")
+    if not cleaned:
+        return cleaned
+
+    if "://" not in cleaned:
+        scheme = "https" if has_api_key or "cloud.qdrant.io" in cleaned else "http"
+        cleaned = f"{scheme}://{cleaned}"
+
+    parsed = urlparse(cleaned)
+    host = (parsed.hostname or "").lower()
+    is_cloud = host.endswith("cloud.qdrant.io") or ".aws.cloud.qdrant.io" in host
+    scheme = "https" if is_cloud or (has_api_key and host not in {"127.0.0.1", "localhost"}) else (parsed.scheme or "http")
+
+    # Preserve explicit non-default ports; cloud commonly uses :6333 over TLS.
+    netloc = parsed.netloc
+    if is_cloud and parsed.scheme == "http":
+        # Rebuild netloc with https; keep port if present.
+        if parsed.port:
+            netloc = f"{parsed.hostname}:{parsed.port}"
+        else:
+            netloc = parsed.hostname or netloc
+
+    normalized = urlunparse((scheme, netloc, parsed.path or "", "", "", ""))
+    return normalized.rstrip("/")
+
+
 def resolve_qdrant_settings() -> Tuple[str, Optional[str]]:
     """
     Return (url, api_key).
@@ -121,12 +153,12 @@ def resolve_qdrant_settings() -> Tuple[str, Optional[str]]:
 
     url = os.getenv("QDRANT_URL") or os.getenv("QDRANT_CLUSTER_ENDPOINT")
     if url:
-        return url.strip().rstrip("/").strip('"'), api_key or None
+        return normalize_qdrant_url(url, has_api_key=bool(api_key)), api_key or None
 
-    host = os.getenv("QDRANT_HOST", "127.0.0.1").strip()
+    host = os.getenv("QDRANT_HOST", "127.0.0.1").strip().strip('"')
     port = int(os.getenv("QDRANT_PORT", "6333"))
-    scheme = "https" if api_key else "http"
-    return f"{scheme}://{host}:{port}", api_key or None
+    built = f"{host}:{port}"
+    return normalize_qdrant_url(built, has_api_key=bool(api_key)), api_key or None
 
 
 def _is_openrouter_key(api_key: str) -> bool:
