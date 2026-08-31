@@ -8,8 +8,8 @@
     <aside class="login-brand-panel" aria-label="{{ brand.product_name }}">
         <img
             class="login-brand-photo"
-            src="{{ brand.login_background_path }}"
-            alt=""
+            src="{{ brand.login_background_path }}?v={{ static_version }}"
+            alt="{{ brand.org_name }}"
             width="1920"
             height="1280"
             decoding="async"
