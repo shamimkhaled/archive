@@ -5,11 +5,11 @@
 
 {% block content %}
 <div class="login-shell">
-    <aside class="login-brand-panel" aria-label="{{ brand.product_name }}">
+    <aside class="login-brand-panel" aria-label="{{ brand.org_name }}">
         <img
             class="login-brand-photo"
             src="{{ brand.login_background_path }}?v={{ static_version }}"
-            alt="{{ brand.org_name }}"
+            alt=""
             width="1920"
             height="1280"
             decoding="async"
@@ -33,8 +33,9 @@
     <div class="login-form-panel">
         <div class="auth-card">
             <div class="brand-splash">
-                <img src="{{ brand.logo_path }}" alt="{{ brand.org_name }}" width="52" height="52" />
+                <img src="{{ brand.logo_path }}" alt="" width="52" height="52" />
                 <div>
+                    <p class="auth-kicker">{{ brand.tagline_bn }}</p>
                     <strong>{{ brand.product_name }}</strong>
                     <span>{{ brand.org_name }}</span>
                 </div>
@@ -57,13 +58,22 @@
                 </div>
                 <div class="form-group">
                     <label for="password">Password</label>
-                    <input id="password" type="password" name="password" required autocomplete="current-password" />
+                    <div class="password-field">
+                        <input id="password" type="password" name="password" required autocomplete="current-password" />
+                        <button type="button" class="password-toggle" id="togglePassword" aria-controls="password" aria-pressed="false">
+                            Show
+                        </button>
+                    </div>
                 </div>
                 <button type="submit" class="button-block" id="loginSubmit">
                     <span class="login-submit-label">Sign In</span>
                     <span class="login-submit-busy" hidden>Signing in…</span>
                 </button>
             </form>
+            <p class="auth-credit">
+                Powered by
+                <a href="https://alawaf.com.bd" target="_blank" rel="noopener noreferrer">Alawaf</a>
+            </p>
         </div>
     </div>
 </div>
@@ -74,16 +84,27 @@
 (function () {
   var form = document.getElementById("loginForm");
   var btn = document.getElementById("loginSubmit");
-  if (!form || !btn) return;
-  form.addEventListener("submit", function () {
-    if (btn.disabled) return;
-    btn.disabled = true;
-    btn.classList.add("is-loading");
-    var label = btn.querySelector(".login-submit-label");
-    var busy = btn.querySelector(".login-submit-busy");
-    if (label) label.hidden = true;
-    if (busy) busy.hidden = false;
-  });
+  var toggle = document.getElementById("togglePassword");
+  var password = document.getElementById("password");
+  if (form && btn) {
+    form.addEventListener("submit", function () {
+      if (btn.disabled) return;
+      btn.disabled = true;
+      btn.classList.add("is-loading");
+      var label = btn.querySelector(".login-submit-label");
+      var busy = btn.querySelector(".login-submit-busy");
+      if (label) label.hidden = true;
+      if (busy) busy.hidden = false;
+    });
+  }
+  if (toggle && password) {
+    toggle.addEventListener("click", function () {
+      var show = password.type === "password";
+      password.type = show ? "text" : "password";
+      toggle.textContent = show ? "Hide" : "Show";
+      toggle.setAttribute("aria-pressed", show ? "true" : "false");
+    });
+  }
 })();
 </script>
 {% endblock %}
