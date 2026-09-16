@@ -17,6 +17,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy import and_, cast, func, or_, select, String, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -53,6 +54,13 @@ from .calendar_utils import build_google_calendar_link, build_meeting_ics, new_m
 from .config import cookie_secure, is_production, load_environment
 from .db import get_session, engine
 from .document_types import merge_document_types, normalize_document_type
+from .dummy_transcription import (
+    TRANSCRIPTION_LIVE,
+    TRANSCRIPTION_OFF,
+    TRANSCRIPTION_STOPPED,
+    sync_dummy_transcript,
+    transcription_payload,
+)
 from .models import (
     AccessMode,
     AccessRequestStatus,
@@ -177,6 +185,7 @@ def _compute_static_version() -> str:
         STATIC_DIR / "js" / "app.js",
         STATIC_DIR / "js" / "sw.js",
         STATIC_DIR / "js" / "archive-graph.js",
+        STATIC_DIR / "js" / "meeting-transcription.js",
         STATIC_DIR / "manifest.webmanifest",
     ]
     mtimes = [p.stat().st_mtime for p in candidates if p.exists()]
@@ -311,6 +320,13 @@ async def _load_pdf_bytes(document: DocumentRecord) -> bytes:
 async def init_db() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.execute(
+            text("ALTER TABLE board_meetings ADD COLUMN IF NOT EXISTS transcription_status VARCHAR(16) NOT NULL DEFAULT 'off'")
+        )
+        await conn.execute(text("ALTER TABLE board_meetings ADD COLUMN IF NOT EXISTS transcription_started_at TIMESTAMP"))
+        await conn.execute(text("ALTER TABLE board_meetings ADD COLUMN IF NOT EXISTS transcription_stopped_at TIMESTAMP"))
+        await conn.execute(text("ALTER TABLE board_meetings ADD COLUMN IF NOT EXISTS transcription_started_by VARCHAR(64)"))
+        await conn.execute(text("ALTER TABLE board_meetings ADD COLUMN IF NOT EXISTS transcription_json JSON"))
 
 
 async def _run_reminder_sweep() -> None:
@@ -2347,6 +2363,34 @@ async def _load_meeting_or_404(meeting_id: int, db: AsyncSession) -> BoardMeetin
     return meeting
 
 
+def _meeting_transcription_status(meeting: BoardMeeting) -> str:
+    return (meeting.transcription_status or TRANSCRIPTION_OFF).strip() or TRANSCRIPTION_OFF
+
+
+def _apply_live_dummy_transcript(meeting: BoardMeeting) -> list:
+    status = _meeting_transcription_status(meeting)
+    segments = list(meeting.transcription_json or [])
+    if status != TRANSCRIPTION_LIVE:
+        return segments
+    synced = sync_dummy_transcript(segments, meeting.transcription_started_at)
+    if synced != segments:
+        meeting.transcription_json = synced
+        flag_modified(meeting, "transcription_json")
+    return synced
+
+
+def _transcription_view(meeting: BoardMeeting, *, include_segments: bool) -> Dict[str, Any]:
+    segments = list(meeting.transcription_json or [])
+    return transcription_payload(
+        _meeting_transcription_status(meeting),
+        segments,
+        started_at=meeting.transcription_started_at,
+        stopped_at=meeting.transcription_stopped_at,
+        started_by=meeting.transcription_started_by,
+        include_segments=include_segments,
+    )
+
+
 async def _require_invited_or_404(meeting_id: int, user: User, db: AsyncSession) -> BoardMeeting:
     meeting = await _load_meeting_or_404(meeting_id, db)
     statement = select(MeetingInvitation).where(
@@ -2618,6 +2662,10 @@ async def meeting_detail(
     attendance_result = await db.execute(attendance_statement)
     attendance = {row.username: row for row in attendance_result.scalars().all()}
     extras = await _meeting_workspace_extras(db, meeting)
+    before_segments = list(meeting.transcription_json or [])
+    transcript_segments = _apply_live_dummy_transcript(meeting)
+    if transcript_segments != before_segments:
+        await db.commit()
 
     return templates.TemplateResponse(
         request,
@@ -2629,6 +2677,7 @@ async def meeting_detail(
             "invitations": invitations,
             "attendance": attendance,
             "status": status,
+            "transcript_segments": transcript_segments,
             **extras,
         },
     )
@@ -2665,6 +2714,106 @@ async def close_meeting_attendance(
     await db.commit()
 
     return RedirectResponse(url=f"/meetings/{meeting_id}?status=attendance_closed", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.post("/meetings/{meeting_id}/transcription/start")
+async def start_meeting_transcription(
+    request: Request,
+    meeting_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> RedirectResponse:
+    require_meeting_organizer(current_user)
+    meeting = await _load_meeting_or_404(meeting_id, db)
+    if _meeting_transcription_status(meeting) == TRANSCRIPTION_LIVE:
+        return RedirectResponse(
+            url=f"/meetings/{meeting_id}?status=transcription_already_live#transcription",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    meeting.transcription_status = TRANSCRIPTION_LIVE
+    meeting.transcription_started_at = datetime.utcnow()
+    meeting.transcription_stopped_at = None
+    meeting.transcription_started_by = current_user.username
+    meeting.transcription_json = sync_dummy_transcript([], meeting.transcription_started_at)
+    flag_modified(meeting, "transcription_json")
+    await write_audit(
+        db,
+        username=current_user.username,
+        action="transcription_start",
+        resource_type="meeting",
+        resource_id=str(meeting_id),
+        detail="dummy_ai_transcription",
+        ip_address=_client_ip(request),
+        commit=False,
+    )
+    await db.commit()
+    return RedirectResponse(
+        url=f"/meetings/{meeting_id}?status=transcription_started#transcription",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
+@app.post("/meetings/{meeting_id}/transcription/stop")
+async def stop_meeting_transcription(
+    request: Request,
+    meeting_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> RedirectResponse:
+    require_meeting_organizer(current_user)
+    meeting = await _load_meeting_or_404(meeting_id, db)
+    if _meeting_transcription_status(meeting) != TRANSCRIPTION_LIVE:
+        return RedirectResponse(
+            url=f"/meetings/{meeting_id}?status=transcription_not_live#transcription",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    meeting.transcription_json = _apply_live_dummy_transcript(meeting)
+    meeting.transcription_status = TRANSCRIPTION_STOPPED
+    meeting.transcription_stopped_at = datetime.utcnow()
+    flag_modified(meeting, "transcription_json")
+    await write_audit(
+        db,
+        username=current_user.username,
+        action="transcription_stop",
+        resource_type="meeting",
+        resource_id=str(meeting_id),
+        detail="dummy_ai_transcription",
+        ip_address=_client_ip(request),
+        commit=False,
+    )
+    await db.commit()
+    return RedirectResponse(
+        url=f"/meetings/{meeting_id}?status=transcription_stopped#transcription",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
+@app.get("/api/meetings/{meeting_id}/transcription")
+async def meeting_transcription_api(
+    meeting_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> JSONResponse:
+    meeting = await _load_meeting_or_404(meeting_id, db)
+    is_organizer = current_user.role in (Role.admin, Role.board_secretary)
+    if not is_organizer:
+        invite = await db.execute(
+            select(MeetingInvitation.id).where(
+                MeetingInvitation.meeting_id == meeting_id,
+                MeetingInvitation.username == current_user.username,
+            )
+        )
+        if invite.scalar_one_or_none() is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
+        return JSONResponse(_transcription_view(meeting, include_segments=False))
+
+    before = list(meeting.transcription_json or [])
+    _apply_live_dummy_transcript(meeting)
+    if list(meeting.transcription_json or []) != before:
+        await db.commit()
+    return JSONResponse(_transcription_view(meeting, include_segments=True))
 
 
 @app.get("/meetings/{meeting_id}/attendance/print", response_class=HTMLResponse)

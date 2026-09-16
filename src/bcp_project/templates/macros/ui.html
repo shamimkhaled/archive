@@ -71,6 +71,11 @@
 {% else %}
 {{ status_chip('Scheduled', 'upcoming') }}
 {% endif %}
+{% if meeting.transcription_status == 'live' %}
+{{ status_chip('AI transcribing', 'approved') }}
+{% elif meeting.transcription_status == 'stopped' %}
+{{ status_chip('Transcript ready', 'neutral') }}
+{% endif %}
 {% endmacro %}
 
 {% macro human_dt(dt) %}{{ dt.strftime('%d %b %Y, %H:%M') }}{% endmacro %}

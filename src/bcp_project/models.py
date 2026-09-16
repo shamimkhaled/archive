@@ -114,6 +114,11 @@ class BoardMeeting(Base):
     attendance_opened_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     attendance_closed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     notifications_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    transcription_status: Mapped[str] = mapped_column(String(16), default="off", nullable=False)
+    transcription_started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    transcription_stopped_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    transcription_started_by: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    transcription_json: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
 
 
 class NotificationEvent(Base):

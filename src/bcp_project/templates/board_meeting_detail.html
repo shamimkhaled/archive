@@ -9,25 +9,32 @@
 
 <header class="meeting-hero">
     <div class="meeting-hero-row">
-        <div>
-            <p class="briefing-kicker" style="margin-bottom:0.35rem;">Meeting {{ meeting.id }}</p>
-            {{ meeting_status(meeting) }}
+        <div class="meeting-hero-copy">
+            <div class="meeting-hero-chips">
+                {{ meeting_status(meeting) }}
+            </div>
             <h1>{{ meeting.title }}</h1>
-            <p class="meeting-hero-meta">{{ meeting.scheduled_at.strftime('%d %b %Y, %H:%M') }}{% if meeting.location %} · {{ meeting.location }}{% endif %}</p>
+            <ul class="meeting-hero-facts">
+                <li>{{ meeting.scheduled_at.strftime('%d %b %Y, %H:%M') }}</li>
+                {% if meeting.location %}<li>{{ meeting.location }}</li>{% endif %}
+            </ul>
         </div>
     </div>
 </header>
-
 
 {% if status == 'signed' %}
 <div class="alert alert-success" role="status">You're checked in. Thank you for signing in.</div>
 {% endif %}
 
+{% if meeting.transcription_status == 'live' %}
+<div class="alert alert-success" role="status">The organizer is capturing a draft transcript for this sitting.</div>
+{% endif %}
+
 <nav class="section-tabs" aria-label="Meeting sections">
     <a href="#attendance">Check-in</a>
     <a href="#agenda">Agenda</a>
-    <a href="#documents">Documents</a>
-    <a href="#intelligence">Intelligence</a>
+    <a href="#documents">Papers</a>
+    <a href="#intelligence">Archive</a>
 </nav>
 
 <section class="panel checkin-card" id="attendance">

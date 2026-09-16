@@ -41,26 +41,40 @@
         cursor: pointer;
         min-height: 40px;
     }
-    header {
+    header.print-masthead {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
         text-align: center;
         border-bottom: 3px solid var(--gold);
         padding-bottom: 1rem;
         margin-bottom: 1.5rem;
     }
-    header .org {
-        font-size: 0.85rem;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: var(--muted);
+    header.print-masthead img {
+        width: 56px;
+        height: 56px;
+        object-fit: contain;
+        margin: 0 auto 0.55rem;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+    header.print-masthead .org {
+        margin: 0;
+        font-size: 0.95rem;
+        letter-spacing: 0.04em;
+        text-transform: none;
+        color: var(--bcg);
         font-weight: 700;
     }
-    header h1 {
-        margin: 0.4rem 0 0;
+    header.print-masthead h1 {
+        margin: 0.2rem 0 0;
         font-family: "Cormorant Garamond", Georgia, serif;
-        font-size: 1.85rem;
+        font-size: 1.75rem;
         font-weight: 600;
         letter-spacing: -0.02em;
         color: var(--bcg);
+        line-height: 1.15;
     }
     .meta {
         display: grid;
@@ -137,9 +151,12 @@
         <button type="button" onclick="window.print()">Print</button>
     </div>
 
-    <header>
-        <div class="org">Sonali Bank PLC</div>
-        <h1>Board Meeting Attendance Sheet</h1>
+    <header class="print-masthead">
+        <img src="{{ brand.logo_path }}" alt="" width="56" height="56" />
+        <div>
+            <p class="org">Sonali Bank PLC</p>
+            <h1>Board Meeting Attendance Sheet</h1>
+        </div>
     </header>
 
     <dl class="meta">

@@ -5302,6 +5302,228 @@ body.auth-page .ptr-indicator {
   border-color: color-mix(in srgb, var(--bcg) 28%, var(--border));
 }
 
+.meeting-hero-copy {
+  min-width: 0;
+  flex: 1;
+}
+.meeting-hero-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.55rem;
+}
+.meeting-hero-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.1rem;
+  list-style: none;
+  margin: 0.35rem 0 0;
+  padding: 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+.meeting-hero-facts li {
+  position: relative;
+}
+.meeting-hero-facts li + li::before {
+  content: "·";
+  position: absolute;
+  left: -0.7rem;
+  color: color-mix(in srgb, var(--bcg-gold) 70%, var(--muted));
+}
+
+.panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+.panel-head h2 {
+  margin: 0;
+}
+
+.sitting-ops {
+  margin-bottom: var(--space-5);
+}
+.sitting-ops-head {
+  margin-bottom: var(--space-3);
+}
+.sitting-ops-head h2 {
+  margin: 0.15rem 0 0.35rem;
+  font-family: var(--font-display);
+  font-size: 1.55rem;
+  color: var(--bcg-dark);
+}
+.sitting-ops-head p {
+  margin: 0;
+  color: var(--muted);
+  max-width: 40rem;
+}
+.sitting-ops-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-3);
+}
+@media (min-width: 820px) {
+  .sitting-ops-grid {
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    align-items: start;
+  }
+}
+.sitting-card {
+  display: grid;
+  gap: 0.55rem;
+  padding: 1.15rem 1.2rem 1.25rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+.sitting-card h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  color: var(--bcg-dark);
+}
+.sitting-card-kicker {
+  margin: 0;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--bcg-gold);
+}
+.sitting-card-lead {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+.sitting-card-metric {
+  margin: 0.2rem 0;
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+.sitting-card-metric strong {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  color: var(--bcg-dark);
+  line-height: 1;
+}
+.sitting-card-metric span {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+.sitting-card-state {
+  margin: 0 0 0.35rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+.sitting-card-state.is-on {
+  color: #0f4f2c;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+.sitting-card.is-active {
+  border-color: color-mix(in srgb, var(--bcg) 32%, var(--border));
+  box-shadow: inset 3px 0 0 var(--bcg);
+}
+.sitting-card-transcript.is-live {
+  border-color: color-mix(in srgb, var(--bcg-gold) 55%, var(--border));
+  background:
+    radial-gradient(circle at 92% 0%, color-mix(in srgb, var(--bcg-gold) 16%, transparent), transparent 42%),
+    var(--surface);
+  box-shadow: inset 3px 0 0 var(--bcg-gold);
+}
+.sitting-card-transcript.is-saved {
+  border-color: color-mix(in srgb, var(--bcg-gold) 28%, var(--border));
+}
+.sitting-card form {
+  margin-top: 0.15rem;
+}
+
+.tx-eq {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 14px;
+}
+.tx-eq i {
+  display: block;
+  width: 3px;
+  height: 6px;
+  border-radius: 2px;
+  background: var(--bcg-gold);
+  animation: tx-eq 0.9s ease-in-out infinite;
+}
+.tx-eq i:nth-child(2) { animation-delay: 0.12s; height: 12px; }
+.tx-eq i:nth-child(3) { animation-delay: 0.24s; height: 8px; }
+.tx-eq i:nth-child(4) { animation-delay: 0.36s; height: 14px; }
+@keyframes tx-eq {
+  0%, 100% { transform: scaleY(0.45); }
+  50% { transform: scaleY(1); }
+}
+
+.soft-details {
+  margin-top: var(--space-4);
+  border-top: 1px dashed var(--border);
+  padding-top: var(--space-3);
+}
+.soft-details summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--bcg-dark);
+  font-size: 0.9rem;
+}
+.soft-details summary:hover {
+  color: var(--bcg);
+}
+
+.notify-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.transcription-log {
+  list-style: none;
+  margin: 0.35rem 0 0;
+  padding: 0.75rem;
+  display: grid;
+  gap: 0.7rem;
+  max-height: min(42vh, 340px);
+  overflow: auto;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bcg-soft) 55%, var(--surface));
+  border: 1px solid var(--border);
+  -webkit-overflow-scrolling: touch;
+}
+.transcription-log li {
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 12px 12px 12px 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+.transcription-speaker {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--bcg-gold);
+}
+.transcription-text {
+  color: var(--text);
+  line-height: 1.45;
+  font-size: 0.9rem;
+}
+
 .checkin-card .sig-wrap {
   padding: var(--space-3);
   border-radius: var(--radius-md);
@@ -5548,8 +5770,12 @@ body.auth-page .ptr-indicator {
     width: 100%;
   }
   .meeting-hero-actions .button,
-  .meeting-hero-actions button {
-    flex: 1;
+  .meeting-hero-actions button,
+  .meeting-hero .button {
+    width: 100%;
+  }
+  .sitting-card-metric strong {
+    font-size: 1.7rem;
   }
 }
 

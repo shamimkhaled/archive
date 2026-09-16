@@ -39,6 +39,15 @@ async def migrate() -> None:
         )
         print("board_meetings attendance / notifications columns present.")
 
+        await conn.execute(
+            text("ALTER TABLE board_meetings ADD COLUMN IF NOT EXISTS transcription_status VARCHAR(16) NOT NULL DEFAULT 'off'")
+        )
+        await conn.execute(text("ALTER TABLE board_meetings ADD COLUMN IF NOT EXISTS transcription_started_at TIMESTAMP"))
+        await conn.execute(text("ALTER TABLE board_meetings ADD COLUMN IF NOT EXISTS transcription_stopped_at TIMESTAMP"))
+        await conn.execute(text("ALTER TABLE board_meetings ADD COLUMN IF NOT EXISTS transcription_started_by VARCHAR(64)"))
+        await conn.execute(text("ALTER TABLE board_meetings ADD COLUMN IF NOT EXISTS transcription_json JSON"))
+        print("board_meetings transcription columns present.")
+
         await conn.execute(text("ALTER TABLE meeting_invitations ADD COLUMN IF NOT EXISTS invitation_email_sent_at TIMESTAMP"))
         await conn.execute(text("ALTER TABLE meeting_invitations ADD COLUMN IF NOT EXISTS reminder_48h_sent_at TIMESTAMP"))
         await conn.execute(text("ALTER TABLE meeting_invitations ADD COLUMN IF NOT EXISTS reminder_24h_sent_at TIMESTAMP"))
