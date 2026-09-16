@@ -1,33 +1,44 @@
 {% extends "base.html" %}
-{% from "macros/ui.html" import empty_state %}
+{% from "macros/ui.html" import empty_state, meeting_status, breadcrumbs %}
 
 {% block title %}{{ meeting.title }} | Sonali Bank Archive System{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <div class="title-group">
-        <h1>{{ meeting.title }}</h1>
-        <p>{{ meeting.scheduled_at.strftime('%Y-%m-%d %H:%M') }}{% if meeting.location %} · {{ meeting.location }}{% endif %}</p>
+{% set crumbs = [{'href': '/board/meetings', 'label': 'Meetings'}, {'label': meeting.title}] %}
+{{ breadcrumbs(crumbs) }}
+
+<header class="meeting-hero">
+    <div class="meeting-hero-row">
+        <div>
+            <p class="briefing-kicker" style="margin-bottom:0.35rem;">Meeting {{ meeting.id }}</p>
+            {{ meeting_status(meeting) }}
+            <h1>{{ meeting.title }}</h1>
+            <p class="meeting-hero-meta">{{ meeting.scheduled_at.strftime('%d %b %Y, %H:%M') }}{% if meeting.location %} · {{ meeting.location }}{% endif %}</p>
+        </div>
     </div>
-    <div class="badge">{{ meeting.status.value | capitalize }}</div>
-</div>
+</header>
+
 
 {% if status == 'signed' %}
-<div class="alert alert-success" role="status">You're checked in. Thanks for signing in.</div>
+<div class="alert alert-success" role="status">You're checked in. Thank you for signing in.</div>
 {% endif %}
 
 <nav class="section-tabs" aria-label="Meeting sections">
     <a href="#attendance">Check-in</a>
     <a href="#agenda">Agenda</a>
     <a href="#documents">Documents</a>
+    <a href="#intelligence">Intelligence</a>
 </nav>
 
-<section class="panel" id="attendance">
-    <h2>Attendance</h2>
+<section class="panel checkin-card" id="attendance">
+    <h2>Check-in</h2>
     {% if my_attendance %}
-    <p class="muted">You checked in at {{ my_attendance.signed_at.strftime('%Y-%m-%d %H:%M') }}.</p>
+    <div class="checkin-done">
+        <strong>You are signed in</strong>
+        <p class="muted">Checked in at {{ my_attendance.signed_at.strftime('%d %b %Y, %H:%M') }}.</p>
+    </div>
     {% elif meeting.attendance_open %}
-    <p>Sign below to record your attendance for this meeting.</p>
+    <p>Sign below to record your attendance for this sitting.</p>
     <div class="sig-wrap">
         <canvas id="sig-pad" width="400" height="150" aria-label="Signature pad"></canvas>
         <div class="sig-actions">
@@ -45,8 +56,14 @@
 
 <section class="panel" id="agenda">
     <h2>Agenda</h2>
-    {% if meeting.agenda %}
-    <p style="white-space: pre-wrap; color: var(--text);">{{ meeting.agenda }}</p>
+    {% if agenda_items %}
+    <ol class="agenda-list">
+        {% for item in agenda_items %}
+        <li>{{ item }}</li>
+        {% endfor %}
+    </ol>
+    {% elif meeting.agenda %}
+    <p class="agenda-paper">{{ meeting.agenda }}</p>
     {% else %}
     {{ empty_state("No agenda yet", "The organizer has not posted an agenda.") }}
     {% endif %}
@@ -67,8 +84,8 @@
             {% for doc in documents %}
             <tr>
                 <td>{{ doc.title }}</td>
-                <td>{{ doc.uploaded_at.strftime('%Y-%m-%d %H:%M') }}</td>
-                <td><a class="doc-link" href="/board/meetings/{{ meeting.id }}/documents/{{ doc.id }}/view">View</a></td>
+                <td>{{ doc.uploaded_at.strftime('%d %b %Y, %H:%M') }}</td>
+                <td><a class="button button-secondary" href="/board/meetings/{{ meeting.id }}/documents/{{ doc.id }}/view">View</a></td>
             </tr>
             {% endfor %}
         </tbody>
@@ -78,14 +95,42 @@
         <article class="mobile-card">
             <h3>{{ doc.title }}</h3>
             <dl>
-                <div><dt>Uploaded</dt><dd>{{ doc.uploaded_at.strftime('%Y-%m-%d %H:%M') }}</dd></div>
+                <div><dt>Uploaded</dt><dd>{{ doc.uploaded_at.strftime('%d %b %Y, %H:%M') }}</dd></div>
             </dl>
-            <p style="margin-top: 0.75rem;"><a class="doc-link" href="/board/meetings/{{ meeting.id }}/documents/{{ doc.id }}/view">View document</a></p>
+            <p style="margin-top: 0.75rem;"><a class="button" href="/board/meetings/{{ meeting.id }}/documents/{{ doc.id }}/view">View document</a></p>
         </article>
         {% endfor %}
     </div>
     {% else %}
     {{ empty_state("No documents", "No documents have been shared for this meeting yet.") }}
+    {% endif %}
+</section>
+
+<section class="panel" id="intelligence">
+    <h2>Context</h2>
+    <p class="muted" style="margin-top:0;">Look up this sitting in the archive. Answers come from stored papers only.</p>
+    <div class="intel-actions">
+        {% for q in intel_queries %}
+        <a class="button button-secondary" href="/search?q={{ q | urlencode }}" data-nav>{{ q[:56] }}{% if q|length > 56 %}…{% endif %}</a>
+        {% endfor %}
+        <a class="button button-secondary" href="/archive/map" data-nav>Open mind map</a>
+    </div>
+    {% if related_meetings %}
+    <p class="form-section-label" style="margin-top:1.25rem;">Other sittings</p>
+    <div class="meeting-list">
+        {% for other in related_meetings %}
+        <a class="meeting-brief" href="/board/meetings/{{ other.id }}" data-nav>
+            <time class="meeting-dateblock" datetime="{{ other.scheduled_at.isoformat() }}">
+                <span class="meeting-dateblock-day">{{ other.scheduled_at.strftime('%d') }}</span>
+                <span class="meeting-dateblock-month">{{ other.scheduled_at.strftime('%b') }}</span>
+            </time>
+            <div class="meeting-brief-body">
+                <h3>{{ other.title }}</h3>
+                <p class="meeting-brief-meta">{{ other.scheduled_at.strftime('%d %b %Y, %H:%M') }}</p>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
     {% endif %}
 </section>
 {% endblock %}

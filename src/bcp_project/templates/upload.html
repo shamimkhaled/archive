@@ -8,19 +8,19 @@
         <h1>Upload document</h1>
         <p>Submit a PDF to parse, summarize, and index in the archive.</p>
     </div>
-    <div class="badge">{{ user.username }} · {{ user.role.value | replace('_', ' ') | title }}</div>
 </div>
 
 <section class="panel">
     {% if status == 'success' %}
     <div class="alert alert-success" role="status">
-      Upload complete. Summary is searchable now; deeper text indexing continues in the background for a few moments.
+      Searchable now. Deeper text indexing continues in the background for a few moments.
     </div>
     {% endif %}
 
+    <div class="upload-split">
     <div id="uploadState" class="upload-flow{% if status == 'success' %} is-complete{% endif %}" aria-live="polite">
         <div class="upload-flow-header">
-            <h2 class="upload-flow-title">{% if status == 'success' %}Ingestion complete{% else %}Ingestion pipeline{% endif %}</h2>
+            <h2 class="upload-flow-title">{% if status == 'success' %}Searchable now{% else %}Ingestion pipeline{% endif %}</h2>
             <p id="uploadMessage" class="upload-message">
                 {% if status == 'success' %}
                 Document uploaded, parsed, summarized, and indexed.
@@ -128,16 +128,17 @@
 
         <div class="form-section">
             <div class="form-section-label">File</div>
-            <div class="form-group">
-                <label for="file">PDF file</label>
+            <label class="file-drop" for="file">
+                <span class="file-drop-label">Drop or choose a PDF</span>
                 <input id="file" type="file" name="file" accept="application/pdf" required />
-            </div>
+            </label>
         </div>
 
         <div class="form-actions-sticky">
             <button id="submitButton" type="submit" class="button-block">Upload document</button>
         </div>
     </form>
+    </div>
 </section>
 
 <script>

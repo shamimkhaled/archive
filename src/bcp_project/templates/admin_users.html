@@ -8,14 +8,13 @@
 {% set fe = field_errors|default({}) %}
 <div class="page-header">
     <div class="title-group">
-        <h1>Users</h1>
-        <p>Create, update, or remove accounts. Only admins can manage users.</p>
+        <h1>People</h1>
+        <p>Create accounts and assign roles for the board workspace.</p>
     </div>
-    <div class="badge">{{ user.username }} · Admin</div>
 </div>
 
 <section class="panel">
-    <h2>Create user</h2>
+    <h2>Create person</h2>
     {% if status == 'created' or status == 'success' %}
     <div class="alert alert-success" role="status">User created successfully.</div>
     {% elif status == 'updated' %}
@@ -53,7 +52,7 @@
         </div>
         <div class="form-group{% if fe.role %} has-error{% endif %}">
             <label for="role">Role</label>
-            <select id="role" name="role" required aria-describedby="roleError">
+            <select id="role" name="role" required aria-describedby="roleError roleHelp">
                 {% for role in roles %}
                 <option value="{{ role.value }}" {% if fv.role == role.value %}selected{% endif %}>
                     {% if role.value == 'admin' %}Admin — full access
@@ -65,6 +64,7 @@
                 </option>
                 {% endfor %}
             </select>
+            <p class="field-hint" id="roleHelp">The role controls archive, meetings, and admin tools.</p>
             {% if fe.role %}<p class="field-error" id="roleError">{{ fe.role }}</p>{% endif %}
         </div>
         <label class="checkbox-item">
@@ -76,8 +76,8 @@
 </section>
 
 <section class="panel">
-    <h2>Existing users</h2>
-    <p class="muted" style="margin-top: 0;">Click <strong>Edit</strong> on a user to change username, email, role, password, or status.</p>
+    <h2>Directory</h2>
+    <p class="muted" style="margin-top: 0;">Edit a person to change username, email, role, password, or status.</p>
     {% if users %}
     <div class="table-wrap table-desktop">
         <table class="data-table">

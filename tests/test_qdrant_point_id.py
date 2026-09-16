@@ -19,3 +19,13 @@ def test_numeric_and_uuid_ids_are_preserved():
     assert normalize_doc_point_id("42") == 42
     sample = uuid.uuid4()
     assert normalize_doc_point_id(str(sample)) == sample
+
+
+def test_client_point_id_is_json_safe_string():
+    from bcp_project.qdrant_store import QdrantIndexer
+
+    indexer = QdrantIndexer.__new__(QdrantIndexer)
+    client_id = indexer._client_point_id("SB-2026-008")
+    assert isinstance(client_id, str)
+    assert client_id == str(normalize_doc_point_id("SB-2026-008"))
+    assert indexer._client_point_id("42") == 42

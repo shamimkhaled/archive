@@ -4,17 +4,21 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Attendance Sheet — {{ meeting.title }}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet" />
 <style>
     :root {
-        --bcg: #006a4e;
-        --text: #10231d;
-        --muted: #5a6d66;
-        --border: #c5d4cc;
-        --soft: #eef4ef;
+        --bcg: #1A1A54;
+        --gold: #C5922F;
+        --text: #12122e;
+        --muted: #5a5a78;
+        --border: #d8dae8;
+        --soft: #eef0f8;
     }
     * { box-sizing: border-box; }
     body {
-        font-family: "Source Sans 3", system-ui, -apple-system, sans-serif;
+        font-family: "Source Sans 3", "Noto Sans Bengali", system-ui, -apple-system, sans-serif;
         color: var(--text);
         margin: 0;
         padding: 2rem 2.5rem;
@@ -39,7 +43,7 @@
     }
     header {
         text-align: center;
-        border-bottom: 3px solid var(--bcg);
+        border-bottom: 3px solid var(--gold);
         padding-bottom: 1rem;
         margin-bottom: 1.5rem;
     }
@@ -52,7 +56,9 @@
     }
     header h1 {
         margin: 0.4rem 0 0;
-        font-size: 1.65rem;
+        font-family: "Cormorant Garamond", Georgia, serif;
+        font-size: 1.85rem;
+        font-weight: 600;
         letter-spacing: -0.02em;
         color: var(--bcg);
     }

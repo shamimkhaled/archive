@@ -261,15 +261,20 @@
 </script>
 {% if archive_doc_id %}
 <script>
-(function () {
-  if (!window.BCPArchiveGraph) return;
+(function bootViewerGraph(attempt) {
+  if (!window.BCPArchiveGraph || typeof window.BCPArchiveGraph.initViewerPanel !== "function") {
+    if ((attempt || 0) < 50) {
+      setTimeout(function () { bootViewerGraph((attempt || 0) + 1); }, 50);
+    }
+    return;
+  }
   window.BCPArchiveGraph.initViewerPanel({
     panelId: "viewerRelatedPanel",
     graphId: "viewerMiniGraph",
     listId: "viewerRelatedList",
     statusId: "viewerRelatedStatus",
   });
-})();
+})(0);
 </script>
 {% endif %}
 {% endblock %}

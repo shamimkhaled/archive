@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional
 
-from sqlalchemy import Boolean, Column, Date, DateTime, Enum as SQLEnum, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Column, Date, DateTime, Enum as SQLEnum, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -59,7 +59,12 @@ class DocumentRecord(Base):
     summary_json: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     file_location: Mapped[str] = mapped_column(Text, nullable=False)
     uploaded_by: Mapped[str] = mapped_column(String(64), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+
+    __table_args__ = (
+        Index("ix_documents_doc_type", "doc_type"),
+        Index("ix_documents_doc_date", "doc_date"),
+    )
 
 
 class DocumentAccessRequest(Base):
@@ -98,7 +103,7 @@ class BoardMeeting(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
-    scheduled_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    scheduled_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
     location: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     agenda: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[MeetingStatus] = mapped_column(SQLEnum(MeetingStatus), default=MeetingStatus.scheduled)

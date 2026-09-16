@@ -329,28 +329,61 @@
     return list;
   }
 
+  function loadExternalScript(src) {
+    var existing = document.querySelector('script[src="' + src + '"]');
+    if (existing) {
+      if (existing.getAttribute("data-bcp-loaded") === "1") return Promise.resolve();
+      return new Promise(function (resolve) {
+        var settled = false;
+        var done = function () {
+          if (settled) return;
+          settled = true;
+          existing.setAttribute("data-bcp-loaded", "1");
+          resolve();
+        };
+        existing.addEventListener("load", done, { once: true });
+        existing.addEventListener("error", done, { once: true });
+        if (src.indexOf("archive-graph.js") !== -1 && window.BCPArchiveGraph) {
+          done();
+          return;
+        }
+        setTimeout(done, 400);
+      });
+    }
+    return new Promise(function (resolve) {
+      var s = document.createElement("script");
+      s.src = src;
+      s.async = false;
+      s.onload = function () {
+        s.setAttribute("data-bcp-loaded", "1");
+        resolve();
+      };
+      s.onerror = function () { resolve(); };
+      document.body.appendChild(s);
+    });
+  }
+
   function runScripts(scriptSpecs) {
     var blockedPatterns = ["unpkg.com/vis-network"];
+    var chain = Promise.resolve();
     (scriptSpecs || []).forEach(function (spec) {
-      var src = spec.src;
-      if (src && blockedPatterns.some(function (pattern) { return src.indexOf(pattern) !== -1; })) {
-        return;
-      }
-      var s = document.createElement("script");
-      if (src) {
-        if (document.querySelector('script[src="' + src + '"]')) return;
-        s.src = src;
-        s.async = false;
-      } else if (spec.text) {
-        s.textContent = spec.text;
-      } else {
-        return;
-      }
-      document.body.appendChild(s);
-      if (!src) {
-        s.remove();
-      }
+      chain = chain.then(function () {
+        var src = spec.src;
+        if (src && blockedPatterns.some(function (pattern) { return src.indexOf(pattern) !== -1; })) {
+          return;
+        }
+        if (src) {
+          return loadExternalScript(src);
+        }
+        if (spec.text) {
+          var s = document.createElement("script");
+          s.textContent = spec.text;
+          document.body.appendChild(s);
+          s.remove();
+        }
+      });
     });
+    return chain;
   }
 
   function swap(html, url, opts) {
@@ -389,12 +422,12 @@
     }
 
     window.scrollTo(0, 0);
-    runScripts(pageScripts);
-    // Defer boot so swapped DOM + page scripts are attached
-    setTimeout(function () {
-      bootPage();
-      endProgress();
-    }, 0);
+    runScripts(pageScripts)
+      .catch(function () {})
+      .then(function () {
+        bootPage();
+        endProgress();
+      });
   }
 
   function fetchPage(url, force) {
@@ -747,6 +780,14 @@
       var active = document.querySelector(".search-tab.active");
       var which = active && active.getAttribute("data-search-tab") === "metadata" ? "metadata" : "keyword";
       showSearchPanel(which);
+      var params = new URLSearchParams(window.location.search);
+      var preset = (params.get("q") || "").trim();
+      var searchQuery = document.getElementById("searchQuery");
+      if (preset && searchQuery) {
+        searchQuery.value = preset;
+        var btn = document.getElementById("searchButton");
+        if (btn) window.setTimeout(function () { btn.click(); }, 0);
+      }
     }
   }
 
@@ -788,7 +829,11 @@
             searchResults.innerHTML = emptyHtml("No results", 'Nothing matched “' + payload.query + '”.');
             return;
           }
-          searchResults.innerHTML = renderKeywordResults(payload.results);
+          var html = renderKeywordResults(payload.results);
+          if (payload.degraded) {
+            html = '<p class="muted">Showing keyword matches. Similarity ranking will return when the search index is reachable.</p>' + html;
+          }
+          searchResults.innerHTML = html;
         })
         .catch(function () {
           searchResults.innerHTML = emptyHtml("Search unavailable", "Unable to complete search. Please try again.");

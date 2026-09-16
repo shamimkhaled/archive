@@ -584,7 +584,12 @@
     return fetch("/api/archive/graph?" + query.toString(), opts)
       .then(redirectIfUnauthorized)
       .then(function (res) {
-        if (!res.ok) throw new Error("Could not load mind map (" + res.status + ")");
+        if (!res.ok) {
+          if (res.status === 502 || res.status === 504) {
+            throw new Error("The map took too long. Try another document or a tighter similarity.");
+          }
+          throw new Error("Could not load mind map (" + res.status + ")");
+        }
         return res.json();
       });
   }
@@ -596,6 +601,7 @@
     params.set("offset", String(opts.offset || 0));
     if (opts.q) params.set("q", opts.q);
     if (opts.doc_type) params.set("doc_type", opts.doc_type);
+    if (opts.year) params.set("year", String(opts.year));
     return fetch("/api/archive/documents?" + params.toString(), {
       credentials: "same-origin",
       headers: csrfHeaders(),
@@ -631,6 +637,8 @@
   function initMapPage(config) {
     var root = document.querySelector('[data-page="archive-map"]');
     if (!root) return;
+    if (root.getAttribute("data-map-booted") === "1") return;
+    root.setAttribute("data-map-booted", "1");
 
     var container = document.getElementById(config.containerId);
     var emptyEl = document.getElementById(config.emptyId);
@@ -641,6 +649,7 @@
     var focusLabel = document.getElementById(config.focusLabelId);
     var limitSelect = document.getElementById(config.limitSelectId);
     var similaritySelect = document.getElementById(config.similaritySelectId);
+    var yearSelect = document.getElementById(config.yearSelectId || "mapYear");
     var reloadBtn = document.getElementById(config.reloadBtnId);
     var clearFocusBtn = document.getElementById(config.clearFocusBtnId);
     var docSearch = document.getElementById(config.docSearchId);
@@ -705,6 +714,10 @@
         disconnected: {
           title: "No connections found",
           lead: "Try a lower similarity threshold or raise Max related.",
+        },
+        failed: {
+          title: "Could not load this map",
+          lead: "The archive is still available. Search again or pick another document.",
         },
       };
       if (!kind) {
@@ -1161,6 +1174,7 @@
       return fetchArchiveDocuments({
         q: searchQuery,
         doc_type: activeDocTypeFilter,
+        year: yearSelect && yearSelect.value ? yearSelect.value : "",
         limit: pageSize,
         offset: append ? listOffset : 0,
       })
@@ -1217,7 +1231,7 @@
       if (!renderer) setEmptyState("loading");
       else setEmptyState(null);
       fetchGraph({
-        limit: limitSelect ? Number(limitSelect.value) : 24,
+        limit: limitSelect ? Number(limitSelect.value) : 16,
         min_similarity: similaritySelect ? Number(similaritySelect.value) : 0.68,
         focus: requestedFocus,
         signal: mapAbort ? mapAbort.signal : undefined,
@@ -1259,6 +1273,7 @@
             graph.edge_count + " links",
             "focused on " + requestedFocus,
           ];
+          if (graph.degraded) statusBits.push("keyword links (similarity delayed)");
           if (lastModel && !lastModel.branches.length) statusBits.push("no connections in current settings");
           setStatus(statusBits.join(" · "));
         })
@@ -1266,7 +1281,7 @@
           if (err && (err.name === "AbortError" || err.message === "The user aborted a request.")) return;
           if (seq !== mapSeq) return;
           setStatus(err.message || "Failed to load mind map");
-          setEmptyState(archiveTotal ? "idle" : "vacant");
+          setEmptyState("failed");
           renderWorkflowPanel(null);
         })
         .finally(function () {
@@ -1356,6 +1371,12 @@
     }
     if (limitSelect) limitSelect.addEventListener("change", function () { if (focusedDocId) loadMap(); });
     if (similaritySelect) similaritySelect.addEventListener("change", function () { if (focusedDocId) loadMap(); });
+    if (yearSelect) {
+      yearSelect.addEventListener("change", function () {
+        listOffset = 0;
+        loadDocuments({ append: false });
+      });
+    }
     if (clearFocusBtn) {
       clearFocusBtn.addEventListener("click", function () {
         setFocus("");
@@ -1396,6 +1417,8 @@
     var listEl = document.getElementById(config.listId);
     var statusEl = document.getElementById(config.statusId);
     if (!docId || !graphEl) return;
+    if (panel.getAttribute("data-graph-booted") === "1") return;
+    panel.setAttribute("data-graph-booted", "1");
 
     function setStatus(text) {
       if (statusEl) statusEl.textContent = text;

@@ -180,6 +180,23 @@ async def migrate() -> None:
         else:
             print("role enum already up to date.")
 
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_documents_created_at ON documents (created_at)"))
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_documents_doc_type ON documents (doc_type)"))
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_documents_doc_date ON documents (doc_date)"))
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_board_meetings_scheduled_at ON board_meetings (scheduled_at)"))
+        await conn.execute(
+            text(
+                """
+                DO $$ BEGIN
+                    CREATE INDEX IF NOT EXISTS ix_documents_keywords_gin
+                    ON documents USING GIN ((keywords::jsonb));
+                EXCEPTION WHEN others THEN NULL;
+                END $$;
+                """
+            )
+        )
+        print("archive/meeting lookup indexes present.")
+
     print("Migration complete.")
 
 

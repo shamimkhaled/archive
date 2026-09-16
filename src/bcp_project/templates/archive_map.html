@@ -1,16 +1,20 @@
 {% extends "base.html" %}
 
+{% from "macros/ui.html" import breadcrumbs %}
+
 {% block title %}Mind Map | {{ brand.product_name }}{% endblock %}
 
 {% block content %}
 {% set can_upload = user.role.value in ['admin', 'uploader'] %}
+{% set crumbs = [{'href': '/search', 'label': 'Archive'}, {'label': 'Mind Map'}] %}
 <div class="mind-map-page" data-page="archive-map">
+    {{ breadcrumbs(crumbs) }}
     <div class="page-header">
         <div class="title-group">
-            <h1>Document mind map</h1>
-            <p>Search a document, then explore links by summary meaning, projects, people, organization, and keywords — built for large archives.</p>
+            <h1>Archive intelligence</h1>
+            <p>Search a paper, then see why others connect — similar meaning, shared projects, people, or keywords.</p>
         </div>
-        <div class="badge">{{ user.username }} · {{ 'Board Member' if user.role.value == 'board_member' else user.role.value | replace('_', ' ') | title }}</div>
+        <span class="badge">{{ user.username }} · {{ 'Board Member' if user.role.value == 'board_member' else user.role.value | replace('_', ' ') | title }}</span>
     </div>
 
     <section class="panel mind-map-workspace">
@@ -22,9 +26,18 @@
             <div class="neural-toolbar-group">
                 <label for="mapLimit">Max related</label>
                 <select id="mapLimit">
-                    <option value="16">16</option>
-                    <option value="24" selected>24</option>
-                    <option value="40">40</option>
+                    <option value="12">12</option>
+                    <option value="16" selected>16</option>
+                    <option value="24">24</option>
+                </select>
+            </div>
+            <div class="neural-toolbar-group">
+                <label for="mapYear">Year</label>
+                <select id="mapYear">
+                    <option value="" selected>All years</option>
+                    <option value="2026">2026</option>
+                    <option value="2025">2025</option>
+                    <option value="2024">2024</option>
                 </select>
             </div>
             <div class="neural-toolbar-group">
@@ -91,8 +104,8 @@
                                     <path d="M8 6.8L16.5 7.8M7.6 7.8l2.2 9.5M16 9.8l-5.5 7.5"/>
                                 </svg>
                             </div>
-                            <h2 id="neuralTreeEmptyTitle">Choose a document</h2>
-                            <p id="neuralTreeEmptyLead">Search or pick a record — the map shows links by summary meaning, projects, people, org, and keywords.</p>
+                            <h2 id="neuralTreeEmptyTitle">Pick a document</h2>
+                            <p id="neuralTreeEmptyLead">Search or choose a record — the map shows how it connects across the archive.</p>
                             {% if can_upload %}
                             <a class="button" id="neuralTreeEmptyAction" href="/upload" hidden>Upload a document</a>
                             {% endif %}
@@ -167,8 +180,13 @@
 {% block scripts %}
 <script src="/static/js/archive-graph.js?v={{ static_version }}"></script>
 <script>
-(function () {
-  if (!window.BCPArchiveGraph) return;
+(function bootArchiveMap(attempt) {
+  if (!window.BCPArchiveGraph || typeof window.BCPArchiveGraph.initMapPage !== "function") {
+    if ((attempt || 0) < 50) {
+      setTimeout(function () { bootArchiveMap((attempt || 0) + 1); }, 50);
+    }
+    return;
+  }
   var params = new URLSearchParams(window.location.search);
   window.BCPArchiveGraph.initMapPage({
     containerId: "archiveMapGraph",
@@ -197,8 +215,9 @@
     zoomInId: "neuralZoomIn",
     zoomOutId: "neuralZoomOut",
     zoomFitId: "neuralZoomFit",
+    yearSelectId: "mapYear",
     initialFocus: params.get("focus") || "",
   });
-})();
+})(0);
 </script>
 {% endblock %}

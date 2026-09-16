@@ -14,9 +14,14 @@ venv/
 .cursor/
 .claude/
 
+
 # Local upload storage — real board documents, not source code
 uploaded_pdfs/
 BCP01.pdf
+claude.md
+cursor.md
+FLY_DEPLOY.md
+
 
 # Deploy / runtime
 FLY_DEPLOY.md.bak

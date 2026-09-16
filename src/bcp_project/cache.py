@@ -14,6 +14,7 @@ logger = logging.getLogger("bcp_project.cache")
 
 REDIS_URL = resolve_redis_url()
 SEARCH_CACHE_TTL_SECONDS = int(os.getenv("SEARCH_CACHE_TTL_SECONDS", "3600"))
+GRAPH_CACHE_TTL_SECONDS = int(os.getenv("GRAPH_CACHE_TTL_SECONDS", "900"))
 SEARCH_CACHE_VERSION_KEY = "search:version"
 
 _redis_client: Optional["redis.Redis"] = None
@@ -116,6 +117,43 @@ async def set_cached_metadata_search(filters: dict, payload: Any, ttl: int = SEA
         await client.set(_metadata_cache_key(filters, version), json.dumps(payload), ex=ttl)
     except Exception as exc:
         _note_redis_failure("meta write", exc)
+
+
+def _graph_cache_key(focus: str, limit: int, min_similarity: float, version: str) -> str:
+    sim = f"{float(min_similarity):.2f}"
+    return f"graph:v{version}:{focus}:{int(limit)}:{sim}"
+
+
+async def get_cached_graph(focus: str, limit: int, min_similarity: float) -> Optional[Any]:
+    try:
+        client = get_redis_client()
+        version = await client.get(SEARCH_CACHE_VERSION_KEY) or "0"
+        raw = await client.get(_graph_cache_key(focus, limit, min_similarity, version))
+        if raw is None:
+            return None
+        return json.loads(raw)
+    except Exception as exc:
+        _note_redis_failure("graph read", exc)
+        return None
+
+
+async def set_cached_graph(
+    focus: str,
+    limit: int,
+    min_similarity: float,
+    payload: Any,
+    ttl: int = GRAPH_CACHE_TTL_SECONDS,
+) -> None:
+    try:
+        client = get_redis_client()
+        version = await client.get(SEARCH_CACHE_VERSION_KEY) or "0"
+        await client.set(
+            _graph_cache_key(focus, limit, min_similarity, version),
+            json.dumps(payload),
+            ex=ttl,
+        )
+    except Exception as exc:
+        _note_redis_failure("graph write", exc)
 
 
 async def bump_search_cache_version() -> None:

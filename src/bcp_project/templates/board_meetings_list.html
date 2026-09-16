@@ -1,33 +1,49 @@
 {% extends "base.html" %}
-{% from "macros/ui.html" import empty_state %}
+{% from "macros/ui.html" import empty_state, meeting_tile %}
 
 {% block title %}My Board Meetings | Sonali Bank Archive System{% endblock %}
 
 {% block content %}
+{% set ns = namespace(upcoming=[], past=[]) %}
+{% for meeting in meetings %}
+    {% if meeting.status.value == 'scheduled' %}
+        {% set ns.upcoming = ns.upcoming + [meeting] %}
+    {% else %}
+        {% set ns.past = ns.past + [meeting] %}
+    {% endif %}
+{% endfor %}
+
 <div class="page-header">
     <div class="title-group">
         <h1>My meetings</h1>
-        <p>Meetings you've been invited to, most recent first.</p>
+        <p>Sessions you have been invited to — agendas, papers, and check-in.</p>
     </div>
-    <div class="badge">{{ user.username }} · Board Member</div>
 </div>
 
-<section class="panel">
-    {% if meetings %}
+{% if meetings %}
+{% if ns.upcoming %}
+<section class="meeting-group" aria-label="Upcoming meetings">
+    <h2 class="meeting-group-label">Upcoming</h2>
     <div class="meeting-list">
-        {% for meeting in meetings %}
-        <a class="meeting-card" href="/board/meetings/{{ meeting.id }}">
-            <div class="meeting-card-header">
-                <h3>{{ meeting.title }}</h3>
-                <span class="badge">{{ meeting.status.value | capitalize }}</span>
-            </div>
-            <p><strong>When</strong> {{ meeting.scheduled_at.strftime('%Y-%m-%d %H:%M') }}</p>
-            {% if meeting.location %}<p><strong>Where</strong> {{ meeting.location }}</p>{% endif %}
-        </a>
+        {% for meeting in ns.upcoming %}
+        {{ meeting_tile(meeting, '/board/meetings/' ~ meeting.id) }}
         {% endfor %}
     </div>
-    {% else %}
-    {{ empty_state("No invitations yet", "When you're invited to a board meeting, it will show up here.") }}
-    {% endif %}
 </section>
+{% endif %}
+{% if ns.past %}
+<section class="meeting-group" aria-label="Past meetings">
+    <h2 class="meeting-group-label">Past</h2>
+    <div class="meeting-list">
+        {% for meeting in ns.past %}
+        {{ meeting_tile(meeting, '/board/meetings/' ~ meeting.id) }}
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
+{% else %}
+<section class="panel">
+    {{ empty_state("No invitations yet", "When you are invited to a board meeting, it will appear here.") }}
+</section>
+{% endif %}
 {% endblock %}

@@ -3,6 +3,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from datetime import datetime, timedelta
+from types import SimpleNamespace
+
 from bcp_project.access_control import (
     can_download_with_grant,
     can_view_with_grant,
@@ -10,14 +13,15 @@ from bcp_project.access_control import (
 )
 from bcp_project.models import AccessMode, AccessRequestStatus, DocumentAccessRequest, Role, User
 from bcp_project.qdrant_store import (
+    QdrantIndexer,
     build_summary_embedding_text,
     reciprocal_rank_fusion,
+    summary_haystack,
+    summary_search_snippet,
     _casefold_contains,
     _contains_bangla,
 )
 from bcp_project.security import LoginRateLimiter
-from datetime import datetime, timedelta
-from types import SimpleNamespace
 
 
 def _user(role: Role, username: str = "u1") -> User:
@@ -145,3 +149,41 @@ def test_login_rate_limiter_blocks_after_max():
     assert limiter.is_blocked(request, "alice")
     limiter.clear(request, "alice")
     assert not limiter.is_blocked(request, "alice")
+
+
+def test_summary_haystack_and_snippet_find_body_terms():
+    summary = {
+        "searchable_keywords": ["Board"],
+        "core_info": {"meeting_title": "412th Board Meeting"},
+        "finance_and_admin": ["Recruitment of media consultants for FY26"],
+        "major_projects": [{"project_name": "Core banking", "brief_context": "job grading review"}],
+    }
+    hay = summary_haystack(summary)
+    assert "media consultants" in hay.casefold()
+    assert "job grading" in hay.casefold()
+    snippet = summary_search_snippet(summary, "job")
+    assert "job" in snippet.casefold()
+
+
+def test_fuse_hybrid_keeps_chunk_only_hits():
+    indexer = QdrantIndexer.__new__(QdrantIndexer)
+    fused = indexer.fuse_hybrid_results(
+        [],
+        {
+            "SB-2026-001": {
+                "doc_id": "SB-2026-001",
+                "score": 0.81,
+                "snippet": "The committee discussed media buying for the campaign.",
+                "page_number": 4,
+                "source": "chunk",
+            }
+        },
+        "media",
+        limit=10,
+        lang="en",
+        use_chunks=True,
+    )
+    assert len(fused) == 1
+    assert fused[0]["doc_id"] == "SB-2026-001"
+    assert "chunk" in fused[0]["match_reasons"]
+    assert "media" in fused[0]["snippet"]

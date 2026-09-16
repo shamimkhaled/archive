@@ -1,3 +1,16 @@
+{% macro breadcrumbs(items) %}
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+    {% for item in items %}
+    {% if item.href %}
+    <a href="{{ item.href }}" data-nav>{{ item.label }}</a>
+    {% else %}
+    <span aria-current="page">{{ item.label }}</span>
+    {% endif %}
+    {% if not loop.last %}<span class="breadcrumbs-sep" aria-hidden="true">/</span>{% endif %}
+    {% endfor %}
+</nav>
+{% endmacro %}
+
 {% macro page_header(title, subtitle=None, badge=None) %}
 <div class="page-header">
     <div class="title-group">
@@ -42,4 +55,66 @@
 
 {% macro user_badge(user) %}
 <span class="badge">{{ user.username }} · {{ user.role.value | replace('_', ' ') | title }}</span>
+{% endmacro %}
+
+{% macro status_chip(label, kind='neutral') %}
+<span class="status-chip status-chip-{{ kind }}">{{ label }}</span>
+{% endmacro %}
+
+{% macro meeting_status(meeting) %}
+{% if meeting.attendance_open %}
+{{ status_chip('Check-in open', 'open') }}
+{% elif meeting.status.value == 'completed' %}
+{{ status_chip('Closed', 'closed') }}
+{% elif meeting.status.value == 'cancelled' %}
+{{ status_chip('Cancelled', 'danger') }}
+{% else %}
+{{ status_chip('Scheduled', 'upcoming') }}
+{% endif %}
+{% endmacro %}
+
+{% macro human_dt(dt) %}{{ dt.strftime('%d %b %Y, %H:%M') }}{% endmacro %}
+
+{% macro dest_card(href, title, subtitle, icon='folder') %}
+<a class="dest-card" href="{{ href }}" data-nav>
+    <span class="dest-card-icon" aria-hidden="true">
+        {% if icon == 'calendar' %}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+        {% elif icon == 'search' %}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        {% elif icon == 'map' %}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6" cy="6" r="2"/><circle cx="18" cy="8" r="2"/><circle cx="10" cy="18" r="2"/><path d="M8 6.8L16.5 7.8M7.6 7.8l2.2 9.5M16 9.8l-5.5 7.5"/></svg>
+        {% elif icon == 'upload' %}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 20h16"/></svg>
+        {% elif icon == 'users' %}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+        {% elif icon == 'access' %}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+        {% else %}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7a2 2 0 012-2h5l2 2h7a2 2 0 012 2v8a2 2 0 01-2 2H6a2 2 0 01-2-2V7z"/></svg>
+        {% endif %}
+    </span>
+    <span class="dest-card-copy">
+        <strong>{{ title }}</strong>
+        <span>{{ subtitle }}</span>
+    </span>
+    <span class="dest-card-chevron" aria-hidden="true">→</span>
+</a>
+{% endmacro %}
+
+{% macro meeting_tile(meeting, href, meta=None) %}
+<a class="meeting-brief" href="{{ href }}" data-nav>
+    <time class="meeting-dateblock" datetime="{{ meeting.scheduled_at.isoformat() }}">
+        <span class="meeting-dateblock-day">{{ meeting.scheduled_at.strftime('%d') }}</span>
+        <span class="meeting-dateblock-month">{{ meeting.scheduled_at.strftime('%b') }}</span>
+    </time>
+    <div class="meeting-brief-body">
+        <div class="meeting-brief-top">
+            <h3>{{ meeting.title }}</h3>
+            {{ meeting_status(meeting) }}
+        </div>
+        <p class="meeting-brief-meta">{{ meeting.scheduled_at.strftime('%d %b %Y, %H:%M') }}{% if meeting.location %} · {{ meeting.location }}{% endif %}</p>
+        {% if meta %}<p class="meeting-brief-sub">{{ meta }}</p>{% endif %}
+    </div>
+</a>
 {% endmacro %}

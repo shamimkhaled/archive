@@ -89,7 +89,25 @@
 {% set home_href = '/' %}
 {% set show_chrome = user and not hide_chrome %}
 {% set show_bottom = show_chrome and not contextual %}
-{% set page_label = 'Mind Map' if path.startswith('/archive/map') else ('Archive' if path.startswith('/search') else ('Upload' if path.startswith('/upload') else ('Appearance' if path.startswith('/appearance') else ('Users' if path.startswith('/admin') else ('Meetings' if path.startswith('/meetings') or path.startswith('/board/meetings') else ('Notifications' if path.startswith('/notifications') else 'Home')))))) %}
+{% if path.startswith('/archive/map') %}
+{% set page_label = 'Mind Map' %}
+{% elif path.startswith('/search') %}
+{% set page_label = 'Archive' %}
+{% elif path.startswith('/upload') %}
+{% set page_label = 'Upload' %}
+{% elif path.startswith('/appearance') %}
+{% set page_label = 'Appearance' %}
+{% elif path.startswith('/admin/access') or path.startswith('/access-requests') %}
+{% set page_label = 'Access' %}
+{% elif path.startswith('/admin') %}
+{% set page_label = 'Users' %}
+{% elif path.startswith('/meetings') or path.startswith('/board/meetings') %}
+{% set page_label = 'Meetings' %}
+{% elif path.startswith('/notifications') %}
+{% set page_label = 'Notifications' %}
+{% else %}
+{% set page_label = 'Home' %}
+{% endif %}
 <body class="{% block body_class %}{% endblock %}{% if not user %} auth-page{% endif %}{% if hide_chrome %} viewer-mode{% endif %}">
     <div id="nav-progress" class="nav-progress" aria-hidden="true"></div>
 
@@ -205,7 +223,7 @@
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 18l-6-6 6-6"/></svg>
                 </a>
                 <div class="mobile-topbar-meta">
-                    <span class="mobile-page-title">{% if is_meeting_form %}Schedule{% else %}Details{% endif %}</span>
+                    <span class="mobile-page-title">{% if is_meeting_form %}Schedule{% else %}Meeting{% endif %}</span>
                     <span class="mobile-page-sub">{{ brand.product_name }}</span>
                 </div>
             </header>

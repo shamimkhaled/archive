@@ -6,7 +6,7 @@ import mimetypes
 import os
 import shutil
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Union
 
@@ -42,8 +42,10 @@ from .brand import BRAND
 from .aws_utils import get_s3_client, probe_s3, storage_backend_name, store_pdf, use_local_storage
 from .cache import (
     bump_search_cache_version,
+    get_cached_graph,
     get_cached_metadata_search,
     get_cached_search,
+    set_cached_graph,
     set_cached_metadata_search,
     set_cached_search,
 )
@@ -79,7 +81,13 @@ from .notify import notify_meeting_email
 from .pdf_parser import parse_pdf
 from .pdf_watermark import stamp_pdf_bytes
 from .reminders import send_due_reminders
-from .qdrant_store import make_qdrant_indexer, build_summary_embedding_text, embed_texts
+from .qdrant_store import (
+    make_qdrant_indexer,
+    build_summary_embedding_text,
+    embed_texts,
+    summary_haystack,
+    summary_search_snippet,
+)
 from .security import (
     CsrfMiddleware,
     SecurityHeadersMiddleware,
@@ -677,6 +685,19 @@ async def search_page(
     )
 
 
+SEARCH_SUMMARY_TIMEOUT_SECONDS = 5.0
+SEARCH_CHUNK_TIMEOUT_SECONDS = 5.0
+SEARCH_EMBED_TIMEOUT_SECONDS = 8.0
+
+
+async def _capped_search(label: str, coro, timeout: float):
+    try:
+        return await asyncio.wait_for(coro, timeout=timeout)
+    except Exception as exc:
+        logger.warning("%s search skipped (%s: %s)", label, type(exc).__name__, exc)
+        return None
+
+
 @app.get("/api/search")
 async def search_documents(
     q: str,
@@ -704,48 +725,118 @@ async def search_documents(
             "mode": cached.get("mode") or "hybrid",
         }
 
+    needle = q.casefold()
+    summary_rows: List[dict] = []
+    chunk_best: Dict[str, dict] = {}
+    summary_ok = False
+    chunk_ok = False
+
     try:
         qdrant = make_qdrant_indexer()
-        results = await asyncio.to_thread(
-            qdrant.search_documents_hybrid,
-            q,
-            20,
-            lang_hint,
-            True,
+        query_vector = await asyncio.wait_for(
+            asyncio.to_thread(embed_texts, [q]),
+            timeout=SEARCH_EMBED_TIMEOUT_SECONDS,
         )
+        query_vector = query_vector[0] if query_vector else None
     except Exception as exc:
-        raise HTTPException(status_code=502, detail="Search backend unavailable") from exc
+        logger.warning("Search embedding unavailable (%s: %s)", type(exc).__name__, exc)
+        query_vector = None
+        qdrant = None
 
-    # Promote exact / partial Document ID matches from Postgres (works even if not in top vectors).
+    if qdrant is not None and query_vector is not None:
+        summary_task = _capped_search(
+            "Summary",
+            asyncio.to_thread(lambda: qdrant.search_summary_hits(query_vector, q, limit=20)),
+            SEARCH_SUMMARY_TIMEOUT_SECONDS,
+        )
+        chunk_task = _capped_search(
+            "Page-text",
+            asyncio.to_thread(lambda: qdrant.search_chunk_hits(query_vector, limit=20)),
+            SEARCH_CHUNK_TIMEOUT_SECONDS,
+        )
+        summary_result, chunk_result = await asyncio.gather(summary_task, chunk_task)
+        if isinstance(summary_result, list):
+            summary_rows = summary_result
+            summary_ok = True
+        if isinstance(chunk_result, dict):
+            chunk_best = chunk_result
+            chunk_ok = True
+
+    results: List[dict] = []
+    if qdrant is not None and (summary_rows or chunk_best):
+        results = qdrant.fuse_hybrid_results(
+            summary_rows,
+            chunk_best,
+            q,
+            limit=20,
+            lang=lang_hint,
+            use_chunks=True,
+        )
+    vector_ok = bool(summary_ok or chunk_ok)
+
+    # Postgres: document ID / type / keywords, plus LLM summary fields (option B).
     like = f"%{q}%"
+    pg_filters = [
+        DocumentRecord.doc_id.ilike(like),
+        DocumentRecord.doc_type.ilike(like),
+        cast(DocumentRecord.keywords, String).ilike(like),
+    ]
+    if len(needle) >= 3:
+        pg_filters.append(cast(DocumentRecord.summary_json, String).ilike(like))
     id_rows = (
         await db.execute(
-            select(DocumentRecord.doc_id, DocumentRecord.doc_type, DocumentRecord.keywords)
-            .where(DocumentRecord.doc_id.ilike(like))
+            select(
+                DocumentRecord.doc_id,
+                DocumentRecord.doc_type,
+                DocumentRecord.keywords,
+                DocumentRecord.summary_json,
+            )
+            .where(or_(*pg_filters))
             .order_by(DocumentRecord.created_at.desc())
-            .limit(5)
+            .limit(40)
         )
     ).all()
     by_id = {row.get("doc_id"): row for row in results if row.get("doc_id")}
-    for doc_id, doc_type, keywords in id_rows:
+    for doc_id, doc_type, keywords, summary_json in id_rows:
+        id_hit = needle in (doc_id or "").casefold()
+        type_hit = needle in (doc_type or "").casefold()
+        keyword_hit = any(needle in str(kw).casefold() for kw in (keywords or []))
+        hay = summary_haystack(summary_json)
+        summary_hit = len(needle) >= 3 and needle in hay.casefold()
         if doc_id in by_id:
             entry = by_id[doc_id]
             reasons = list(entry.get("match_reasons") or [])
-            if "doc_id" not in reasons:
+            if id_hit and "doc_id" not in reasons:
                 reasons.append("doc_id")
+                entry["score"] = float(entry.get("score") or 0) + 0.35
+            if (keyword_hit or type_hit) and "keyword" not in reasons:
+                reasons.append("keyword")
+                entry["score"] = float(entry.get("score") or 0) + 0.16
+            if summary_hit and "summary" not in reasons:
+                reasons.append("summary")
+                entry["score"] = float(entry.get("score") or 0) + 0.2
+            if not entry.get("snippet") and (summary_hit or keyword_hit):
+                entry["snippet"] = summary_search_snippet(summary_json, q)
             entry["match_reasons"] = reasons
-            entry["score"] = float(entry.get("score") or 0) + 0.35
-            if entry.get("source") != "hybrid":
-                entry["source"] = "doc_id"
         else:
+            reasons = []
+            if id_hit:
+                reasons.append("doc_id")
+            if keyword_hit or type_hit:
+                reasons.append("keyword")
+            if summary_hit:
+                reasons.append("summary")
+            if not reasons:
+                reasons = ["keyword"]
+            source = "doc_id" if id_hit else ("summary" if summary_hit else "keyword")
             by_id[doc_id] = {
                 "doc_id": doc_id,
                 "doc_type": doc_type,
                 "searchable_keywords": keywords or [],
-                "score": 1.2,
-                "source": "doc_id",
-                "match_reasons": ["doc_id"],
-                "snippet": "",
+                "score": 1.2 if id_hit else (0.95 if summary_hit else 0.85),
+                "source": source,
+                "match_reasons": reasons,
+                "snippet": summary_search_snippet(summary_json, q) if (summary_hit or keyword_hit) else "",
             }
     results = sorted(by_id.values(), key=lambda row: (-(row.get("score") or 0), str(row.get("doc_id") or "")))[:20]
 
@@ -783,13 +874,23 @@ async def search_documents(
         "results": filtered_results,
         "count": len(filtered_results),
         "query": q,
-        "mode": "hybrid",
+        "mode": "hybrid" if vector_ok else "keyword",
         "lang": lang_hint or "any",
+        "degraded": not vector_ok,
     }
-    await set_cached_search(q, payload, lang=lang_hint)
+    if vector_ok:
+        await set_cached_search(q, payload, lang=lang_hint)
 
     enriched = await enrich_results_with_access(db, current_user, filtered_results)
-    return {"results": enriched, "count": len(enriched), "query": q, "cached": False, "mode": "hybrid", "lang": lang_hint or "any"}
+    return {
+        "results": enriched,
+        "count": len(enriched),
+        "query": q,
+        "cached": False,
+        "mode": payload["mode"],
+        "lang": lang_hint or "any",
+        "degraded": not vector_ok,
+    }
 
 
 
@@ -901,10 +1002,11 @@ async def _find_entity_related_doc_ids(
     exclude: Optional[Set[str]] = None,
     limit: int = 40,
 ) -> List[str]:
-    """Find related docs across the archive by shared keywords / summary entities.
+    """Find related docs by shared keywords / summary entities.
 
-    Uses indexed-friendly text match on keywords JSON plus a few summary terms.
-    Limited result set — safe for 10k+ archives.
+    Avoids full-table ILIKE on JSON (unusable at 10k+ rows). Uses:
+    1) JSON array contains on keywords (cheap with an index)
+    2) A bounded recent-window scan for project/person/org overlap
     """
     entities = summary_entities(center.summary_json)
     terms: List[str] = []
@@ -915,21 +1017,87 @@ async def _find_entity_related_doc_ids(
     if not terms:
         return []
 
-    conditions = []
-    keywords_text = cast(DocumentRecord.keywords, String)
-    for term in terms[:8]:
-        conditions.append(keywords_text.ilike(f"%{term}%"))
+    skip = set(exclude or set())
+    skip.add(center.doc_id)
+    matched: List[str] = []
 
-    statement = (
-        select(DocumentRecord.doc_id)
-        .where(or_(*conditions))
+    contains_filters = [DocumentRecord.keywords.contains([term]) for term in terms[:6]]
+    if contains_filters:
+        try:
+            statement = (
+                select(DocumentRecord.doc_id)
+                .where(or_(*contains_filters), DocumentRecord.doc_id != center.doc_id)
+                .order_by(DocumentRecord.created_at.desc())
+                .limit(max(1, min(limit, 80)))
+            )
+            result = await db.execute(statement)
+            for row in result.all():
+                doc_id = row[0]
+                if doc_id not in skip:
+                    matched.append(doc_id)
+            if matched:
+                return matched[:limit]
+        except Exception as exc:
+            logger.debug("Keyword contains lookup skipped: %s", exc)
+            await db.rollback()
+
+    window = (
+        select(DocumentRecord.doc_id, DocumentRecord.summary_json)
+        .where(DocumentRecord.doc_id != center.doc_id)
         .order_by(DocumentRecord.created_at.desc())
-        .limit(max(1, min(limit, 80)))
+        .limit(150)
     )
-    if exclude:
-        statement = statement.where(DocumentRecord.doc_id.notin_(list(exclude)))
-    result = await db.execute(statement)
-    return [row[0] for row in result.all()]
+    rows = (await db.execute(window)).all()
+    already = set(matched) | skip
+    for doc_id, summary in rows:
+        if doc_id in already:
+            continue
+        other = summary_entities(summary)
+        for key in ("project", "person", "organization", "keyword"):
+            if entities[key] & other[key]:
+                matched.append(doc_id)
+                already.add(doc_id)
+                break
+        if len(matched) >= limit:
+            break
+    return matched[:limit]
+
+
+GRAPH_SEMANTIC_TIMEOUT_SECONDS = 3.0
+GRAPH_REQUEST_BUDGET_SECONDS = 6.0
+
+
+async def _semantic_neighbors_safe(
+    doc_id: str,
+    *,
+    limit: int,
+    min_score: float,
+) -> List[dict]:
+    """Qdrant similarity with a hard deadline. Never raises — empty on timeout/outage."""
+    try:
+        qdrant = make_qdrant_indexer()
+    except Exception as exc:
+        logger.warning("Qdrant indexer unavailable for graph: %s", exc)
+        return []
+    try:
+        hits = await asyncio.wait_for(
+            asyncio.to_thread(
+                lambda: qdrant.find_similar_documents(
+                    doc_id,
+                    limit=limit,
+                    min_score=min_score,
+                    allow_fallback=False,
+                )
+            ),
+            timeout=GRAPH_SEMANTIC_TIMEOUT_SECONDS,
+        )
+        return hits or []
+    except asyncio.TimeoutError:
+        logger.warning("Qdrant similarity timed out after %.1fs for %s", GRAPH_SEMANTIC_TIMEOUT_SECONDS, doc_id)
+        return []
+    except Exception as exc:
+        logger.warning("Qdrant similarity failed for %s: %s", doc_id, exc)
+        return []
 
 
 def _graph_response(
@@ -944,6 +1112,7 @@ def _graph_response(
         "count": len(graph.nodes),
         "edge_count": len(graph.edges),
         "center": center_doc_id,
+        "degraded": False,
         "relation_guide": relation_guide
         or {
             "semantic": "Similar meaning from document summaries (AI embeddings)",
@@ -959,6 +1128,7 @@ def _graph_response(
 async def archive_documents(
     q: Optional[str] = None,
     doc_type: Optional[str] = None,
+    year: Optional[int] = None,
     limit: int = 40,
     offset: int = 0,
     current_user: User = Depends(get_current_user),
@@ -970,6 +1140,7 @@ async def archive_documents(
     offset = max(0, offset)
     needle = (q or "").strip()
     type_filter = (doc_type or "").strip()
+    year_filter = year if year and 1990 <= year <= 2100 else None
 
     filters = []
     if needle:
@@ -983,6 +1154,12 @@ async def archive_documents(
         )
     if type_filter:
         filters.append(DocumentRecord.doc_type == type_filter)
+    if year_filter:
+        year_start = date(year_filter, 1, 1)
+        year_end = date(year_filter + 1, 1, 1)
+        filters.append(
+            and_(DocumentRecord.doc_date >= year_start, DocumentRecord.doc_date < year_end)
+        )
 
     count_stmt = select(func.count()).select_from(DocumentRecord)
     if filters:
@@ -1014,14 +1191,19 @@ async def archive_documents(
     ]
     items = [document_summary_card(doc) for doc in docs]
 
-    type_rows = (
-        await db.execute(
-            select(DocumentRecord.doc_type, func.count())
-            .group_by(DocumentRecord.doc_type)
-            .order_by(func.count().desc())
-        )
-    ).all()
-    types = [{"doc_type": row[0], "count": int(row[1])} for row in type_rows]
+    cached_types = await get_cached_metadata_search({"facet": "archive_doc_types"})
+    if cached_types and isinstance(cached_types.get("types"), list):
+        types = cached_types["types"]
+    else:
+        type_rows = (
+            await db.execute(
+                select(DocumentRecord.doc_type, func.count())
+                .group_by(DocumentRecord.doc_type)
+                .order_by(func.count().desc())
+            )
+        ).all()
+        types = [{"doc_type": row[0], "count": int(row[1])} for row in type_rows]
+        await set_cached_metadata_search({"facet": "archive_doc_types"}, {"types": types})
 
     return {
         "documents": items,
@@ -1049,24 +1231,30 @@ async def archive_map_page(
 
 @app.get("/api/archive/graph")
 async def archive_graph(
-    limit: int = 24,
+    limit: int = 16,
     min_similarity: float = 0.68,
     focus: Optional[str] = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
-    """Focus-centric mind map across the full archive (scales to 10k+ docs).
-
-    Neighbors come from:
-    1) Qdrant summary similarity (semantic)
-    2) Shared keywords / projects / people / org in summaries
-    """
+    """Focus-centric mind map. Never 502s: Qdrant timeouts degrade to keyword links."""
     require_role(current_user, [Role.admin, Role.board_secretary, Role.board_member])
-    max_related = max(8, min(limit, 60))
+    max_related = max(8, min(limit, 40))
     min_similarity = max(0.5, min(min_similarity, 0.99))
     focus = (focus or "").strip() or None
     if not focus:
         return _graph_response(GraphBuildResult(), center_doc_id=None)
+
+    try:
+        cached = await asyncio.wait_for(
+            get_cached_graph(focus, max_related, min_similarity),
+            timeout=0.5,
+        )
+    except Exception:
+        cached = None
+    if cached:
+        cached["cached"] = True
+        return cached
 
     document = await _load_document_or_404(focus, db)
     center = GraphDoc(
@@ -1076,52 +1264,96 @@ async def archive_graph(
         summary_json=document.summary_json,
     )
 
-    related_ids: Set[str] = set()
-    semantic_hits: List[dict] = []
+    async def assemble() -> Dict[str, Any]:
+        try:
+            semantic_hits, entity_ids = await asyncio.gather(
+                _semantic_neighbors_safe(focus, limit=max_related, min_score=min_similarity),
+                _find_entity_related_doc_ids(db, center, exclude={focus}, limit=max_related),
+            )
+        except Exception as exc:
+            logger.warning("Graph neighbor lookup failed for %s: %s", focus, exc)
+            try:
+                await db.rollback()
+            except Exception:
+                pass
+            semantic_hits, entity_ids = [], []
+
+        related_ids: Set[str] = set()
+        for row in semantic_hits or []:
+            other = row.get("doc_id")
+            if other and other != focus:
+                related_ids.add(str(other))
+        related_ids.update(entity_ids or [])
+
+        capped_ids = list(related_ids)[: max_related + 8]
+        neighbors = await _load_graph_documents(db, doc_ids=capped_ids) if capped_ids else []
+        docs = [center] + [d for d in neighbors if d.doc_id != focus]
+        graph = build_document_graph(
+            docs,
+            None,
+            center_doc_id=focus,
+            semantic_neighbors=max_related,
+            min_similarity=min_similarity,
+            include_semantic=True,
+            include_entities=True,
+            semantic_hits=semantic_hits,
+            use_provided_cluster=True,
+        )
+        payload = _graph_response(graph, center_doc_id=focus)
+        payload["degraded"] = not bool(semantic_hits)
+        return payload
+
     try:
-        qdrant = make_qdrant_indexer()
+        payload = await asyncio.wait_for(assemble(), timeout=GRAPH_REQUEST_BUDGET_SECONDS)
+    except asyncio.TimeoutError:
+        logger.warning("Graph assemble exceeded %.1fs for %s", GRAPH_REQUEST_BUDGET_SECONDS, focus)
+        try:
+            await db.rollback()
+        except Exception:
+            pass
+        graph = build_document_graph(
+            [center],
+            None,
+            center_doc_id=focus,
+            semantic_neighbors=max_related,
+            min_similarity=min_similarity,
+            include_semantic=False,
+            include_entities=True,
+            semantic_hits=[],
+            use_provided_cluster=True,
+        )
+        payload = _graph_response(graph, center_doc_id=focus)
+        payload["degraded"] = True
+        return payload
     except Exception as exc:
-        raise HTTPException(status_code=502, detail="Search backend unavailable") from exc
+        logger.warning("Graph assemble failed for %s: %s", focus, exc)
+        try:
+            await db.rollback()
+        except Exception:
+            pass
+        graph = build_document_graph(
+            [center],
+            None,
+            center_doc_id=focus,
+            semantic_neighbors=max_related,
+            min_similarity=min_similarity,
+            include_semantic=False,
+            include_entities=True,
+            semantic_hits=[],
+            use_provided_cluster=True,
+        )
+        payload = _graph_response(graph, center_doc_id=focus)
+        payload["degraded"] = True
+        return payload
 
-    semantic_task = asyncio.to_thread(
-        qdrant.find_similar_documents,
-        focus,
-        limit=max_related,
-        min_score=min_similarity,
-    )
-    entity_task = _find_entity_related_doc_ids(
-        db,
-        center,
-        exclude={focus},
-        limit=max_related,
-    )
     try:
-        semantic_hits, entity_ids = await asyncio.gather(semantic_task, entity_task)
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail="Search backend unavailable") from exc
-    for row in semantic_hits or []:
-        other = row.get("doc_id")
-        if other and other != focus:
-            related_ids.add(str(other))
-    related_ids.update(entity_ids or [])
-
-    # Cap neighborhood size for readable maps.
-    capped_ids = list(related_ids)[: max_related + 8]
-    neighbors = await _load_graph_documents(db, doc_ids=capped_ids) if capped_ids else []
-    docs = [center] + [d for d in neighbors if d.doc_id != focus]
-
-    graph = build_document_graph(
-        docs,
-        None,
-        center_doc_id=focus,
-        semantic_neighbors=max_related,
-        min_similarity=min_similarity,
-        include_semantic=True,
-        include_entities=True,
-        semantic_hits=semantic_hits,
-        use_provided_cluster=True,
-    )
-    return _graph_response(graph, center_doc_id=focus)
+        await asyncio.wait_for(
+            set_cached_graph(focus, max_related, min_similarity, payload),
+            timeout=0.5,
+        )
+    except Exception:
+        pass
+    return payload
 
 
 @app.get("/api/documents/{doc_id}/related")
@@ -1146,20 +1378,11 @@ async def document_related(
     )
 
     related_ids: Set[str] = set()
-    semantic_hits: List[dict] = []
-    try:
-        qdrant = make_qdrant_indexer()
-        semantic_hits = qdrant.find_similar_documents(
-            doc_id,
-            limit=limit + 4,
-            min_score=min_similarity,
-        )
-        for row in semantic_hits:
-            other = row.get("doc_id")
-            if other and other != doc_id:
-                related_ids.add(str(other))
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail="Search backend unavailable") from exc
+    semantic_hits = await _semantic_neighbors_safe(doc_id, limit=limit + 4, min_score=min_similarity)
+    for row in semantic_hits:
+        other = row.get("doc_id")
+        if other and other != doc_id:
+            related_ids.add(str(other))
 
     entity_ids = await _find_entity_related_doc_ids(
         db, center, exclude={doc_id}, limit=limit + 8
@@ -1341,28 +1564,56 @@ async def download_document(
     )
 
 
+def _upsert_document_chunks(doc_id: str, page_payloads: List[Dict[str, Any]]) -> int:
+    """Embed OCR/extracted page text and upsert into Qdrant document_chunks."""
+    from .pdf_parser import Document as PdfDoc
+
+    pages = [PdfDoc(text=p["text"], metadata=p.get("metadata") or {}) for p in page_payloads if p.get("text")]
+    if not pages:
+        return 0
+    qdrant = make_qdrant_indexer()
+    qdrant.create_collections()
+    child_documents = chunk_documents(pages, parent_doc_id=doc_id)
+    if not child_documents:
+        return 0
+    chunk_records = qdrant.prepare_chunk_records(child_documents, parent_doc_id=doc_id)
+    texts = [record["text"] for record in chunk_records]
+    vectors: List[List[float]] = []
+    batch_size = 24
+    for i in range(0, len(texts), batch_size):
+        vectors.extend(embed_texts(texts[i : i + batch_size]))
+    qdrant.upload_chunks(chunks=chunk_records, vectors=vectors)
+    logger.info("Chunk index complete for %s (%s chunks)", doc_id, len(chunk_records))
+    return len(chunk_records)
+
+
 def _index_document_chunks(doc_id: str, page_payloads: List[Dict[str, Any]]) -> None:
     """Background: embed + upsert child chunks after the summary is already searchable."""
     try:
-        from .pdf_parser import Document as PdfDoc
-
-        pages = [PdfDoc(text=p["text"], metadata=p.get("metadata") or {}) for p in page_payloads if p.get("text")]
-        if not pages:
-            return
-        qdrant = make_qdrant_indexer()
-        child_documents = chunk_documents(pages, parent_doc_id=doc_id)
-        if not child_documents:
-            return
-        chunk_records = qdrant.prepare_chunk_records(child_documents, parent_doc_id=doc_id)
-        texts = [record["text"] for record in chunk_records]
-        vectors: List[List[float]] = []
-        batch_size = 24
-        for i in range(0, len(texts), batch_size):
-            vectors.extend(embed_texts(texts[i : i + batch_size]))
-        qdrant.upload_chunks(chunks=chunk_records, vectors=vectors)
-        logger.info("Background chunk index complete for %s (%s chunks)", doc_id, len(chunk_records))
+        _upsert_document_chunks(doc_id, page_payloads)
     except Exception:
         logger.exception("Background chunk indexing failed for %s", doc_id)
+
+
+def reindex_chunks_from_pdf_bytes(doc_id: str, pdf_bytes: bytes) -> int:
+    """Re-parse a stored PDF and rebuild page-text chunk vectors."""
+    import tempfile
+
+    tmp_path = ""
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+            tmp.write(pdf_bytes)
+            tmp_path = tmp.name
+        pages = parse_pdf(tmp_path)
+        page_payloads = [
+            {"text": page.text, "metadata": dict(page.metadata or {})}
+            for page in pages
+            if getattr(page, "text", None)
+        ]
+        return _upsert_document_chunks(doc_id, page_payloads)
+    finally:
+        if tmp_path:
+            Path(tmp_path).unlink(missing_ok=True)
 
 
 def _parse_upload_keywords(keywords: str, summary_keywords: List[str]) -> List[str]:
@@ -2286,6 +2537,47 @@ async def create_meeting(
     return RedirectResponse(url=f"/meetings/{meeting.id}?status=created", status_code=status.HTTP_303_SEE_OTHER)
 
 
+def _parse_agenda_items(agenda: str) -> List[str]:
+    items: List[str] = []
+    for raw in (agenda or "").splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        items.append(line)
+        if len(items) >= 16:
+            break
+    return items
+
+
+async def _related_board_meetings(
+    db: AsyncSession,
+    meeting: BoardMeeting,
+    *,
+    limit: int = 5,
+) -> List[BoardMeeting]:
+    statement = (
+        select(BoardMeeting)
+        .where(BoardMeeting.id != meeting.id)
+        .order_by(BoardMeeting.scheduled_at.desc())
+        .limit(limit)
+    )
+    result = await db.execute(statement)
+    return list(result.scalars().all())
+
+
+async def _meeting_workspace_extras(db: AsyncSession, meeting: BoardMeeting) -> Dict[str, Any]:
+    agenda_items = _parse_agenda_items(meeting.agenda)
+    related = await _related_board_meetings(db, meeting)
+    topics = [item[:80] for item in agenda_items[:8]]
+    intel_queries = agenda_items[:3] or [meeting.title]
+    return {
+        "agenda_items": agenda_items,
+        "related_meetings": related,
+        "meeting_topics": topics,
+        "intel_queries": intel_queries,
+    }
+
+
 @app.get("/meetings/{meeting_id}", response_class=HTMLResponse)
 async def meeting_detail(
     request: Request,
@@ -2325,6 +2617,7 @@ async def meeting_detail(
     attendance_statement = select(MeetingAttendance).where(MeetingAttendance.meeting_id == meeting_id)
     attendance_result = await db.execute(attendance_statement)
     attendance = {row.username: row for row in attendance_result.scalars().all()}
+    extras = await _meeting_workspace_extras(db, meeting)
 
     return templates.TemplateResponse(
         request,
@@ -2336,6 +2629,7 @@ async def meeting_detail(
             "invitations": invitations,
             "attendance": attendance,
             "status": status,
+            **extras,
         },
     )
 
@@ -2772,6 +3066,7 @@ async def board_meeting_detail(
     )
     attendance_result = await db.execute(attendance_statement)
     my_attendance = attendance_result.scalar_one_or_none()
+    extras = await _meeting_workspace_extras(db, meeting)
 
     return templates.TemplateResponse(
         request,
@@ -2782,6 +3077,7 @@ async def board_meeting_detail(
             "documents": documents,
             "my_attendance": my_attendance,
             "status": status,
+            **extras,
         },
     )
 

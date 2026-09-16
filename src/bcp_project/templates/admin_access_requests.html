@@ -1,12 +1,13 @@
 {% extends "base.html" %}
+{% from "macros/ui.html" import empty_state, status_chip %}
 
 {% block title %}Review access requests | Sonali Bank Archive System{% endblock %}
 
 {% block content %}
 <div class="page-header">
     <div class="title-group">
-        <h1>Review access requests</h1>
-        <p>Approve or deny archive view/download requests.</p>
+        <h1>Review access</h1>
+        <p>Approve or deny archive view and download requests.</p>
     </div>
     <a class="button button-secondary" href="/access-requests">My requests</a>
 </div>
@@ -16,15 +17,15 @@
         <label for="status_filter" class="muted">Filter</label>
         <select id="status_filter" name="status_filter" onchange="this.form.submit()">
             {% for s in statuses %}
-            <option value="{{ s.value }}" {% if status_filter == s.value %}selected{% endif %}>{{ s.value }}</option>
+            <option value="{{ s.value }}" {% if status_filter == s.value %}selected{% endif %}>{{ s.value | replace('_', ' ') | title }}</option>
             {% endfor %}
         </select>
     </form>
 
     {% if not requests %}
-    <p class="muted">No requests in this filter.</p>
+    {{ empty_state("Nothing in this filter", "No access requests match the selected status.") }}
     {% else %}
-    <div class="table-wrap">
+    <div class="table-wrap table-desktop">
         <table class="data-table">
             <thead>
                 <tr>
@@ -41,14 +42,20 @@
                 <tr>
                     <td>{{ row.doc_id }}</td>
                     <td>{{ row.requester_username }}</td>
-                    <td>{{ row.requested_mode.value }}</td>
+                    <td>{{ row.requested_mode.value | replace('_', ' ') | title }}</td>
                     <td>{{ row.purpose }}</td>
-                    <td><span class="badge">{{ row.status.value }}</span></td>
+                    <td>
+                        {% if row.status.value == 'approved' %}{{ status_chip('Approved', 'approved') }}
+                        {% elif row.status.value == 'denied' %}{{ status_chip('Denied', 'danger') }}
+                        {% elif row.status.value == 'revoked' %}{{ status_chip('Revoked', 'closed') }}
+                        {% else %}{{ status_chip('Pending', 'pending') }}
+                        {% endif %}
+                    </td>
                     <td>
                         {% if row.status.value == 'pending' %}
-                        <form method="post" action="/admin/access-requests/{{ row.id }}/review" style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+                        <form method="post" action="/admin/access-requests/{{ row.id }}/review" class="review-actions">
                             <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token', '') }}" />
-                            <input type="number" name="grant_days" value="7" min="1" max="365" title="Grant days" style="width:4.5rem;" />
+                            <input type="number" name="grant_days" value="7" min="1" max="365" title="Grant days" />
                             <input type="text" name="review_note" placeholder="Note (optional)" />
                             <button type="submit" name="decision" value="approve" class="button">Approve</button>
                             <button type="submit" name="decision" value="deny" class="button button-secondary">Deny</button>
@@ -61,6 +68,33 @@
                 {% endfor %}
             </tbody>
         </table>
+    </div>
+    <div class="mobile-card-list">
+        {% for row in requests %}
+        <article class="review-card">
+            <div class="review-card-top">
+                <h3>{{ row.doc_id }}</h3>
+                {% if row.status.value == 'approved' %}{{ status_chip('Approved', 'approved') }}
+                {% elif row.status.value == 'denied' %}{{ status_chip('Denied', 'danger') }}
+                {% elif row.status.value == 'revoked' %}{{ status_chip('Revoked', 'closed') }}
+                {% else %}{{ status_chip('Pending', 'pending') }}
+                {% endif %}
+            </div>
+            <p class="muted">{{ row.requester_username }} · {{ row.requested_mode.value | replace('_', ' ') | title }}</p>
+            <p>{{ row.purpose }}</p>
+            {% if row.status.value == 'pending' %}
+            <form method="post" action="/admin/access-requests/{{ row.id }}/review" class="review-actions">
+                <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token', '') }}" />
+                <input type="number" name="grant_days" value="7" min="1" max="365" title="Grant days" />
+                <input type="text" name="review_note" placeholder="Note (optional)" />
+                <button type="submit" name="decision" value="approve" class="button">Approve</button>
+                <button type="submit" name="decision" value="deny" class="button button-secondary">Deny</button>
+            </form>
+            {% else %}
+            <p class="muted">Reviewed by {{ row.reviewed_by or '—' }}</p>
+            {% endif %}
+        </article>
+        {% endfor %}
     </div>
     {% endif %}
 </section>

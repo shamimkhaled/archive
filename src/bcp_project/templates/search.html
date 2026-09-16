@@ -1,23 +1,24 @@
 {% extends "base.html" %}
+{% from "macros/ui.html" import breadcrumbs %}
 
-{% block title %}Search Intelligence | {{ brand.product_name }}{% endblock %}
+{% block title %}Archive | {{ brand.product_name }}{% endblock %}
 
 {% block content %}
+{{ breadcrumbs([{'href': '/', 'label': 'Home'}, {'label': 'Archive'}]) }}
 <div class="page-header">
     <div class="title-group">
-        <h1>Search intelligence</h1>
-        <p>Hybrid retrieval across document summaries and page text — the same pipeline that runs when you upload.</p>
+        <h1>Archive</h1>
+        <p>Intelligent search across summaries and page text — English and বাংলা.</p>
     </div>
     <div class="page-header-actions">
         <a class="button button-secondary" href="/archive/map" data-nav>Open Mind Map</a>
-        <div class="badge">{{ user.username }} · {{ 'Board Member' if user.role.value == 'board_member' else user.role.value | replace('_', ' ') | title }}</div>
     </div>
 </div>
 
 <section class="panel search-intel-panel" data-page="search" id="searchPage">
     <div class="search-tabs" role="tablist">
-        <button id="tabKeyword" type="button" class="search-tab active" role="tab" aria-selected="true" data-search-tab="keyword">Intelligent search</button>
-        <button id="tabMetadata" type="button" class="search-tab" role="tab" aria-selected="false" data-search-tab="metadata">Metadata filters</button>
+        <button id="tabKeyword" type="button" class="search-tab active" role="tab" aria-selected="true" data-search-tab="keyword">Search</button>
+        <button id="tabMetadata" type="button" class="search-tab" role="tab" aria-selected="false" data-search-tab="metadata">Filters</button>
     </div>
 
     <div id="keywordPanel" class="search-panel" role="tabpanel" data-search-panel="keyword" aria-hidden="false">
@@ -26,11 +27,11 @@
             <button type="button" id="langBn" class="search-lang-btn" data-search-lang="bn">বাংলা</button>
             <p id="searchLangHint" class="search-lang-hint">Prefers Latin-script evidence when ranking.</p>
         </div>
-        <div class="search-control">
-            <input id="searchQuery" type="search" placeholder="Search by meaning, keyword, project, or document ID…" enterkeyhint="search" autocomplete="off" />
+        <div class="search-control search-hero-field">
+            <input id="searchQuery" type="search" placeholder="Search minutes, circulars, or a document ID…" enterkeyhint="search" autocomplete="off" value="{{ request.query_params.get('q', '') }}" />
             <button id="searchButton" type="button">Search</button>
         </div>
-        <p class="search-intel-note">Matches <strong>summary meaning</strong>, <strong>page text chunks</strong>, and <strong>keywords / projects</strong> — then fuses ranks for one result list.</p>
+        <p class="search-intel-note">Matches meaning, page text, and keywords — then ranks one list.</p>
     </div>
 
     <div id="metadataPanel" class="search-panel is-hidden" role="tabpanel" data-search-panel="metadata" aria-hidden="true">
@@ -40,27 +41,33 @@
                 <input id="metaDocId" type="text" placeholder="e.g. SB-2026-001" autocomplete="off" />
             </div>
             <div class="form-group">
-                <label for="metaDocType">Document Type</label>
+                <label for="metaDocType">Document type</label>
                 <input id="metaDocType" type="text" placeholder="e.g. Minutes, Budget" autocomplete="off" />
             </div>
             <div class="form-group">
-                <label for="metaUploadedBy">Uploaded By</label>
+                <label for="metaUploadedBy">Uploaded by</label>
                 <input id="metaUploadedBy" type="text" placeholder="Username" autocomplete="off" />
             </div>
             <div class="form-group">
-                <label for="metaDateFrom">Date From</label>
+                <label for="metaDateFrom">Date from</label>
                 <input id="metaDateFrom" type="date" />
             </div>
             <div class="form-group">
-                <label for="metaDateTo">Date To</label>
+                <label for="metaDateTo">Date to</label>
                 <input id="metaDateTo" type="date" />
             </div>
         </div>
-        <button id="metadataSearchButton" type="button" class="button-block">Search metadata</button>
+        <button id="metadataSearchButton" type="button" class="button-block">Apply filters</button>
     </div>
 
     <div id="searchResults" class="search-results" aria-live="polite">
-        <p class="muted">Search results will appear here after you submit a query.</p>
+        <div class="search-empty">
+            <p class="muted">Search minutes, circulars, or a document ID.</p>
+            <p class="search-examples" aria-hidden="true">
+                <span>SB-2026-001</span>
+                <span>board minutes</span>
+            </p>
+        </div>
     </div>
 </section>
 {% endblock %}
