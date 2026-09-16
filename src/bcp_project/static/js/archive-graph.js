@@ -665,6 +665,11 @@
     var overviewGrid = document.getElementById(config.overviewGridId);
     var viewTabs = root.querySelectorAll(".mind-map-view-tab");
     var viewPanels = root.querySelectorAll(".mind-map-visual-panel");
+    var mobileNav = document.getElementById("mapMobileNav");
+    var filtersToggle = document.getElementById("mapFiltersToggle");
+    var workspaceEl = root.querySelector(".mind-map-workspace");
+    var sheetBackdrop = document.getElementById("mapSheetBackdrop");
+    var browseDocsBtn = document.getElementById("mapBrowseDocsBtn");
     var renderer = null;
     var lastModel = null;
     var lastGraph = null;
@@ -687,6 +692,25 @@
 
     if (focusInput && focusedDocId) {
       focusInput.value = focusedDocId;
+    }
+
+    function isCompactMap() {
+      return window.matchMedia("(max-width: 899px)").matches;
+    }
+
+    function setMobileStage(stage) {
+      var next = stage === "links" || stage === "map" || stage === "docs" ? stage : "docs";
+      root.setAttribute("data-mobile-stage", next);
+      root.querySelectorAll(".mind-map-mobile-tab").forEach(function (tab) {
+        var on = tab.getAttribute("data-stage") === next;
+        tab.classList.toggle("is-active", on);
+        tab.setAttribute("aria-selected", on ? "true" : "false");
+      });
+      if (next === "map") {
+        window.requestAnimationFrame(function () {
+          if (renderer) renderer.fitToView();
+        });
+      }
     }
 
     function setStatus(text) {
@@ -916,6 +940,8 @@
       syncFocusUrl();
       highlightDocumentList(focusedDocId);
       setActiveView("workflow");
+      if (next) setMobileStage("map");
+      else if (isCompactMap()) setMobileStage("docs");
       if (reload !== false) loadMap();
     }
 
@@ -1007,6 +1033,7 @@
     function hideSidebar() {
       if (sidebar) sidebar.hidden = true;
       if (layoutEl) layoutEl.classList.remove("has-detail");
+      if (sheetBackdrop) sheetBackdrop.hidden = true;
       renderDocumentList(focusedDocId || undefined);
     }
 
@@ -1014,6 +1041,7 @@
       if (!sidebar || !node) return;
       sidebar.hidden = false;
       if (layoutEl) layoutEl.classList.add("has-detail");
+      if (sheetBackdrop) sheetBackdrop.hidden = !isCompactMap();
       var title = document.getElementById("mapSidebarTitle");
       var meta = document.getElementById("mapSidebarMeta");
       var projects = document.getElementById("mapSidebarProjects");
@@ -1330,6 +1358,7 @@
         renderDocTypeFilters();
         loadDocuments({ append: false });
         setActiveView("overview");
+        if (isCompactMap()) setMobileStage("docs");
       });
     }
 
@@ -1341,6 +1370,33 @@
         listOffset = 0;
         renderDocTypeFilters();
         loadDocuments({ append: false });
+      });
+    }
+
+    if (mobileNav) {
+      mobileNav.addEventListener("click", function (event) {
+        var tab = event.target.closest(".mind-map-mobile-tab");
+        if (!tab) return;
+        setMobileStage(tab.getAttribute("data-stage") || "docs");
+      });
+    }
+
+    if (filtersToggle && workspaceEl) {
+      filtersToggle.addEventListener("click", function () {
+        var open = workspaceEl.classList.toggle("is-filters-open");
+        filtersToggle.setAttribute("aria-expanded", open ? "true" : "false");
+        filtersToggle.textContent = open ? "Close" : "Filters";
+      });
+    }
+
+    if (sheetBackdrop) {
+      sheetBackdrop.addEventListener("click", hideSidebar);
+    }
+
+    if (browseDocsBtn) {
+      browseDocsBtn.addEventListener("click", function () {
+        setMobileStage("docs");
+        if (docSearch) docSearch.focus();
       });
     }
 
@@ -1394,10 +1450,14 @@
 
     window.addEventListener("resize", function () {
       if (renderer) renderer.fitToView();
+      if (!isCompactMap() && sheetBackdrop && sidebar && !sidebar.hidden) {
+        sheetBackdrop.hidden = true;
+      }
     });
 
     hideSidebar();
     renderWorkflowPanel(null);
+    setMobileStage(focusedDocId ? "map" : "docs");
     if (focusedDocId) {
       setEmptyState("loading");
     } else {

@@ -7,7 +7,7 @@
 {% block content %}
 {% set can_upload = user.role.value in ['admin', 'uploader'] %}
 {% set crumbs = [{'href': '/search', 'label': 'Archive'}, {'label': 'Mind Map'}] %}
-<div class="mind-map-page" data-page="archive-map">
+<div class="mind-map-page" data-page="archive-map" data-mobile-stage="docs">
     {{ breadcrumbs(crumbs) }}
     <div class="page-header">
         <div class="title-group">
@@ -17,12 +17,20 @@
         <span class="badge">{{ user.username }} · {{ 'Board Member' if user.role.value == 'board_member' else user.role.value | replace('_', ' ') | title }}</span>
     </div>
 
+    <nav class="mind-map-mobile-nav" id="mapMobileNav" role="tablist" aria-label="Mind map sections">
+        <button type="button" class="mind-map-mobile-tab is-active" role="tab" data-stage="docs" aria-selected="true">Docs</button>
+        <button type="button" class="mind-map-mobile-tab" role="tab" data-stage="map" aria-selected="false">Map</button>
+        <button type="button" class="mind-map-mobile-tab" role="tab" data-stage="links" aria-selected="false">Links</button>
+    </nav>
+
     <section class="panel mind-map-workspace">
         <div class="mind-map-toolbar">
             <div class="mind-map-toolbar-meta">
                 <p class="mind-map-focus-label">Focused document</p>
                 <p class="mind-map-focus-value" id="mapFocusLabel">None selected</p>
             </div>
+            <button type="button" class="mind-map-filters-toggle" id="mapFiltersToggle" aria-expanded="false" aria-controls="mapToolbarControls">Filters</button>
+            <div class="mind-map-toolbar-controls" id="mapToolbarControls">
             <div class="neural-toolbar-group">
                 <label for="mapLimit">Max related</label>
                 <select id="mapLimit">
@@ -52,6 +60,7 @@
             <div class="mind-map-toolbar-actions">
                 <button type="button" class="button button-secondary neural-toolbar-btn" id="mapClearFocusBtn">Clear focus</button>
                 <button type="button" class="button neural-toolbar-btn" id="mapReloadBtn">Refresh</button>
+            </div>
             </div>
         </div>
 
@@ -106,6 +115,7 @@
                             </div>
                             <h2 id="neuralTreeEmptyTitle">Pick a document</h2>
                             <p id="neuralTreeEmptyLead">Search or choose a record — the map shows how it connects across the archive.</p>
+                            <button type="button" class="button button-secondary" id="mapBrowseDocsBtn">Browse documents</button>
                             {% if can_upload %}
                             <a class="button" id="neuralTreeEmptyAction" href="/upload" hidden>Upload a document</a>
                             {% endif %}
@@ -173,6 +183,7 @@
 
         <footer class="neural-map-status" id="archiveMapStatus">Loading mind map…</footer>
     </section>
+    <div class="mind-map-sheet-backdrop" id="mapSheetBackdrop" hidden></div>
 </div>
 <input type="hidden" id="mapFocusDoc" value="" />
 {% endblock %}

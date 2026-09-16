@@ -672,6 +672,11 @@ textarea:focus-visible {
     padding-bottom: max(var(--safe-bottom), env(safe-area-inset-bottom));
   }
 
+  .app-main:has(.mind-map-page) {
+    height: 100svh;
+    max-height: 100svh;
+  }
+
   .install-banner {
     display: none !important;
   }
@@ -3158,6 +3163,17 @@ body.auth-page .ptr-indicator {
   justify-content: flex-end;
 }
 
+.mind-map-toolbar-controls {
+  display: contents;
+}
+
+.mind-map-mobile-nav,
+.mind-map-filters-toggle,
+.mind-map-sheet-backdrop,
+#mapBrowseDocsBtn {
+  display: none;
+}
+
 .neural-toolbar-btn {
   white-space: nowrap;
   min-height: 40px;
@@ -3284,6 +3300,8 @@ body.auth-page .ptr-indicator {
 .mind-map-page button.mind-map-doc-item,
 .mind-map-page button.mind-map-overview-card,
 .mind-map-page button.mind-map-workflow-doc,
+.mind-map-page button.mind-map-mobile-tab,
+.mind-map-page button.mind-map-filters-toggle,
 .mind-map-page .neural-tree-controls button,
 .mind-map-page .neural-detail-close {
   min-height: 0;
@@ -4514,77 +4532,6 @@ body.auth-page .ptr-indicator {
 }
 
 @media (max-width: 960px) {
-  .mind-map-page {
-    gap: var(--space-2);
-  }
-
-  .mind-map-workspace.panel {
-    min-height: 0;
-    border-radius: var(--radius-lg);
-  }
-
-  .mind-map-toolbar {
-    grid-template-columns: 1fr 1fr;
-    padding: var(--space-3);
-  }
-
-  .mind-map-toolbar-meta,
-  .mind-map-toolbar-actions {
-    grid-column: 1 / -1;
-  }
-
-  .mind-map-toolbar-actions {
-    justify-content: stretch;
-  }
-
-  .mind-map-toolbar-actions .button {
-    flex: 1;
-  }
-
-  .mind-map-layout,
-  .mind-map-layout.has-detail {
-    grid-template-columns: 1fr;
-    gap: var(--space-3);
-    padding: var(--space-3);
-    padding-bottom: calc(var(--space-3) + env(safe-area-inset-bottom, 0px));
-  }
-
-  .mind-map-doc-panel {
-    max-height: min(42vh, 320px);
-  }
-
-  .mind-map-workflow-steps {
-    display: flex;
-    overflow-x: auto;
-    gap: var(--space-2);
-    padding: var(--space-2) var(--space-3);
-    -webkit-overflow-scrolling: touch;
-  }
-
-  .mind-map-step {
-    flex: 1 0 148px;
-    padding: 0.5rem 0.65rem;
-    font-size: 0.76rem;
-  }
-
-  .mind-map-canvas-column {
-    min-height: min(58vh, 480px);
-  }
-
-  .mind-map-workflow-panel,
-  .neural-detail-drawer {
-    max-height: min(48vh, 380px);
-  }
-
-  .neural-tree-hint,
-  .nlm-canvas-hint {
-    display: none;
-  }
-
-  .mind-map-canvas .neural-tree-canvas {
-    inset: 8px 8px 52px 8px;
-  }
-
   .viewer-panel-with-related .viewer-body {
     grid-template-columns: 1fr;
   }
@@ -4596,26 +4543,395 @@ body.auth-page .ptr-indicator {
   }
 }
 
-@media (max-width: 600px) {
-  .mind-map-page .page-header {
+@media (max-width: 899px) {
+  body:has(.mind-map-page) {
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
+  .app-main:has(.mind-map-page) {
+    height: 100dvh;
+    max-height: 100dvh;
+    overflow: hidden;
+  }
+
+  .app-main:has(.mind-map-page) .layout {
+    flex: 1;
+    min-height: 0;
+    max-width: none;
+    width: 100%;
+    padding: 0;
+    padding-bottom: calc(var(--bottom-nav-h) + var(--safe-bottom));
+    display: flex;
     flex-direction: column;
-    align-items: flex-start;
+  }
+
+  .app-main:has(.mind-map-page) .content,
+  .app-main:has(.mind-map-page) .content-inner {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  .mind-map-page {
+    flex: 1;
+    min-height: 0;
+    gap: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .mind-map-page .breadcrumbs,
+  .mind-map-page .page-header,
+  .mind-map-workflow-steps,
+  .nlm-canvas-hint,
+  .neural-tree-hint {
+    display: none !important;
+  }
+
+  .mind-map-mobile-nav {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+    margin: 8px 12px 0;
+    padding: 4px;
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--bcg-soft) 70%, var(--surface));
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .mind-map-page button.mind-map-mobile-tab {
+    min-height: 40px;
+    border: 0;
+    border-radius: 11px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    box-shadow: none;
+  }
+
+  .mind-map-page button.mind-map-mobile-tab.is-active,
+  .mind-map-page button.mind-map-mobile-tab.is-active:hover {
+    background: var(--bcg-dark);
+    color: #fff;
+    transform: none;
+  }
+
+  .mind-map-page button.mind-map-mobile-tab:hover {
+    background: color-mix(in srgb, var(--surface) 80%, transparent);
+    color: var(--text);
+  }
+
+  .mind-map-workspace.panel {
+    flex: 1;
+    min-height: 0;
+    margin: 8px 12px 0;
+    border-radius: 18px 18px 0 0;
+    border-bottom: 0;
+    overflow: hidden;
   }
 
   .mind-map-toolbar {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    padding: 10px 12px;
+    gap: 8px;
   }
 
-  .mind-map-doc-panel {
-    max-height: min(38vh, 280px);
+  .mind-map-toolbar-controls {
+    display: none;
+    grid-column: 1 / -1;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .mind-map-workspace.is-filters-open .mind-map-toolbar-controls {
+    display: grid;
+  }
+
+  .mind-map-filters-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+    padding: 0 0.9rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--bcg-dark);
+    font-size: 0.78rem;
+    font-weight: 700;
+  }
+
+  .mind-map-workspace.is-filters-open .mind-map-filters-toggle {
+    border-color: color-mix(in srgb, var(--bcg-gold) 55%, var(--border));
+    background: color-mix(in srgb, var(--bcg-gold) 14%, var(--surface));
+  }
+
+  .mind-map-page button.mind-map-filters-toggle:hover {
+    background: var(--surface);
+    color: var(--bcg-dark);
+  }
+
+  .mind-map-focus-value {
+    font-size: 0.86rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .mind-map-toolbar-actions {
+    grid-column: 1 / -1;
+    justify-content: stretch;
+  }
+
+  .mind-map-toolbar-actions .button,
+  .neural-toolbar-btn {
+    flex: 1;
+    width: auto;
+    min-height: 44px;
+  }
+
+  .mind-map-layout,
+  .mind-map-layout.has-detail {
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr);
+    gap: 0;
+    padding: 0;
+    flex: 1;
+    min-height: 0;
+    background: var(--surface);
+    overflow: hidden;
+  }
+
+  .mind-map-doc-panel,
+  .mind-map-canvas-column,
+  .mind-map-workflow-panel {
+    display: none;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    min-height: 0;
+    max-height: none;
+    height: 100%;
+  }
+
+  .mind-map-page[data-mobile-stage="docs"] .mind-map-doc-panel,
+  .mind-map-page[data-mobile-stage="map"] .mind-map-canvas-column,
+  .mind-map-page[data-mobile-stage="links"] .mind-map-workflow-panel {
+    display: flex;
+  }
+
+  .mind-map-layout.has-detail .mind-map-workflow-panel {
+    display: none;
+  }
+
+  .mind-map-page[data-mobile-stage="links"] .mind-map-layout.has-detail .mind-map-workflow-panel {
+    display: flex;
   }
 
   .mind-map-canvas-column {
-    min-height: min(52vh, 420px);
+    border-right: 0;
+    background: #eef2f6;
   }
 
-  .neural-toolbar-btn {
-    width: 100%;
+  .nlm-canvas.mind-map-canvas,
+  .neural-tree-shell.nlm-canvas,
+  .nlm-overview-shell {
+    min-height: 0;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .mind-map-canvas,
+  .mind-map-overview-grid {
+    min-height: 0;
+  }
+
+  .nlm-canvas-header,
+  .nlm-overview-shell .nlm-canvas-header {
+    position: relative;
+    top: auto;
+    left: auto;
+    padding: 10px 10px 0;
+    z-index: 4;
+  }
+
+  .mind-map-page button.mind-map-view-tab.pill-btn {
+    min-height: 36px;
+    padding: 0 14px;
+  }
+
+  .nlm-keyword-tags {
+    position: relative;
+    top: auto;
+    right: auto;
+    max-width: none;
+    padding: 8px 10px 0;
+    justify-content: flex-start;
+  }
+
+  .nlm-zoom-toolbar.neural-tree-controls {
+    top: auto;
+    right: 10px;
+    bottom: 58px;
+  }
+
+  .mind-map-page .nlm-zoom-toolbar button.zoom-btn,
+  .nlm-zoom-toolbar button.zoom-btn:last-child {
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    font-size: 16px;
+  }
+
+  .nlm-legend-bar.neural-tree-legend {
+    left: 10px;
+    right: 10px;
+    bottom: 10px;
+    gap: 8px 12px;
+    padding: 8px 12px;
+    border-radius: 16px;
+  }
+
+  .mind-map-canvas .neural-tree-canvas {
+    inset: 52px 8px 96px 8px;
+  }
+
+  .neural-tree-empty {
+    inset: 56px 12px 12px;
+    padding: 1.25rem 1rem;
+  }
+
+  .neural-tree-empty h2 {
+    font-size: 1.2rem;
+  }
+
+  #mapBrowseDocsBtn {
+    display: inline-flex;
+    margin-top: var(--space-4);
+    min-height: 44px;
+  }
+
+  .mind-map-doc-panel-head,
+  .mind-map-workflow-panel-head {
+    padding: 12px;
+  }
+
+  .mind-map-doc-panel-head input {
+    min-height: 44px;
+    font-size: 16px;
+  }
+
+  .mind-map-doc-filters {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .mind-map-doc-filters::-webkit-scrollbar {
+    display: none;
+  }
+
+  .mind-map-page button.mind-map-type-chip {
+    flex-shrink: 0;
+    min-height: 32px;
+  }
+
+  .mind-map-doc-list-wrap,
+  .mind-map-workflow-groups {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+
+  .mind-map-page button.mind-map-doc-item,
+  .mind-map-page button.mind-map-workflow-doc,
+  .mind-map-page button.mind-map-overview-card {
+    min-height: 52px;
+    padding: 0.8rem 0.85rem;
+  }
+
+  .neural-map-status {
+    padding: 8px 12px;
+    font-size: 0.72rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex-shrink: 0;
+  }
+
+  .mind-map-sheet-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 55;
+    background: rgba(16, 18, 36, 0.42);
+  }
+
+  .mind-map-sheet-backdrop[hidden] {
+    display: none !important;
+  }
+
+  .mind-map-layout.has-detail .neural-detail-drawer:not([hidden]),
+  .neural-detail-drawer:not([hidden]) {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: calc(var(--bottom-nav-h) + var(--safe-bottom));
+    z-index: 56;
+    display: flex;
+    max-height: min(72dvh, 560px);
+    border-radius: 22px 22px 0 0;
+    border: 1px solid var(--border);
+    box-shadow: 0 -16px 40px rgba(16, 18, 36, 0.18);
+    padding: 14px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .neural-detail-drawer:not([hidden])::before {
+    content: "";
+    display: block;
+    width: 42px;
+    height: 4px;
+    margin: 0 auto 10px;
+    border-radius: 999px;
+    background: var(--border-strong, var(--border));
+  }
+
+  .mind-map-page .neural-detail-close {
+    width: 40px;
+    height: 40px;
+    font-size: 1.4rem;
+  }
+
+  .mind-map-overview-grid {
+    padding: 12px;
+  }
+
+  .nlm-overview-shell .mind-map-overview-grid {
+    margin-top: 0;
+  }
+
+  .neural-tree-empty.is-loading #mapBrowseDocsBtn {
+    display: none !important;
+  }
+
+  .neural-toolbar-group select {
+    min-height: 44px;
+    font-size: 16px;
+  }
+
+  .mind-map-overview-cards,
+  .mind-map-overview-types {
+    grid-template-columns: 1fr;
   }
 }
 

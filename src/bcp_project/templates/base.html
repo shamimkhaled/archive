@@ -232,7 +232,7 @@
 
             <div class="layout">
                 <main class="content" id="main-content">
-                    <div class="content-inner"{% if show_bottom and (path.startswith('/meetings') or path.startswith('/board/meetings') or path.startswith('/search') or path.startswith('/archive/map') or path == '/' or path.startswith('/appearance')) %} data-pull-refresh{% endif %}>
+                    <div class="content-inner"{% if show_bottom and (path.startswith('/meetings') or path.startswith('/board/meetings') or path.startswith('/search') or path == '/' or path.startswith('/appearance')) %} data-pull-refresh{% endif %}>
                         <div id="ptrIndicator" class="ptr-indicator" aria-hidden="true">Release to refresh</div>
                         {% block content %}{% endblock %}
                     </div>
