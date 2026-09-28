@@ -70,6 +70,14 @@
                     <span class="login-submit-busy" hidden>Signing in…</span>
                 </button>
             </form>
+            {% if oidc_enabled %}
+            <p class="auth-lead" style="margin-top:1rem;">
+                <a class="button-block" href="/auth/oidc/start">Sign in with bank SSO (OIDC)</a>
+            </p>
+            {% endif %}
+            {% if request.query_params.get('error') == 'oidc_state' or request.query_params.get('error') == 'oidc_token' or request.query_params.get('error') == 'oidc_map' or request.query_params.get('error') == 'oidc_user' %}
+            <div class="alert alert-error" role="alert">SSO sign-in failed. Contact an administrator.</div>
+            {% endif %}
             <p class="auth-credit">
                 Powered by
                 <a href="https://alawaf.com.bd" target="_blank" rel="noopener noreferrer">Alawaf</a>

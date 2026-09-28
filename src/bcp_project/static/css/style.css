@@ -5524,6 +5524,13 @@ body.auth-page .ptr-indicator {
   font-size: 0.9rem;
 }
 
+.minutes-draft {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  min-height: 18rem;
+}
+
 .checkin-card .sig-wrap {
   padding: var(--space-3);
   border-radius: var(--radius-md);
@@ -5910,4 +5917,71 @@ body.auth-page .ptr-indicator {
   color: var(--bcg-gold);
   margin-left: 0.25rem;
 }
+
+/* Ask Sonali */
+.ask-panel .panel-header {
+  margin-bottom: var(--space-4);
+}
+.ask-panel .eyebrow {
+  margin: 0 0 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--bcg-gold);
+}
+.ask-panel h1 {
+  margin: 0 0 0.5rem;
+  font-size: 1.55rem;
+}
+.ask-panel .lede {
+  margin: 0;
+  color: var(--muted);
+  max-width: 42rem;
+  line-height: 1.5;
+}
+.ask-form {
+  margin-top: var(--space-4);
+}
+.ask-form .form-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: end;
+}
+.ask-form .form-row .form-group {
+  flex: 1 1 10rem;
+}
+.ask-status {
+  margin-top: var(--space-4);
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+.ask-answer {
+  margin-top: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2, transparent);
+  white-space: pre-wrap;
+  line-height: 1.55;
+}
+.ask-citations {
+  margin-top: var(--space-4);
+}
+.ask-citations h2 {
+  font-size: 1rem;
+  margin-bottom: 0.5rem;
+}
+.ask-citations ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 0.55rem;
+}
+.ask-citations li {
+  color: var(--muted);
+  line-height: 1.4;
+}
+
 

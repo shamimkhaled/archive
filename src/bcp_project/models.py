@@ -31,6 +31,13 @@ class AccessRequestStatus(str, Enum):
     revoked = "revoked"
 
 
+class ApprovalStatus(str, Enum):
+    pending = "pending"
+    approved = "approved"
+    denied = "denied"
+    expired = "expired"
+
+
 class Base(DeclarativeBase):
     pass
 
@@ -95,7 +102,48 @@ class AuditLog(Base):
     resource_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True, index=True)
     detail: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     ip_address: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    correlation_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    actor_type: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    tool_name: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+
+
+class ServiceClient(Base):
+    """Machine / agent identity for /api/v1 and MCP (API key auth)."""
+
+    __tablename__ = "service_clients"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    client_id: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    key_prefix: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    key_hash: Mapped[str] = mapped_column(String(256), nullable=False)
+    scopes: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    rate_limit_per_minute: Mapped[int] = mapped_column(Integer, nullable=False, default=120)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_agent: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_by: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+
+
+class ApprovalRequest(Base):
+    """Human-in-the-loop gate for mutating agent/tool actions."""
+
+    __tablename__ = "approval_requests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    requester: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    actor_type: Mapped[str] = mapped_column(String(16), nullable=False, default="agent")
+    tool_name: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    arguments_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    purpose: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[ApprovalStatus] = mapped_column(
+        SQLEnum(ApprovalStatus), default=ApprovalStatus.pending, nullable=False, index=True
+    )
+    reviewed_by: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    review_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
 
 class BoardMeeting(Base):
@@ -119,6 +167,10 @@ class BoardMeeting(Base):
     transcription_stopped_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     transcription_started_by: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     transcription_json: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    minutes_status: Mapped[str] = mapped_column(String(16), default="off", nullable=False)
+    minutes_draft: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    minutes_source: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    minutes_generated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
 
 class NotificationEvent(Base):

@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 
 TRANSCRIPTION_OFF = "off"
 TRANSCRIPTION_LIVE = "live"
+TRANSCRIPTION_PROCESSING = "processing"
 TRANSCRIPTION_STOPPED = "stopped"
 
 DUMMY_INTERVAL_SECONDS = 5
@@ -97,15 +98,25 @@ def transcription_payload(
     stopped_at: Optional[datetime] = None,
     started_by: Optional[str] = None,
     include_segments: bool = True,
+    dummy: Optional[bool] = None,
+    chunk_count: int = 0,
+    phase: str = "c",
+    minutes: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     lines = list(segments or [])
+    status_norm = status or TRANSCRIPTION_OFF
+    is_dummy = bool(dummy) if dummy is not None else any(bool(line.get("dummy")) for line in lines)
     return {
-        "status": status or TRANSCRIPTION_OFF,
-        "live": status == TRANSCRIPTION_LIVE,
-        "dummy": True,
+        "status": status_norm,
+        "live": status_norm == TRANSCRIPTION_LIVE,
+        "processing": status_norm == TRANSCRIPTION_PROCESSING,
+        "dummy": is_dummy,
+        "phase": phase or "c",
+        "chunk_count": chunk_count,
         "started_at": started_at.isoformat() + "Z" if started_at else None,
         "stopped_at": stopped_at.isoformat() + "Z" if stopped_at else None,
         "started_by": started_by,
         "segment_count": len(lines),
         "segments": lines if include_segments else [],
+        "minutes": minutes or None,
     }

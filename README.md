@@ -58,7 +58,11 @@ Downloads are always server-watermarked and restricted to administrators.
 
 ```
 src/bcp_project/
-  main_api.py          Routes: auth, upload, search, view/download, access requests, meetings, admin
+  main_api.py          App factory: middleware, startup, include_routers
+  deps.py              Shared auth/PDF/chunk helpers for routers
+  routers/             auth, documents, meetings, board, admin, access, …
+  ports/               Adapter ports (LLM, vector, storage, email)
+  jobs/                Redis job queue + worker (chunk indexing)
   models.py            Users, documents, access requests, audit logs, meetings
   access_control.py    Privilege bypass + grant checks
   pdf_watermark.py     Server-side watermark stamping
@@ -71,6 +75,18 @@ src/bcp_project/
   templates/ static/   PWA shell (web + installable mobile)
 scripts/               DB bootstrap / migrate / admin create
 ```
+
+### Background worker (optional)
+
+```bash
+# Terminal A — API (enqueue chunk jobs when enabled)
+ENABLE_JOB_QUEUE=1 PYTHONPATH=src uvicorn bcp_project.main_api:app --reload --host 127.0.0.1 --port 8000
+
+# Terminal B — worker
+ENABLE_JOB_QUEUE=1 PYTHONPATH=src python -m bcp_project.jobs.worker
+```
+
+Without `ENABLE_JOB_QUEUE`, uploads still index chunks via in-process `BackgroundTasks`.
 
 ## Access workflow
 

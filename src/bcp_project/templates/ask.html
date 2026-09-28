@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block title %}Ask Sonali | {{ brand.product_name }}{% endblock %}
+
+{% block content %}
+<section class="panel ask-panel">
+  <header class="panel-header">
+    <div>
+      <p class="eyebrow">Governed AI · R7</p>
+      <h1>Ask Sonali Bank</h1>
+      <p class="lede">Answers only from archive sources you are authorized to view. No Source, No Answer. Humans remain the decision authority.</p>
+    </div>
+  </header>
+
+  <form id="askForm" class="form-grid ask-form">
+    <div class="form-group">
+      <label for="question">Your question</label>
+      <textarea id="question" name="question" rows="4" required placeholder="e.g. What is the latest board position on ICT procurement?"></textarea>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="lang">Language hint</label>
+        <select id="lang" name="lang">
+          <option value="any">Any</option>
+          <option value="en">English</option>
+          <option value="bn">Bangla</option>
+        </select>
+      </div>
+      <button type="submit" class="button-primary" id="askSubmit">Ask</button>
+    </div>
+  </form>
+
+  <div id="askStatus" class="ask-status" hidden></div>
+  <article id="askAnswer" class="ask-answer" hidden></article>
+  <section id="askCitations" class="ask-citations" hidden>
+    <h2>Citations</h2>
+    <ul id="askCitationList"></ul>
+  </section>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var form = document.getElementById("askForm");
+  var statusEl = document.getElementById("askStatus");
+  var answerEl = document.getElementById("askAnswer");
+  var citesEl = document.getElementById("askCitations");
+  var listEl = document.getElementById("askCitationList");
+  var btn = document.getElementById("askSubmit");
+
+  function csrfToken() {
+    var m = document.cookie.match(/(?:^|; )csrf_token=([^;]*)/);
+    return m ? decodeURIComponent(m[1]) : "";
+  }
+
+  form.addEventListener("submit", async function (e) {
+    e.preventDefault();
+    btn.disabled = true;
+    statusEl.hidden = false;
+    statusEl.textContent = "Searching authorized sources…";
+    answerEl.hidden = true;
+    citesEl.hidden = true;
+    listEl.innerHTML = "";
+    try {
+      var res = await fetch("/api/v1/ask", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": csrfToken(),
+          "X-Requested-With": "BCPNav",
+        },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          question: document.getElementById("question").value,
+          lang: document.getElementById("lang").value,
+        }),
+      });
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Ask failed");
+      if (data.refused) {
+        statusEl.textContent = data.refusal_reason || "Refused — insufficient authorized sources.";
+        return;
+      }
+      statusEl.textContent = data.disclaimer || "AI support only.";
+      answerEl.hidden = false;
+      answerEl.textContent = data.answer || "";
+      var cites = data.citations || [];
+      if (cites.length) {
+        citesEl.hidden = false;
+        cites.forEach(function (c) {
+          var li = document.createElement("li");
+          var page = c.page != null ? (" · p." + c.page) : "";
+          li.innerHTML = '<a href="/view/' + encodeURIComponent(c.doc_id) + '">' + c.doc_id + "</a>" + page +
+            (c.quote ? (" — “" + c.quote + "”") : "");
+          listEl.appendChild(li);
+        });
+      }
+    } catch (err) {
+      statusEl.textContent = err.message || "Request failed";
+    } finally {
+      btn.disabled = false;
+    }
+  });
+})();
+</script>
+{% endblock %}

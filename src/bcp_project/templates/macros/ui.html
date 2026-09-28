@@ -72,7 +72,9 @@
 {{ status_chip('Scheduled', 'upcoming') }}
 {% endif %}
 {% if meeting.transcription_status == 'live' %}
-{{ status_chip('AI transcribing', 'approved') }}
+{{ status_chip('Recording audio', 'approved') }}
+{% elif meeting.transcription_status == 'processing' %}
+{{ status_chip('Transcribing', 'approved') }}
 {% elif meeting.transcription_status == 'stopped' %}
 {{ status_chip('Transcript ready', 'neutral') }}
 {% endif %}

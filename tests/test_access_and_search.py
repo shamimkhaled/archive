@@ -37,13 +37,13 @@ def _user(role: Role, username: str = "u1") -> User:
 def test_privileged_roles_bypass():
     assert is_archive_privileged(_user(Role.admin))
     assert is_archive_privileged(_user(Role.board_secretary))
-    assert is_archive_privileged(_user(Role.board_member))
+    assert not is_archive_privileged(_user(Role.board_member))
     assert not is_archive_privileged(_user(Role.uploader))
 
 
-def test_board_member_has_direct_view_access():
+def test_board_member_requires_approved_grant():
     member = _user(Role.board_member)
-    assert can_view_with_grant(member, None)
+    assert not can_view_with_grant(member, None)
 
     grant = DocumentAccessRequest(
         doc_id="D1",

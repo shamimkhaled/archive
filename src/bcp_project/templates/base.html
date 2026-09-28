@@ -137,6 +137,10 @@
                     <span class="sidebar-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></span>
                     Archive
                 </a>
+                <a href="/ask" class="sidebar-link{% if path.startswith('/ask') %} is-active{% endif %}" data-nav>
+                    <span class="sidebar-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15a4 4 0 01-4 4H8l-5 3V7a4 4 0 014-4h10a4 4 0 014 4z"/></svg></span>
+                    Ask Sonali
+                </a>
                 <a href="/archive/map" class="sidebar-link{% if path.startswith('/archive/map') %} is-active{% endif %}" data-nav>
                     <span class="sidebar-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6" cy="6" r="2"/><circle cx="18" cy="8" r="2"/><circle cx="10" cy="18" r="2"/><path d="M8 6.8L16.5 7.8M7.6 7.8l2.2 9.5M16 9.8l-5.5 7.5"/></svg></span>
                     Mind Map
@@ -162,6 +166,10 @@
                 <a href="/search" class="sidebar-link{% if path.startswith('/search') %} is-active{% endif %}" data-nav>
                     <span class="sidebar-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></span>
                     Archive
+                </a>
+                <a href="/ask" class="sidebar-link{% if path.startswith('/ask') %} is-active{% endif %}" data-nav>
+                    <span class="sidebar-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15a4 4 0 01-4 4H8l-5 3V7a4 4 0 014-4h10a4 4 0 014 4z"/></svg></span>
+                    Ask Sonali
                 </a>
                 <a href="/archive/map" class="sidebar-link{% if path.startswith('/archive/map') %} is-active{% endif %}" data-nav>
                     <span class="sidebar-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6" cy="6" r="2"/><circle cx="18" cy="8" r="2"/><circle cx="10" cy="18" r="2"/><path d="M8 6.8L16.5 7.8M7.6 7.8l2.2 9.5M16 9.8l-5.5 7.5"/></svg></span>
@@ -320,6 +328,7 @@
             <p class="more-sheet-label">Workspace</p>
             <a href="/archive/map" data-nav>Mind Map</a>
             <a href="/search" data-nav>Archive search</a>
+            <a href="/ask" data-nav>Ask Sonali</a>
             {% endif %}
             {% if role == 'admin' %}
             <a href="/upload" data-nav>Upload document</a>

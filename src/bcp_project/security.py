@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import secrets
 import time
 from collections import defaultdict, deque
@@ -63,7 +64,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
-        response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+        # Organizer meeting workspace may capture mic for Phase A transcription.
+        path = request.url.path or ""
+        allow_mic = bool(re.match(r"^/meetings/\d+/?$", path))
+        mic_policy = "microphone=(self)" if allow_mic else "microphone=()"
+        response.headers["Permissions-Policy"] = f"camera=(), {mic_policy}, geolocation=()"
         # Allow pdf.js CDN + fonts used by the PWA shell.
         csp = (
             "default-src 'self'; "
@@ -73,6 +78,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "font-src 'self' https://fonts.gstatic.com data:; "
             "img-src 'self' data: blob:; "
             "connect-src 'self' https://cdnjs.cloudflare.com; "
+            "media-src 'self' blob:; "
             "frame-ancestors 'none'; "
             "base-uri 'self'; "
             "form-action 'self'"
@@ -90,7 +96,9 @@ class CsrfMiddleware(BaseHTTPMiddleware):
             request.method not in SAFE_METHODS
             and path not in CSRF_EXEMPT_PATHS
             and not path.startswith("/static/")
+            and not path.startswith("/api/v1/")
             and request.cookies.get("access_token")
+            and not request.headers.get("x-api-key")
         ):
             cookie_token = request.cookies.get(CSRF_COOKIE)
             if not cookie_token or not _origin_ok(request):

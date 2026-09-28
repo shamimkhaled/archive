@@ -32,3 +32,5 @@ readme = "README.md"
 
 [project.scripts]
 bcp-project = "bcp_project.main:main"
+bcp-worker = "bcp_project.jobs.worker:main"
+bcp-mcp = "bcp_project.mcp.server:main"

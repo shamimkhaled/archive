@@ -27,7 +27,9 @@
 {% endif %}
 
 {% if meeting.transcription_status == 'live' %}
-<div class="alert alert-success" role="status">The organizer is capturing a draft transcript for this sitting.</div>
+<div class="alert alert-success" role="status">The organizer is recording with live captions for a draft transcript of this sitting.</div>
+{% elif meeting.transcription_status == 'processing' %}
+<div class="alert alert-success" role="status">The organizer has stopped recording; a transcript and minutes draft are being prepared.</div>
 {% endif %}
 
 <nav class="section-tabs" aria-label="Meeting sections">

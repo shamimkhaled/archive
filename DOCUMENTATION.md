@@ -9,18 +9,25 @@ Stack: **FastAPI · SQLAlchemy async · PostgreSQL · Qdrant · Redis · Jinja2 
 ```
 Browser / installed PWA
         │
-    FastAPI (main_api.py)
+    FastAPI (main_api.py → routers/*)
         ├─ PostgreSQL — users, documents (+ summary_json), access requests, audit logs, meetings
         ├─ Qdrant — document_summaries (parent) + document_chunks (child); hybrid search
-        ├─ Redis — semantic + metadata search cache (versioned; fail-open)
+        ├─ Redis — search cache + optional job queue (ENABLE_JOB_QUEUE)
         ├─ S3 or local UPLOAD_DIR — PDF binaries
+        ├─ ports/* — LLM / vector / storage / email adapters
         └─ Resend — meeting invites / reminders (+ ICS)
+    + optional jobs.worker process for durable chunk indexing
 ```
 
 ## Module map (`src/bcp_project/`)
 
 | Module | Role |
 |---|---|
+| `main_api.py` | App factory: middleware, lifespan, `include_routers` |
+| `deps.py` | Shared auth deps, PDF loaders, `schedule_chunk_index` |
+| `routers/` | Route modules (auth, documents, meetings, board, admin, …) |
+| `ports/` | Adapter ports (OpenAI, Qdrant, S3, Resend) |
+| `jobs/` | Redis queue, locks, chunk_index handler, worker CLI |
 | `brand.py` | Sonali Bank PLC product/org constants for templates, emails, watermarks |
 | `pdf_parser.py` | llama-parse → pypdf → OCR (`eng`+`ben` when Tessdata present) |
 | `summary_extractor.py` | LLM structured summary; bilingual searchable keywords |
@@ -32,7 +39,6 @@ Browser / installed PWA
 | `security.py` | CSRF double-submit, CSP/HSTS headers, login rate limiter |
 | `models.py` | ORM including `DocumentAccessRequest`, `AuditLog` |
 | `notifications.py` / `reminders.py` / `calendar_utils.py` | Live Resend + APScheduler 48h/24h + ICS/GCal |
-| `main_api.py` | All HTTP routes |
 
 ## Access & viewer security
 

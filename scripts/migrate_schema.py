@@ -161,7 +161,79 @@ async def migrate() -> None:
         await conn.execute(
             text("CREATE INDEX IF NOT EXISTS ix_audit_logs_created_at ON audit_logs (created_at)")
         )
-        print("audit_logs table present.")
+        await conn.execute(text("ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS correlation_id VARCHAR(64)"))
+        await conn.execute(text("ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS actor_type VARCHAR(16)"))
+        await conn.execute(text("ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS tool_name VARCHAR(64)"))
+        await conn.execute(
+            text("CREATE INDEX IF NOT EXISTS ix_audit_logs_correlation_id ON audit_logs (correlation_id)")
+        )
+        print("audit_logs table present (with correlation/actor/tool columns).")
+
+        await conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS service_clients (
+                    id SERIAL PRIMARY KEY,
+                    client_id VARCHAR(64) NOT NULL UNIQUE,
+                    name VARCHAR(128) NOT NULL,
+                    key_prefix VARCHAR(16) NOT NULL,
+                    key_hash VARCHAR(256) NOT NULL,
+                    scopes JSON NOT NULL,
+                    rate_limit_per_minute INTEGER NOT NULL DEFAULT 120,
+                    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+                    is_agent BOOLEAN NOT NULL DEFAULT FALSE,
+                    created_at TIMESTAMP,
+                    created_by VARCHAR(64)
+                )
+                """
+            )
+        )
+        await conn.execute(
+            text("CREATE INDEX IF NOT EXISTS ix_service_clients_key_prefix ON service_clients (key_prefix)")
+        )
+        print("service_clients table present.")
+
+        await conn.execute(
+            text(
+                """
+                DO $$ BEGIN
+                    CREATE TYPE approvalstatus AS ENUM ('pending', 'approved', 'denied', 'expired');
+                EXCEPTION WHEN duplicate_object THEN null; END $$;
+                """
+            )
+        )
+        await conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS approval_requests (
+                    id SERIAL PRIMARY KEY,
+                    requester VARCHAR(64) NOT NULL,
+                    actor_type VARCHAR(16) NOT NULL DEFAULT 'agent',
+                    tool_name VARCHAR(64) NOT NULL,
+                    arguments_json JSON NOT NULL,
+                    purpose TEXT NOT NULL,
+                    status approvalstatus NOT NULL DEFAULT 'pending',
+                    reviewed_by VARCHAR(64),
+                    review_note TEXT,
+                    created_at TIMESTAMP,
+                    reviewed_at TIMESTAMP
+                )
+                """
+            )
+        )
+        await conn.execute(
+            text("CREATE INDEX IF NOT EXISTS ix_approval_requests_requester ON approval_requests (requester)")
+        )
+        await conn.execute(
+            text("CREATE INDEX IF NOT EXISTS ix_approval_requests_tool_name ON approval_requests (tool_name)")
+        )
+        await conn.execute(
+            text("CREATE INDEX IF NOT EXISTS ix_approval_requests_status ON approval_requests (status)")
+        )
+        await conn.execute(
+            text("CREATE INDEX IF NOT EXISTS ix_approval_requests_created_at ON approval_requests (created_at)")
+        )
+        print("approval_requests table present.")
 
         result = await conn.execute(text(
             "SELECT e.enumlabel FROM pg_type t "

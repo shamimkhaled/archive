@@ -18,7 +18,8 @@ from .models import (
 )
 
 # May view archive PDFs without a prior access request.
-ARCHIVE_VIEW_PRIVILEGED_ROLES = frozenset({Role.admin, Role.board_secretary, Role.board_member})
+# board_member must obtain an approved grant (see README permission matrix).
+ARCHIVE_VIEW_PRIVILEGED_ROLES = frozenset({Role.admin, Role.board_secretary})
 
 # Only admins may download (always watermarked).
 ARCHIVE_DOWNLOAD_ROLES = frozenset({Role.admin})
@@ -200,8 +201,13 @@ async def write_audit(
     resource_id: Optional[str] = None,
     detail: Optional[str] = None,
     ip_address: Optional[str] = None,
+    correlation_id: Optional[str] = None,
+    actor_type: Optional[str] = None,
+    tool_name: Optional[str] = None,
     commit: bool = False,
 ) -> None:
+    from .correlation import get_correlation_id
+
     db.add(
         AuditLog(
             username=username,
@@ -210,6 +216,9 @@ async def write_audit(
             resource_id=resource_id,
             detail=detail,
             ip_address=ip_address,
+            correlation_id=correlation_id or get_correlation_id(),
+            actor_type=actor_type,
+            tool_name=tool_name,
         )
     )
     if commit:

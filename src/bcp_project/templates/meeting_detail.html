@@ -46,13 +46,21 @@
 {% elif status == 'notifications_disabled' %}
 <div class="alert alert-error" role="alert">Enable notifications first, then resend invitations.</div>
 {% elif status == 'transcription_started' %}
-<div class="alert alert-success" role="status">AI transcription is on. Captions will appear in the sitting panel.</div>
+<div class="alert alert-success" role="status">Recording started. Allow the microphone when prompted — keep this tab open until you stop.</div>
 {% elif status == 'transcription_stopped' %}
-<div class="alert alert-success" role="status">Transcription stopped. The draft is saved on this meeting.</div>
+<div class="alert alert-success" role="status">Transcript ready for this sitting.</div>
+{% elif status == 'transcription_processing' %}
+<div class="alert alert-success" role="status">Audio saved. Finalizing the transcript and drafting minutes — this page will refresh when ready.</div>
 {% elif status == 'transcription_already_live' %}
-<div class="alert alert-success" role="status">Transcription is already running.</div>
+<div class="alert alert-success" role="status">Recording is already running for this sitting.</div>
 {% elif status == 'transcription_not_live' %}
-<div class="alert alert-error" role="alert">Transcription is not running.</div>
+<div class="alert alert-error" role="alert">Transcription is not recording.</div>
+{% elif status == 'minutes_saved' %}
+<div class="alert alert-success" role="status">Minutes draft saved.</div>
+{% elif status == 'minutes_generating' %}
+<div class="alert alert-success" role="status">Regenerating minutes draft from the transcript.</div>
+{% elif status == 'minutes_no_transcript' %}
+<div class="alert alert-error" role="alert">No transcript yet — finish a recording first.</div>
 {% endif %}
 
 <nav class="section-tabs" aria-label="Meeting sections">
@@ -60,6 +68,7 @@
     <a href="#agenda">Agenda</a>
     <a href="#documents">Papers</a>
     <a href="#invitees">People</a>
+    <a href="#minutes">Minutes</a>
     <a href="#intelligence">Archive</a>
 </nav>
 
@@ -89,19 +98,32 @@
             {% endif %}
         </article>
 
-        <article class="sitting-card sitting-card-transcript{% if tx == 'live' %} is-live{% elif tx == 'stopped' %} is-saved{% endif %}" id="transcription" data-meeting-id="{{ meeting.id }}" data-transcription-status="{{ tx }}">
-            <p class="sitting-card-kicker">Optional · AI</p>
-            <h3>Meeting Voice transcription</h3>
-            <p class="sitting-card-lead">Creates a draft of what is said. Off unless you start it. Preview captions are simulated for this demo.</p>
+        <article class="sitting-card sitting-card-transcript{% if tx == 'live' %} is-live{% elif tx == 'processing' %} is-live{% elif tx == 'stopped' %} is-saved{% endif %}" id="transcription" data-meeting-id="{{ meeting.id }}" data-transcription-status="{{ tx }}">
+            <p class="sitting-card-kicker">Optional · Live captions</p>
+            <h3>Meeting voice transcription</h3>
+            <p class="sitting-card-lead">Records this device’s microphone, streams live captions while you speak, then finalizes the transcript and drafts minutes after you stop. Keep this tab open while recording.</p>
 
             {% if tx == 'live' %}
             <p class="sitting-card-state is-on" id="transcriptionPulse">
                 <span class="tx-eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
-                Capturing captions
+                Live captions
             </p>
-            <form action="/meetings/{{ meeting.id }}/transcription/stop" method="post">
-                <button type="submit" class="button-secondary button-block">Stop transcription</button>
-            </form>
+            <p class="muted" id="txChunkMeta">Chunks uploaded: <span id="txChunkCount">{{ audio_chunk_count | default(0) }}</span></p>
+            <p class="muted" id="txMicStatus">Requesting microphone…</p>
+            <button type="button" class="button-secondary button-block" id="txStopBtn" data-stop-url="/meetings/{{ meeting.id }}/transcription/stop">Stop &amp; finalize</button>
+            <ol class="transcription-log" id="transcriptionLog" aria-live="polite"{% if not lines %} hidden{% endif %}>
+                {% for line in lines %}
+                <li>
+                    <span class="transcription-speaker">{{ line.speaker }}</span>
+                    <span class="transcription-text">{{ line.text }}</span>
+                </li>
+                {% endfor %}
+            </ol>
+            {% elif tx == 'processing' %}
+            <p class="sitting-card-state is-on" id="transcriptionPulse">
+                <span class="tx-eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+                Finalizing transcript &amp; minutes
+            </p>
             <ol class="transcription-log" id="transcriptionLog" aria-live="polite">
                 {% for line in lines %}
                 <li>
@@ -113,7 +135,7 @@
             {% elif tx == 'stopped' %}
             <p class="sitting-card-state">Draft saved{% if meeting.transcription_started_at and meeting.transcription_stopped_at %} · {{ meeting.transcription_started_at.strftime('%H:%M') }}–{{ meeting.transcription_stopped_at.strftime('%H:%M') }}{% endif %}</p>
             <form action="/meetings/{{ meeting.id }}/transcription/start" method="post">
-                <button type="submit" class="button-secondary button-block">Start a new draft</button>
+                <button type="submit" class="button-secondary button-block">Start a new recording</button>
             </form>
             <ol class="transcription-log" id="transcriptionLog">
                 {% for line in lines %}
@@ -131,6 +153,41 @@
             {% endif %}
         </article>
     </div>
+</section>
+
+{% set mv = minutes_view or {} %}
+<section class="panel" id="minutes" data-meeting-id="{{ meeting.id }}" data-minutes-status="{{ meeting.minutes_status or 'off' }}">
+    <div class="panel-head">
+        <h2>Minutes draft</h2>
+        <span class="muted">
+            {% if mv.status == 'ready' %}Ready{% elif mv.generating %}Generating…{% else %}Not generated{% endif %}
+            {% if meeting.minutes_source %} · {{ meeting.minutes_source }}{% endif %}
+        </span>
+    </div>
+    <p class="muted" style="margin-top:0;">Auto-drafted from the transcript after you stop recording. Edit before circulating.</p>
+    {% if mv.generating %}
+    <p class="sitting-card-state is-on">Drafting minutes from the transcript…</p>
+    {% elif mv.body_md %}
+    <form action="/meetings/{{ meeting.id }}/minutes" method="post" class="form-grid">
+        <div class="form-group">
+            <label for="minutes-body">Draft (Markdown)</label>
+            <textarea id="minutes-body" name="body_md" rows="16" class="minutes-draft">{{ meeting.minutes_draft }}</textarea>
+        </div>
+        <div class="form-actions-row">
+            <button type="submit">Save minutes</button>
+        </div>
+    </form>
+    <form action="/meetings/{{ meeting.id }}/minutes/regenerate" method="post" style="margin-top:0.75rem;">
+        <button type="submit" class="button-secondary">Regenerate from transcript</button>
+    </form>
+    {% else %}
+    {{ empty_state("No minutes yet", "Stop a transcription sitting to generate a draft, or regenerate after a transcript exists.") }}
+    {% if tx == 'stopped' %}
+    <form action="/meetings/{{ meeting.id }}/minutes/regenerate" method="post" style="margin-top:0.75rem;">
+        <button type="submit" class="button-secondary">Generate minutes draft</button>
+    </form>
+    {% endif %}
+    {% endif %}
 </section>
 
 <section class="panel" id="agenda">
