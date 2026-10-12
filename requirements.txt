@@ -29,5 +29,5 @@ pillow>=10.0.0
 numpy>=1.26
 reportlab>=4.0.0
 uharfbuzz>=0.39
-pytest>=7.0.0
+pytest>=9.1.1
 httpx>=0.27.0
