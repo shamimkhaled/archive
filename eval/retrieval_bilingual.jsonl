@@ -1,0 +1,100 @@
+{"id": "q001", "lang": "en", "q": "core banking servers procurement budget", "relevant": ["SB-EVAL-001"], "page": 1, "answer": "Tk 12 crore"}
+{"id": "q002", "lang": "en", "q": "tender deadline for ICT Division", "relevant": ["SB-EVAL-001"], "page": 1, "answer": "ninety days"}
+{"id": "q003", "lang": "en", "q": "data centre redundancy Mirpur", "relevant": ["SB-EVAL-001"], "page": 1, "answer": "Mirpur"}
+{"id": "q004", "lang": "bn", "q": "কোর ব্যাংকিং সার্ভার ক্রয়ের বাজেট", "relevant": ["SB-EVAL-001"], "page": 2, "answer": "১২ কোটি টাকায়"}
+{"id": "q005", "lang": "bn", "q": "দরপত্র সম্পন্ন করার সময়সীমা", "relevant": ["SB-EVAL-001"], "page": 2, "answer": "নব্বই দিনের"}
+{"id": "q006", "lang": "en", "q": "crop loan interest rate reduction", "relevant": ["SB-EVAL-002"], "page": 1, "answer": "8 percent"}
+{"id": "q007", "lang": "en", "q": "grace period for flood-affected farmers", "relevant": ["SB-EVAL-002"], "page": 1, "answer": "six month grace period"}
+{"id": "q008", "lang": "en", "q": "how often branch managers report agricultural loan disbursement", "relevant": ["SB-EVAL-002"], "page": 1, "answer": "weekly"}
+{"id": "q009", "lang": "bn", "q": "শস্য ঋণের সুদের হার", "relevant": ["SB-EVAL-002"], "page": 2, "answer": "৮ শতাংশে"}
+{"id": "q010", "lang": "bn", "q": "বন্যাকবলিত জেলার কৃষকদের গ্রেস পিরিয়ড", "relevant": ["SB-EVAL-002"], "page": 2, "answer": "ছয় মাসের"}
+{"id": "q011", "lang": "en", "q": "minimum foreign exchange reserve", "relevant": ["SB-EVAL-003"], "page": 1, "answer": "USD 250 million"}
+{"id": "q012", "lang": "en", "q": "who approves dollar purchases above 5 million", "relevant": ["SB-EVAL-003"], "page": 1, "answer": "ALCO", "filters": {"department": "Treasury"}}
+{"id": "q013", "lang": "en", "q": "single correspondent bank exposure cap", "relevant": ["SB-EVAL-003"], "page": 1, "answer": "15 percent"}
+{"id": "q014", "lang": "bn", "q": "বৈদেশিক মুদ্রার ন্যূনতম রিজার্ভ", "relevant": ["SB-EVAL-003"], "page": 2, "answer": "২৫০ মিলিয়ন"}
+{"id": "q015", "lang": "bn", "q": "করেসপন্ডেন্ট ব্যাংকের এক্সপোজার সীমা", "relevant": ["SB-EVAL-003"], "page": 2, "answer": "১৫ শতাংশে"}
+{"id": "q016", "lang": "en", "q": "years of service required for principal officer promotion", "relevant": ["SB-EVAL-004"], "page": 1, "answer": "five years"}
+{"id": "q017", "lang": "en", "q": "promotion eligibility with pending disciplinary proceedings", "relevant": ["SB-EVAL-004"], "page": 1, "answer": "not eligible"}
+{"id": "q018", "lang": "en", "q": "when does the promotion board meet", "relevant": ["SB-EVAL-004"], "page": 1, "answer": "every June"}
+{"id": "q019", "lang": "bn", "q": "প্রিন্সিপাল অফিসার পদে পদোন্নতির যোগ্যতা", "relevant": ["SB-EVAL-004"], "page": 2, "answer": "পাঁচ বছরের"}
+{"id": "q020", "lang": "bn", "q": "পদোন্নতি বোর্ড কখন সভা করে", "relevant": ["SB-EVAL-004"], "page": 2, "answer": "জুন মাসে"}
+{"id": "q021", "lang": "en", "q": "phishing incident at which branch", "relevant": ["SB-EVAL-005"], "page": 1, "answer": "Motijheel"}
+{"id": "q022", "lang": "en", "q": "multi-factor authentication deadline for internet banking users", "relevant": ["SB-EVAL-005"], "page": 1, "answer": "30 June 2026"}
+{"id": "q023", "lang": "en", "q": "payment gateway penetration test schedule", "relevant": ["SB-EVAL-005"], "page": 1, "answer": "April"}
+{"id": "q024", "lang": "bn", "q": "ফিশিং ঘটনা কোন শাখায়", "relevant": ["SB-EVAL-005"], "page": 2, "answer": "মতিঝিল শাখার"}
+{"id": "q025", "lang": "bn", "q": "ইন্টারনেট ব্যাংকিং গ্রাহকের অথেনটিকেশন", "relevant": ["SB-EVAL-005"], "page": 2, "answer": "বাধ্যতামূলক"}
+{"id": "q026", "lang": "en", "q": "cash transaction reporting threshold BFIU", "relevant": ["SB-EVAL-006"], "page": 1, "answer": "Tk 10 lakh"}
+{"id": "q027", "lang": "en", "q": "customer due diligence refresh for high risk accounts", "relevant": ["SB-EVAL-006"], "page": 1, "answer": "every three years"}
+{"id": "q028", "lang": "en", "q": "deadline to file suspicious transaction reports", "relevant": ["SB-EVAL-006"], "page": 1, "answer": "seven working days", "filters": {"category": "circular"}}
+{"id": "q029", "lang": "bn", "q": "নগদ লেনদেন রিপোর্ট করার সীমা", "relevant": ["SB-EVAL-006"], "page": 2, "answer": "১০ লক্ষ টাকা"}
+{"id": "q030", "lang": "bn", "q": "সন্দেহজনক লেনদেন রিপোর্ট দাখিলের সময়", "relevant": ["SB-EVAL-006"], "page": 2, "answer": "সাত কর্মদিবসের"}
+{"id": "q031", "lang": "en", "q": "branch opening hours during Ramadan", "relevant": ["SB-EVAL-007"], "page": 1, "answer": "9:30 am to 2:30 pm"}
+{"id": "q032", "lang": "en", "q": "when do cash counters close in Ramadan", "relevant": ["SB-EVAL-007"], "page": 1, "answer": "1:30 pm"}
+{"id": "q033", "lang": "en", "q": "agent banking outlets hours", "relevant": ["SB-EVAL-007"], "page": 1, "answer": "regular hours"}
+{"id": "q034", "lang": "bn", "q": "রমজান মাসে শাখা খোলার সময়", "relevant": ["SB-EVAL-007"], "page": 2, "answer": "সাড়ে ৯টা"}
+{"id": "q035", "lang": "bn", "q": "নগদ লেনদেন কাউন্টার বন্ধের সময়", "relevant": ["SB-EVAL-007"], "page": 2, "answer": "দেড়টায়"}
+{"id": "q036", "lang": "en", "q": "irregular loan files in Khulna region audit", "relevant": ["SB-EVAL-008"], "page": 1, "answer": "37 irregular loan files"}
+{"id": "q037", "lang": "en", "q": "vault shortage at Daulatpur branch", "relevant": ["SB-EVAL-008"], "page": 1, "answer": "Tk 4.2 lakh"}
+{"id": "q038", "lang": "en", "q": "rotation of cash officers recommendation", "relevant": ["SB-EVAL-008"], "page": 1, "answer": "every two years"}
+{"id": "q039", "lang": "bn", "q": "খুলনা অঞ্চলের অনিয়মিত ঋণ নথি", "relevant": ["SB-EVAL-008"], "page": 2, "answer": "৩৭টি"}
+{"id": "q040", "lang": "bn", "q": "দৌলতপুর শাখার ভল্টে ঘাটতি", "relevant": ["SB-EVAL-008"], "page": 2, "answer": "৪.২ লক্ষ টাকা"}
+{"id": "q041", "lang": "en", "q": "operating profit target in the annual budget 2026", "relevant": ["SB-EVAL-009"], "page": 1, "answer": "Tk 3,500 crore"}
+{"id": "q042", "lang": "en", "q": "digital banking capital expenditure allocation", "relevant": ["SB-EVAL-009"], "page": 1, "answer": "Tk 220 crore"}
+{"id": "q043", "lang": "en", "q": "non-performing loan recovery target", "relevant": ["SB-EVAL-009"], "page": 1, "answer": "Tk 1,800 crore"}
+{"id": "q044", "lang": "bn", "q": "বার্ষিক বাজেটে পরিচালন মুনাফার লক্ষ্যমাত্রা", "relevant": ["SB-EVAL-009"], "page": 2, "answer": "৩,৫০০ কোটি টাকা"}
+{"id": "q045", "lang": "bn", "q": "খেলাপি ঋণ আদায়ের লক্ষ্যমাত্রা", "relevant": ["SB-EVAL-009"], "page": 2, "answer": "১,৮০০ কোটি টাকা"}
+{"id": "q046", "lang": "en", "q": "new rural branches in Rangpur and Sylhet", "relevant": ["SB-EVAL-010"], "page": 1, "answer": "25 new rural branches", "filters": {"department": "Board Affairs"}}
+{"id": "q047", "lang": "en", "q": "start-up allocation per new branch", "relevant": ["SB-EVAL-010"], "page": 1, "answer": "Tk 1.5 crore"}
+{"id": "q048", "lang": "en", "q": "solar power in new branches", "relevant": ["SB-EVAL-010"], "page": 1, "answer": "Solar power"}
+{"id": "q049", "lang": "bn", "q": "রংপুর ও সিলেট বিভাগে নতুন শাখা", "relevant": ["SB-EVAL-010"], "page": 2, "answer": "২৫টি নতুন গ্রামীণ শাখা"}
+{"id": "q050", "lang": "bn", "q": "নতুন শাখায় সৌর বিদ্যুৎ", "relevant": ["SB-EVAL-010"], "page": 2, "answer": "সৌর বিদ্যুৎ"}
+{"id": "q051", "lang": "en", "q": "core banking database backup frequency to disaster recovery site", "relevant": ["SB-EVAL-011"], "page": 1, "answer": "every four hours"}
+{"id": "q052", "lang": "en", "q": "recovery time objective", "relevant": ["SB-EVAL-011"], "page": 1, "answer": "two hours"}
+{"id": "q053", "lang": "bn", "q": "ডাটাবেস ব্যাকআপ কত ঘণ্টা পরপর", "relevant": ["SB-EVAL-011"], "page": 2, "answer": "চার ঘণ্টা"}
+{"id": "q054", "lang": "bn", "q": "দুর্যোগ পুনরুদ্ধার কেন্দ্র কোথায়", "relevant": ["SB-EVAL-011"], "page": 2, "answer": "যশোরের"}
+{"id": "q055", "lang": "bn", "q": "ব্যাকআপ টেপ সংরক্ষণ", "relevant": ["SB-EVAL-011"], "page": 2, "answer": "ভল্টে"}
+{"id": "q056", "lang": "en", "q": "SME loan sanction limit for the regional office", "relevant": ["SB-EVAL-012"], "page": 1, "answer": "Tk 50 lakh", "filters": {"category": "policy"}}
+{"id": "q057", "lang": "en", "q": "collateral-free loans for women entrepreneurs", "relevant": ["SB-EVAL-012"], "page": 1, "answer": "Tk 25 lakh"}
+{"id": "q058", "lang": "bn", "q": "ক্ষুদ্র ও মাঝারি উদ্যোক্তা ঋণ মঞ্জুর", "relevant": ["SB-EVAL-012"], "page": 2, "answer": "৫০ লক্ষ টাকা"}
+{"id": "q059", "lang": "bn", "q": "নারী উদ্যোক্তাদের জামানতবিহীন ঋণ", "relevant": ["SB-EVAL-012"], "page": 2, "answer": "২৫ লক্ষ টাকা"}
+{"id": "q060", "lang": "bn", "q": "ঋণ পরিশোধের সর্বোচ্চ মেয়াদ", "relevant": ["SB-EVAL-012"], "page": 2, "answer": "পাঁচ বছর"}
+{"id": "q061", "lang": "en", "q": "earned leave days per year", "relevant": ["SB-EVAL-013"], "page": 1, "answer": "20 days"}
+{"id": "q062", "lang": "en", "q": "maternity leave duration", "relevant": ["SB-EVAL-013"], "page": 1, "answer": "six months"}
+{"id": "q063", "lang": "bn", "q": "বছরে অর্জিত ছুটি কত দিন", "relevant": ["SB-EVAL-013"], "page": 2, "answer": "২০ দিন"}
+{"id": "q064", "lang": "bn", "q": "বিনা বেতনে ছুটির অনুমোদন", "relevant": ["SB-EVAL-013"], "page": 2, "answer": "উপ-ব্যবস্থাপনা পরিচালকের"}
+{"id": "q065", "lang": "bn", "q": "অসুস্থতাজনিত ছুটির জন্য কী লাগবে", "relevant": ["SB-EVAL-013"], "page": 2, "answer": "মেডিকেল সনদ"}
+{"id": "q066", "lang": "en", "q": "treasury bills and bonds holdings", "relevant": ["SB-EVAL-014"], "page": 1, "answer": "Tk 18,000 crore"}
+{"id": "q067", "lang": "en", "q": "weighted average yield on the securities portfolio", "relevant": ["SB-EVAL-014"], "page": 1, "answer": "11.2 percent"}
+{"id": "q068", "lang": "bn", "q": "ট্রেজারি বিল ও বন্ডে বিনিয়োগ", "relevant": ["SB-EVAL-014"], "page": 2, "answer": "১৮,০০০ কোটি টাকা"}
+{"id": "q069", "lang": "bn", "q": "পোর্টফোলিওর গড় মুনাফার হার", "relevant": ["SB-EVAL-014"], "page": 2, "answer": "১১.২ শতাংশ"}
+{"id": "q070", "lang": "bn", "q": "নতুন বিনিয়োগ কোন মেয়াদি বন্ডে", "relevant": ["SB-EVAL-014"], "page": 2, "answer": "পাঁচ বছর মেয়াদি"}
+{"id": "q071", "lang": "en", "q": "remittance incentive rate through formal channels", "relevant": ["SB-EVAL-015"], "page": 1, "answer": "2.5 percent", "filters": {"date_from": "2026-01-01", "date_to": "2026-01-31"}}
+{"id": "q072", "lang": "en", "q": "deadline to credit remittance to the beneficiary account", "relevant": ["SB-EVAL-015"], "page": 1, "answer": "one working day"}
+{"id": "q073", "lang": "bn", "q": "রেমিট্যান্স প্রণোদনার হার", "relevant": ["SB-EVAL-015"], "page": 2, "answer": "২.৫ শতাংশ"}
+{"id": "q074", "lang": "bn", "q": "সুবিধাভোগীর হিসাবে রেমিট্যান্স জমার সময়", "relevant": ["SB-EVAL-015"], "page": 2, "answer": "এক কর্মদিবসের"}
+{"id": "q075", "lang": "bn", "q": "প্রণোদনার জন্য কাগজপত্র", "relevant": ["SB-EVAL-015"], "page": 2, "answer": "কোনো কাগজপত্র লাগবে না"}
+{"id": "q076", "lang": "en", "q": "new ATMs and cash recycler machines", "relevant": ["SB-EVAL-016"], "page": 1, "answer": "300 new ATMs"}
+{"id": "q077", "lang": "en", "q": "card-less cash withdrawal launch", "relevant": ["SB-EVAL-016"], "page": 1, "answer": "July"}
+{"id": "q078", "lang": "bn", "q": "নতুন এটিএম স্থাপন", "relevant": ["SB-EVAL-016"], "page": 2, "answer": "৩০০টি"}
+{"id": "q079", "lang": "bn", "q": "কার্ড ছাড়া টাকা উত্তোলন কবে চালু", "relevant": ["SB-EVAL-016"], "page": 2, "answer": "জুলাই মাসে"}
+{"id": "q080", "lang": "bn", "q": "প্রতিটি উপজেলায় এটিএম", "relevant": ["SB-EVAL-016"], "page": 2, "answer": "অন্তত একটি"}
+{"id": "q081", "lang": "en", "q": "external auditor appointment for 2026", "relevant": ["SB-EVAL-017"], "page": 1, "answer": "Rahman Hossain"}
+{"id": "q082", "lang": "en", "q": "external audit fee", "relevant": ["SB-EVAL-017"], "page": 1, "answer": "Tk 85 lakh"}
+{"id": "q083", "lang": "bn", "q": "বহিঃনিরীক্ষক নিয়োগের সুপারিশ", "relevant": ["SB-EVAL-017"], "page": 2, "answer": "রহমান হোসেন"}
+{"id": "q084", "lang": "bn", "q": "নিরীক্ষা ফি কত", "relevant": ["SB-EVAL-017"], "page": 2, "answer": "৮৫ লক্ষ টাকা"}
+{"id": "q085", "lang": "bn", "q": "নিরীক্ষা প্রতিবেদন দাখিলের সময়", "relevant": ["SB-EVAL-017"], "page": 2, "answer": "মে মাসের"}
+{"id": "q086", "lang": "en", "q": "green finance share of new term loans", "relevant": ["SB-EVAL-018"], "page": 1, "answer": "5 percent"}
+{"id": "q087", "lang": "en", "q": "brick kilns financing exclusion", "relevant": ["SB-EVAL-018"], "page": 1, "answer": "excluded"}
+{"id": "q088", "lang": "bn", "q": "সবুজ প্রকল্পে অর্থায়নের হার", "relevant": ["SB-EVAL-018"], "page": 2, "answer": "৫ শতাংশ"}
+{"id": "q089", "lang": "bn", "q": "সৌরচালিত সেচ প্রকল্প", "relevant": ["SB-EVAL-018"], "page": 2, "answer": "অগ্রাধিকার"}
+{"id": "q090", "lang": "bn", "q": "পুরনো প্রযুক্তির ইটভাটা অর্থায়ন", "relevant": ["SB-EVAL-018"], "page": 2, "answer": "বাদ থাকবে"}
+{"id": "q091", "lang": "en", "q": "loan write-off for Hallmark Group", "relevant": ["SB-EVAL-019"], "page": 1, "answer": "Tk 2,150 crore", "role": "board_secretary"}
+{"id": "q092", "lang": "en", "q": "legal recovery suits status after the write-off", "relevant": ["SB-EVAL-019"], "page": 1, "answer": "remain active", "role": "board_secretary"}
+{"id": "q093", "lang": "bn", "q": "হলমার্ক গ্রুপের ঋণ অবলোপন", "relevant": ["SB-EVAL-019"], "page": 2, "answer": "২,১৫০ কোটি টাকার", "role": "board_secretary"}
+{"id": "q094", "lang": "bn", "q": "আইনি আদায় মামলা", "relevant": ["SB-EVAL-019"], "page": 2, "answer": "চলমান", "role": "board_secretary"}
+{"id": "q095", "lang": "bn", "q": "অবলোপন প্রস্তাব কখন উপস্থাপন", "relevant": ["SB-EVAL-019"], "page": 2, "answer": "পরবর্তী বোর্ড সভায়", "role": "board_secretary"}
+{"id": "q096", "lang": "en", "q": "Managing Director monthly salary revision", "relevant": ["SB-EVAL-020"], "page": 1, "answer": "Tk 12 lakh", "role": "board_secretary"}
+{"id": "q097", "lang": "en", "q": "General Managers performance bonus", "relevant": ["SB-EVAL-020"], "page": 1, "answer": "15 percent", "role": "board_secretary"}
+{"id": "q098", "lang": "bn", "q": "ব্যবস্থাপনা পরিচালকের মাসিক বেতন", "relevant": ["SB-EVAL-020"], "page": 2, "answer": "১২ লক্ষ টাকা", "role": "board_secretary"}
+{"id": "q099", "lang": "bn", "q": "মহাব্যবস্থাপকগণের কর্মদক্ষতা বোনাস", "relevant": ["SB-EVAL-020"], "page": 2, "answer": "১৫ শতাংশ", "role": "board_secretary"}
+{"id": "q100", "lang": "bn", "q": "সংশোধিত বেতন কাঠামো কার্যকর", "relevant": ["SB-EVAL-020"], "page": 2, "answer": "অনুমোদন সাপেক্ষে", "role": "board_secretary"}

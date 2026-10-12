@@ -164,8 +164,16 @@ async def test_ask_sonali_enforces_citations():
         new_callable=AsyncMock,
         return_value=evidence_search,
     ), patch(
+        "bcp_project.services.ask_sonali.get_sensitivity_for_docs",
+        new_callable=AsyncMock,
+        return_value={"SB-1": "internal"},
+    ), patch(
         "bcp_project.services.ask_sonali.get_llm_client",
         return_value=fake_llm,
+    ), patch(
+        "bcp_project.services.ask_sonali.grounded_passages",
+        new_callable=AsyncMock,
+        return_value=[],
     ), patch(
         "bcp_project.services.ask_sonali.write_audit",
         new_callable=AsyncMock,

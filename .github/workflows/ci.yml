@@ -1,0 +1,241 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: |
+          pip install -r requirements.txt
+          pip install ruff
+      - name: Lint (syntax and undefined names)
+        run: ruff check --select E9,F63,F7,F82 src tests migrations scripts
+      - name: Unit tests
+        env:
+          APP_ENV: test
+          JWT_SECRET_KEY: ci-only-secret-key-not-for-production-use
+          PYTHONPATH: src
+        run: pytest -q
+      - name: Bilingual retrieval evaluation
+        env:
+          APP_ENV: test
+          JWT_SECRET_KEY: ci-only-secret-key-not-for-production-use
+          PYTHONPATH: src
+        run: python scripts/eval_retrieval.py --json eval-report.json
+      - name: Upload evaluation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: retrieval-eval
+          path: eval-report.json
+          if-no-files-found: ignore
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - name: Generated API client matches the FastAPI schema
+        env:
+          APP_ENV: test
+          JWT_SECRET_KEY: ci-only-secret-key-not-for-production-use
+          PYTHONPATH: ../src
+        run: |
+          pip install -r ../requirements.txt
+          python ../scripts/export_openapi.py
+          npm run gen:api
+          git diff --exit-code -- openapi.json src/api/schema.d.ts
+      - name: Typecheck and build
+        run: npm run build
+      - name: Unit tests
+        run: npm test
+      - name: Dependency audit (production dependencies)
+        run: npm audit --omit=dev --audit-level=high
+      - name: Service worker caches only the static shell
+        run: |
+          # One route (the /app navigation fallback, /api denied); no runtime caching of API, PDFs, or page images.
+          test "$(grep -oF 'registerRoute(' dist/sw.js | wc -l)" -eq 1
+          grep -q 'NavigationRoute' dist/sw.js
+          grep -qF 'denylist:[/^\/api\//]' dist/sw.js
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+
+  migrations:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: bcpdb
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/bcpdb
+      PYTHONPATH: src
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Upgrade a fresh database to head
+        run: python -m bcp_project.migrate
+      - name: Re-run (must be a no-op)
+        run: python -m bcp_project.migrate
+      - name: Single head
+        run: test "$(alembic heads | wc -l)" = "1"
+      - name: Audit log is append-only
+        run: python scripts/check_audit_append_only.py
+
+  dependency-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install pip-audit bandit
+      - name: Known vulnerabilities in Python dependencies
+        run: pip-audit -r requirements.txt -r requirements-worker.txt --desc on
+      - name: Static security lint (high severity, high confidence)
+        run: bandit -q -r src -lll -iii
+
+  zap-baseline:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: bcpdb
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+    env:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/bcpdb
+      REDIS_URL: redis://localhost:6379/0
+      JWT_SECRET_KEY: ci-only-secret-key-not-for-production-use
+      STORAGE_BACKEND: local
+      PYTHONPATH: src
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: python -m bcp_project.migrate
+      - name: Start the app
+        run: |
+          nohup uvicorn bcp_project.main_api:app --host 0.0.0.0 --port 8000 > uvicorn.log 2>&1 &
+          for i in $(seq 1 60); do curl -fsS http://localhost:8000/healthz && exit 0; sleep 2; done
+          cat uvicorn.log; exit 1
+      - name: OWASP ZAP baseline (passive scan)
+        uses: zaproxy/action-baseline@v0.14.0
+        with:
+          target: http://localhost:8000/login
+          rules_file_name: .zap/rules.tsv
+          cmd_options: "-I -j"
+          allow_issue_writing: false
+          artifact_name: zap-baseline
+      - name: App log
+        if: always()
+        run: tail -n 200 uvicorn.log
+
+  monitoring-config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prometheus config and alert rules
+        run: |
+          echo ci-placeholder > deploy/prometheus/metrics_token
+          docker run --rm --entrypoint promtool -v "$PWD/deploy/prometheus:/etc/prometheus:ro" \
+            prom/prometheus:v3.1.0 check config /etc/prometheus/prometheus.yml
+      - name: Alert rule unit tests
+        run: |
+          docker run --rm -w /cfg --entrypoint promtool -v "$PWD/deploy/prometheus:/cfg:ro" \
+            prom/prometheus:v3.1.0 test rules alerts.test.yml
+      - name: Alertmanager example config
+        run: |
+          docker run --rm --entrypoint amtool -v "$PWD/deploy/prometheus:/cfg:ro" \
+            prom/alertmanager:v0.28.0 check-config /cfg/alertmanager.example.yml
+      - name: Grafana dashboards are valid JSON
+        run: for f in deploy/grafana/dashboards/*.json; do python3 -m json.tool "$f" > /dev/null; done
+
+  docker:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        role: [web, pipeline, worker]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          build-args: SERVICE_ROLE=${{ matrix.role }}
+          tags: sonali-archive-${{ matrix.role }}:ci
+          cache-from: type=gha,scope=${{ matrix.role }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.role }}
+          load: true
+      - name: Image vulnerability scan (critical and high with a fix available)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: sonali-archive-${{ matrix.role }}:ci
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: Runs under the hardened profile (non-root, read-only, no capabilities)
+        if: matrix.role == 'web'
+        run: |
+          docker run --rm --user 10001:10001 --read-only --tmpfs /tmp --cap-drop ALL \
+            --security-opt no-new-privileges:true -e JWT_SECRET_KEY="$(openssl rand -hex 32)" \
+            --entrypoint python sonali-archive-web:ci \
+            -c "import os, bcp_project.main_api; assert os.getuid() == 10001; open('/tmp/ok', 'w').write('x')"
+      - name: Bangla OCR data present
+        run: docker run --rm --entrypoint tesseract sonali-archive-${{ matrix.role }}:ci --list-langs | grep -q ben
+      - name: Worker has speech-to-text
+        if: matrix.role == 'worker'
+        run: |
+          docker run --rm --entrypoint python sonali-archive-worker:ci -c "import faster_whisper"
+          docker run --rm --entrypoint ffmpeg sonali-archive-worker:ci -version

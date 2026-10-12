@@ -588,6 +588,9 @@
           if (res.status === 502 || res.status === 504) {
             throw new Error("The map took too long. Try another document or a tighter similarity.");
           }
+          if (res.status === 403) {
+            throw new Error("You need approved access to this document before mapping it. Request access from Search.");
+          }
           throw new Error("Could not load mind map (" + res.status + ")");
         }
         return res.json();

@@ -22,6 +22,7 @@ from ..config import load_environment
 from ..db import get_session
 from ..policy import Principal
 from ..service_auth import (
+    agent_requires_on_behalf,
     lookup_service_client,
     merge_service_scopes,
     resolve_on_behalf_user,
@@ -53,8 +54,10 @@ async def _build_principal() -> Principal:
         client = await lookup_service_client(db, api_key)
         if client is None:
             raise RuntimeError("Invalid BCP_MCP_API_KEY")
+        if client.is_agent and not on_behalf and agent_requires_on_behalf():
+            raise RuntimeError("Agent MCP clients must set BCP_MCP_ON_BEHALF")
         user = await resolve_on_behalf_user(db, on_behalf) if on_behalf else None
-        scopes = merge_service_scopes(scopes_from_client(client), user)
+        scopes = merge_service_scopes(scopes_from_client(client), user, is_agent=bool(client.is_agent))
         return Principal(
             actor_id=client.client_id,
             actor_type="agent" if client.is_agent else "service",

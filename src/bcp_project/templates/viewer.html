@@ -24,6 +24,9 @@
             {% if can_download and download_url %}
             <a class="button button-secondary viewer-download" href="{{ download_url }}">Download</a>
             {% endif %}
+            {% if versions_url %}
+            <a class="button button-secondary" href="{{ versions_url }}" title="Version history and integrity">v{{ current_version or 1 }}</a>
+            {% endif %}
         </div>
     </header>
 
@@ -137,7 +140,8 @@
 
             const pdf = await pdfjsLib.getDocument({ data, useSystemFonts: true }).promise;
             pdfDoc = pdf;
-            currentPage = 1;
+            const requested = parseInt(new URLSearchParams(window.location.search).get("page") || "1", 10);
+            currentPage = requested >= 1 && requested <= pdf.numPages ? requested : 1;
             scale = null;
             await renderPage(currentPage);
         } catch (error) {

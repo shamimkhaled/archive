@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}Verify sign-in | {{ brand.product_name }}{% endblock %}
+{% block body_class %}auth-page{% endblock %}
+
+{% block content %}
+<div class="login-shell login-shell--single">
+    <div class="login-form-panel">
+        <div class="auth-card">
+            <div class="brand-splash">
+                <img src="{{ brand.logo_path }}" alt="" width="52" height="52" />
+                <div>
+                    <p class="auth-kicker">{{ brand.tagline_bn }}</p>
+                    <strong>{{ brand.product_name }}</strong>
+                    <span>{{ brand.org_name }}</span>
+                </div>
+            </div>
+
+            {% if mode == 'verify' %}
+            <h1>Two-step verification</h1>
+            <p class="auth-lead">Enter the 6-digit code from your authenticator app for <strong>{{ username }}</strong>. A recovery code also works.</p>
+            {% if request.query_params.get('error') == 'invalid' %}
+            <div class="alert alert-error" role="alert">That code was not accepted. Try the next code.</div>
+            {% endif %}
+            <form action="/login/mfa" method="post" class="form-grid">
+                <div class="form-group">
+                    <label for="code">Verification code</label>
+                    <input id="code" name="code" required autocomplete="one-time-code" inputmode="numeric" maxlength="16" autofocus />
+                </div>
+                <button type="submit" class="button-block">Verify</button>
+            </form>
+
+            {% elif mode == 'setup' %}
+            <h1>Set up two-step verification</h1>
+            <p class="auth-lead">Your role requires an authenticator app (Microsoft Authenticator, Google Authenticator, or any TOTP app).</p>
+            <ol class="mfa-steps">
+                <li>In the app, choose <em>Add account → Enter a setup key</em>.</li>
+                <li>Account: <strong>{{ username }}</strong>. Key (time-based):
+                    <code class="mfa-secret" aria-label="Setup key">{{ secret }}</code>
+                </li>
+                <li>Or open this link on the phone that has the app: <a href="{{ otpauth_uri }}">add to authenticator</a>.</li>
+                <li>Enter the 6-digit code the app shows.</li>
+            </ol>
+            {% if error == 'invalid' %}
+            <div class="alert alert-error" role="alert">That code did not match. Check the phone clock and try again.</div>
+            {% endif %}
+            <form action="/login/mfa/setup" method="post" class="form-grid">
+                <div class="form-group">
+                    <label for="code">Code from the app</label>
+                    <input id="code" name="code" required autocomplete="one-time-code" inputmode="numeric" maxlength="6" autofocus />
+                </div>
+                <button type="submit" class="button-block">Turn on verification</button>
+            </form>
+
+            {% elif mode == 'recovery' %}
+            <h1>Save your recovery codes</h1>
+            <p class="auth-lead">Each code signs you in once if you lose the phone. They are shown only now; store them somewhere safe.</p>
+            <ul class="mfa-recovery">
+                {% for code in recovery_codes %}<li><code>{{ code }}</code></li>{% endfor %}
+            </ul>
+            <a class="button-block" href="/">Continue to the archive</a>
+            {% endif %}
+
+            <p class="auth-credit"><a href="/logout">Cancel and sign out</a></p>
+        </div>
+    </div>
+</div>
+{% endblock %}

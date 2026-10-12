@@ -60,10 +60,11 @@ def _note_redis_failure(action: str, exc: Exception) -> None:
         logger.debug("Redis %s failed again: %s", action, exc)
 
 
-def _search_cache_key(query: str, version: str, *, lang: Optional[str] = None) -> str:
+def _search_cache_key(query: str, version: str, *, lang: Optional[str] = None, scope: str = "") -> str:
+    """``scope`` separates callers whose vector ACL filter differs (role, grants, filters)."""
     normalized = query.strip().casefold()
     lang_part = (lang or "any").strip().lower()
-    return f"search:init:v{version}:{lang_part}:{normalized}"
+    return f"search:init:v{version}:{lang_part}:{scope}:{normalized}"
 
 
 def _metadata_cache_key(filters: dict, version: str) -> str:
@@ -71,13 +72,13 @@ def _metadata_cache_key(filters: dict, version: str) -> str:
     return f"search:meta:v{version}:{serialized}"
 
 
-async def get_cached_search(query: str, lang: Optional[str] = None) -> Optional[Any]:
+async def get_cached_search(query: str, lang: Optional[str] = None, scope: str = "") -> Optional[Any]:
     """Best-effort cache read. Any Redis failure is treated as a cache miss
     so search keeps working (just uncached) when Redis is unavailable."""
     try:
         client = get_redis_client()
         version = await client.get(SEARCH_CACHE_VERSION_KEY) or "0"
-        raw = await client.get(_search_cache_key(query, version, lang=lang))
+        raw = await client.get(_search_cache_key(query, version, lang=lang, scope=scope))
         if raw is None:
             return None
         return json.loads(raw)
@@ -87,12 +88,12 @@ async def get_cached_search(query: str, lang: Optional[str] = None) -> Optional[
 
 
 async def set_cached_search(
-    query: str, payload: Any, ttl: int = SEARCH_CACHE_TTL_SECONDS, lang: Optional[str] = None
+    query: str, payload: Any, ttl: int = SEARCH_CACHE_TTL_SECONDS, lang: Optional[str] = None, scope: str = ""
 ) -> None:
     try:
         client = get_redis_client()
         version = await client.get(SEARCH_CACHE_VERSION_KEY) or "0"
-        await client.set(_search_cache_key(query, version, lang=lang), json.dumps(payload), ex=ttl)
+        await client.set(_search_cache_key(query, version, lang=lang, scope=scope), json.dumps(payload), ex=ttl)
     except Exception as exc:
         _note_redis_failure("write", exc)
 

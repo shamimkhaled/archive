@@ -13,6 +13,8 @@ if is_production():
     SECRET_KEY = require_secret("JWT_SECRET_KEY", min_length=32)
 else:
     SECRET_KEY = os.getenv("JWT_SECRET_KEY", "supersecretlocalkey")
+# During a rotation, tokens signed with the previous key stay valid until they expire.
+PREVIOUS_SECRET_KEY = (os.getenv("JWT_SECRET_KEY_PREVIOUS") or "").strip() or None
 ALGORITHM = "HS256"
 # Default 8 hours; override with ACCESS_TOKEN_EXPIRE_MINUTES in .env
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "480"))
@@ -28,18 +30,62 @@ def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
 
-def create_access_token(subject: str, role: str) -> str:
+MFA_PENDING_MINUTES = 5
+
+
+def create_access_token(subject: str, role: str, *, mfa: bool = False) -> str:
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     payload = {"sub": subject, "role": role, "exp": expire}
+    if mfa:
+        payload["mfa"] = True
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
-def decode_access_token(token: str) -> Optional[dict]:
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        return payload
-    except JWTError:
+def create_mfa_pending_token(subject: str) -> str:
+    """Short-lived proof that the password step passed; never a session."""
+    expire = datetime.utcnow() + timedelta(minutes=MFA_PENDING_MINUTES)
+    payload = {"sub": subject, "purpose": "mfa_pending", "exp": expire}
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def create_oidc_flow_token(state: str, nonce: str, verifier: str) -> str:
+    """Signed state/nonce/PKCE verifier for one OIDC round-trip; never a session."""
+    expire = datetime.utcnow() + timedelta(minutes=10)
+    payload = {"purpose": "oidc_flow", "state": state, "nonce": nonce, "verifier": verifier, "exp": expire}
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def decode_oidc_flow_token(token: str) -> Optional[dict]:
+    payload = decode_access_token(token)
+    if not payload or payload.get("purpose") != "oidc_flow":
         return None
+    return payload
+
+
+def decode_mfa_pending_token(token: str) -> Optional[str]:
+    payload = decode_access_token(token)
+    if not payload or payload.get("purpose") != "mfa_pending":
+        return None
+    return payload.get("sub")
+
+
+def decode_access_token(token: str) -> Optional[dict]:
+    for key in (SECRET_KEY, PREVIOUS_SECRET_KEY):
+        if not key:
+            continue
+        try:
+            return jwt.decode(token, key, algorithms=[ALGORITHM])
+        except JWTError:
+            continue
+    return None
+
+
+def decode_session_token(token: str) -> Optional[dict]:
+    """Access token only — rejects MFA-pending and other purpose-bound tokens."""
+    payload = decode_access_token(token)
+    if not payload or payload.get("purpose"):
+        return None
+    return payload
 
 
 def token_seconds_remaining(payload: dict) -> Optional[float]:

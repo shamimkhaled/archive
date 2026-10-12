@@ -1,0 +1,48 @@
+# Copy to alertmanager.yml and fill in the bank's endpoints.
+# Alertmanager does not expand environment variables; keep the real file out of git.
+
+global:
+  resolve_timeout: 5m
+  smtp_smarthost: "smtp.bank.local:587"
+  smtp_from: "archive-alerts@bank.local"
+  smtp_require_tls: true
+
+route:
+  receiver: ops-email
+  group_by: [alertname, service]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - matchers: [severity="critical"]
+      receiver: ops-pager
+      repeat_interval: 30m
+    - matchers: [severity="security"]
+      receiver: soc
+      continue: true
+    - matchers: [severity="security"]
+      receiver: ops-email
+
+receivers:
+  - name: ops-email
+    email_configs:
+      - to: "archive-ops@bank.local"
+
+  - name: ops-pager
+    email_configs:
+      - to: "archive-oncall@bank.local"
+    webhook_configs:
+      - url: "https://pager.bank.local/hooks/alertmanager"
+        send_resolved: true
+
+  - name: soc
+    webhook_configs:
+      - url: "https://siem.bank.local/hooks/alertmanager"
+        send_resolved: true
+
+inhibit_rules:
+  # When Redis is down, don't also page for every queue symptom.
+  - source_matchers: [alertname="SonaliRedisStreamsDown"]
+    target_matchers: [alertname=~"SonaliQueueBacklog|SonaliOutboxNotDraining|SonaliJobsStuckPending"]
+  - source_matchers: [alertname="RedisDown"]
+    target_matchers: [alertname="SonaliRedisStreamsDown"]

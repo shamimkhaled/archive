@@ -1,0 +1,82 @@
+# promtool test rules deploy/prometheus/alerts.test.yml   (run from deploy/prometheus)
+rule_files:
+  - alerts.yml
+
+evaluation_interval: 30s
+
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'bcp_job_stream_up{instance="web:8080",job="sonali-web"}'
+        values: "1 1 0 0 0 0"
+      - series: 'bcp_outbox_unpublished{instance="web:8080",job="sonali-web"}'
+        values: "0+30x15"
+      - series: 'bcp_job_stream_length{stream="bcp:stream:dead",instance="web:8080",job="sonali-web"}'
+        values: "0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: SonaliRedisStreamsDown
+        exp_alerts:
+          - exp_labels: { severity: critical, instance: "web:8080", job: sonali-web }
+            exp_annotations:
+              summary: "Web cannot read Redis Streams; jobs queue in the outbox and scheduled sweeps are paused"
+              runbook: docs/DR.md#3-failure-modes
+      - eval_time: 3m
+        alertname: SonaliOutboxNotDraining
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: SonaliDeadLetters
+        exp_alerts:
+          - exp_labels: { severity: warning, stream: "bcp:stream:dead", instance: "web:8080", job: sonali-web }
+            exp_annotations:
+              summary: "Jobs exhausted their retries and moved to the dead-letter stream; review /admin/queues"
+
+  - interval: 1m
+    input_series:
+      - series: 'bcp_job_runs_total{job_type="document_ingest",outcome="ok"}'
+        values: "0+6x40"
+      - series: 'bcp_job_runs_total{job_type="document_ingest",outcome="retried"}'
+        values: "0+4x40"
+      - series: 'bcp_job_runs_total{job_type="meeting_minutes",outcome="ok"}'
+        values: "0+10x40"
+    alert_rule_test:
+      - eval_time: 35m
+        alertname: SonaliJobFailureRate
+        exp_alerts:
+          - exp_labels: { severity: warning, job_type: document_ingest }
+            exp_annotations:
+              summary: "More than 20% of document_ingest jobs are failing"
+
+  - interval: 1m
+    input_series:
+      - series: "bcp_auth_login_failures_total"
+        values: "0+5x20"
+      - series: "bcp_auth_login_locked_total"
+        values: "0 0 0 0 0 1 1 1 1 1 1"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: SonaliLoginFailuresSpike
+        exp_alerts:
+          - exp_labels: { severity: security }
+            exp_annotations:
+              summary: "50 failed sign-ins in 10 minutes (possible password guessing)"
+      - eval_time: 10m
+        alertname: SonaliAccountsLocked
+        exp_alerts:
+          - exp_labels: { severity: security }
+            exp_annotations:
+              summary: "Sign-in lockouts in the last 10 minutes; check the audit log for login* actions"
+
+  - interval: 1m
+    input_series:
+      - series: 'bcp_ai_request_seconds_count{task="chat.ask",provider="openrouter",status="ok"}'
+        values: "0+8x30"
+      - series: 'bcp_ai_request_seconds_count{task="chat.ask",provider="openrouter",status="error"}'
+        values: "0+2x30"
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: SonaliAIErrors
+        exp_alerts:
+          - exp_labels: { severity: warning, task: chat.ask, provider: openrouter }
+            exp_annotations:
+              summary: "openrouter is failing more than 10% of chat.ask calls; consider switching the route at /admin/ai"

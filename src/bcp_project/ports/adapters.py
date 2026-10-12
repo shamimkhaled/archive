@@ -13,36 +13,39 @@ from ..summary_extractor import DocumentSummary, extract_document_summary as _ex
 
 
 class OpenAILlmAdapter:
-    """LLM port backed by OpenAI / OpenRouter (embeddings + summary chat)."""
+    """LLM port over the ``ai`` package (OpenAI, OpenRouter, or a local OpenAI-compatible server)."""
 
-    def embed_texts(self, inputs: List[str], model: Optional[str] = None) -> List[List[float]]:
-        return _embed_texts(inputs, model=model)
+    def embed_texts(
+        self, inputs: List[str], model: Optional[str] = None, *, sensitivity: Optional[str] = None
+    ) -> List[List[float]]:
+        return _embed_texts(inputs, model=model, sensitivity=sensitivity)
 
-    def extract_document_summary(self, text: str) -> DocumentSummary:
-        return _extract_document_summary(text)
+    def extract_document_summary(self, text: str, *, sensitivity: Optional[str] = None) -> DocumentSummary:
+        return _extract_document_summary(text, sensitivity=sensitivity)
 
-    def chat_json(self, *, system: str, user: str, temperature: float = 0.0) -> Dict[str, Any]:
+    def chat_json(
+        self,
+        *,
+        system: str,
+        user: str,
+        temperature: float = 0.0,
+        task: str = "ask",
+        sensitivity: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """Chat completion that must return a JSON object."""
-        from ..config import openai_chat_model, resolve_openai_credentials
-        from ..summary_extractor import _extract_json
         import json
 
-        try:
-            from openai import OpenAI
-        except ImportError as exc:
-            raise RuntimeError("openai package required") from exc
-        api_key, base_url = resolve_openai_credentials()
-        client = OpenAI(api_key=api_key, base_url=base_url) if base_url else OpenAI(api_key=api_key)
-        response = client.chat.completions.create(
-            model=openai_chat_model(),
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
+        from .. import ai
+        from ..summary_extractor import _extract_json
+
+        raw = ai.chat(
+            task,
+            [{"role": "system", "content": system}, {"role": "user", "content": user}],
+            sensitivity=sensitivity,
             temperature=temperature,
             max_tokens=1200,
+            json_mode=True,
         )
-        raw = response.choices[0].message.content or ""
         payload = _extract_json(raw)
         try:
             parsed = json.loads(payload)

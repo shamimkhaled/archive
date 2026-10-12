@@ -450,6 +450,8 @@
         window.location.href = "/login";
         throw new Error("auth");
       }
+      var hardNav = res.headers.get("X-BCP-Hard-Nav");
+      if (hardNav) return { hardNav: hardNav };
       if (!res.ok) throw new Error("nav failed");
       return res.text().then(function (text) {
         var finalUrl = res.url || url;
@@ -473,6 +475,10 @@
     // serve a stale Search page (e.g. missing metadata panel markup).
     fetchPage(url, true)
       .then(function (payload) {
+        if (payload.hardNav) {
+          location.href = payload.hardNav;
+          return;
+        }
         swap(payload.html, payload.url, opts);
       })
       .catch(function () {
@@ -651,12 +657,17 @@
   function renderAccessActions(result) {
     var status = result.access_status || "none";
     if (result.can_view) {
+      var page = parseInt(result.page, 10);
       var links =
         '<a class="doc-link" href="/view/' +
         encodeURIComponent(result.doc_id) +
-        '?from=/search">' +
-        escapeHtml(result.doc_id) +
-        "</a>";
+        "?from=/search" +
+        (page > 0 ? "&page=" + page : "") +
+        '">' +
+        escapeHtml(result.title || result.doc_id) +
+        "</a>" +
+        (result.title ? ' <span class="muted result-doc-id">' + escapeHtml(result.doc_id) + "</span>" : "") +
+        (page > 0 ? ' <span class="badge">p. ' + page + "</span>" : "");
       if (result.can_download) {
         links +=
           ' <a class="button button-secondary result-download" href="/download/' +
@@ -718,9 +729,16 @@
         var snippet = result.snippet
           ? '<p class="result-snippet">“' + escapeHtml(result.snippet) + '”</p>'
           : "";
+        if (result.can_view === false) {
+          reasonHtml = "";
+          snippet = '<p class="result-meta muted">Excerpt hidden until your access request is approved.</p>';
+        }
         var metaBits = [];
         if (result.doc_date) metaBits.push(result.doc_date);
-        metaBits.push("Score " + score);
+        if (result.department) metaBits.push(result.department);
+        if (result.category) metaBits.push(result.category);
+        if (result.reference_number) metaBits.push("Ref " + result.reference_number);
+        if (result.can_view !== false) metaBits.push("Score " + score);
         return (
           '<article class="result-card list-row search-result-card">' +
           '<div class="result-header">' +
@@ -761,6 +779,8 @@
           escapeHtml(result.doc_date || "—") +
           " · Uploaded by: " +
           escapeHtml(result.uploaded_by || "—") +
+          (result.department ? " · " + escapeHtml(result.department) : "") +
+          (result.category ? " · " + escapeHtml(result.category) : "") +
           "</p>" +
           (keywords ? '<p class="result-meta">Topics: ' + escapeHtml(keywords) + "</p>" : "") +
           "</article>"
@@ -769,12 +789,59 @@
       .join("");
   }
 
+  function loadSearchFacets(root) {
+    var selects = root.querySelectorAll("select[data-facet]");
+    if (!selects.length || root.dataset.facetsLoaded) return;
+    root.dataset.facetsLoaded = "1";
+    fetch("/api/search/facets", { credentials: "same-origin" })
+      .then(function (response) {
+        if (!response.ok) throw new Error("facets");
+        return response.json();
+      })
+      .then(function (facets) {
+        Array.prototype.forEach.call(selects, function (select) {
+          var values = facets[select.getAttribute("data-facet")] || [];
+          values.forEach(function (value) {
+            var option = document.createElement("option");
+            option.value = value;
+            option.textContent = value;
+            select.appendChild(option);
+          });
+        });
+      })
+      .catch(function () {
+        delete root.dataset.facetsLoaded;
+      });
+  }
+
+  function fieldValue(id) {
+    var el = document.getElementById(id);
+    return el && el.value ? String(el.value).trim() : "";
+  }
+
+  function refineParams(params) {
+    var map = {
+      department: "refineDepartment",
+      category: "refineCategory",
+      doc_type: "refineDocType",
+      reference_number: "refineReference",
+      date_from: "refineDateFrom",
+      date_to: "refineDateTo",
+    };
+    Object.keys(map).forEach(function (key) {
+      var value = fieldValue(map[key]);
+      if (value) params.set(key, value);
+    });
+    return params;
+  }
+
   function initSearchPage() {
     var root = document.querySelector('[data-page="search"]');
     var searchResults = document.getElementById("searchResults");
     if (root && searchResults && !searchResults.dataset.idleHtml) {
       searchResults.dataset.idleHtml = searchResults.innerHTML;
     }
+    if (root) loadSearchFacets(root);
     // Ensure keyword is the default visible panel after SPA navigation
     if (root) {
       var active = document.querySelector(".search-tab.active");
@@ -817,10 +884,14 @@
       try {
         lang = readStorage("sb-search-lang", "bcb-search-lang") || "en";
       } catch (e) {}
-      var searchUrl =
-        "/api/search?q=" + encodeURIComponent(query) + "&lang=" + encodeURIComponent(lang);
-      fetch(searchUrl, { credentials: "same-origin" })
+      var searchParams = refineParams(new URLSearchParams({ q: query, lang: lang }));
+      fetch("/api/search?" + searchParams.toString(), { credentials: "same-origin" })
         .then(function (response) {
+          if (response.status === 400) {
+            return response.json().then(function (body) {
+              throw new Error(body.detail || "Invalid filters");
+            });
+          }
           if (!response.ok) throw new Error("Search failed");
           return response.json();
         })
@@ -835,8 +906,9 @@
           }
           searchResults.innerHTML = html;
         })
-        .catch(function () {
-          searchResults.innerHTML = emptyHtml("Search unavailable", "Unable to complete search. Please try again.");
+        .catch(function (err) {
+          var detail = err && err.message && err.message !== "Search failed" ? err.message : "Unable to complete search. Please try again.";
+          searchResults.innerHTML = emptyHtml("Search unavailable", detail);
         })
         .finally(function () {
           searchButton.disabled = false;
@@ -887,8 +959,11 @@
       var uploadedBy = ((document.getElementById("metaUploadedBy") || {}).value || "").trim();
       var dateFrom = (document.getElementById("metaDateFrom") || {}).value || "";
       var dateTo = (document.getElementById("metaDateTo") || {}).value || "";
+      var metaDepartment = fieldValue("metaDepartment");
+      var metaCategory = fieldValue("metaCategory");
+      var metaReference = fieldValue("metaReference");
 
-      if (!docId && !docType && !uploadedBy && !dateFrom && !dateTo) {
+      if (!docId && !docType && !uploadedBy && !dateFrom && !dateTo && !metaDepartment && !metaCategory && !metaReference) {
         searchResults2.innerHTML = emptyHtml("Add a filter", "Enter at least one metadata field.");
         return;
       }
@@ -897,6 +972,9 @@
       if (uploadedBy) params.set("uploaded_by", uploadedBy);
       if (dateFrom) params.set("date_from", dateFrom);
       if (dateTo) params.set("date_to", dateTo);
+      if (metaDepartment) params.set("department", metaDepartment);
+      if (metaCategory) params.set("category", metaCategory);
+      if (metaReference) params.set("reference_number", metaReference);
 
       metadataSearchButton.disabled = true;
       searchResults2.innerHTML = skeletonHtml();

@@ -1,34 +1,28 @@
 """Organizer meeting management routes."""
 from __future__ import annotations
 
-import asyncio
 import logging
-import uuid
 from datetime import datetime
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
 from ..access_control import write_audit
-from ..auth import decode_access_token
-from ..aws_utils import store_pdf
 from ..brand import BRAND
 from ..calendar_utils import build_google_calendar_link, build_meeting_ics, new_meeting_uid
 from ..deps import (
     MEETING_INVITEE_ROLES,
-    MEETING_UPLOAD_DIR,
     UPLOAD_DIR,
     _client_ip,
-    _load_stored_pdf_bytes,
     get_current_user,
     get_db,
     require_meeting_organizer,
     role_display_label,
+    session_payload,
     templates,
 )
 from ..dummy_transcription import (
@@ -44,14 +38,14 @@ from ..jobs.handlers import (
     run_meeting_transcribe,
 )
 from ..jobs.queue import enqueue_job, job_queue_enabled
-from ..meeting_audio import clear_meeting_audio, list_chunk_paths, save_chunk
+from ..meeting_audio import clear_meeting_audio, list_chunk_paths, recording_max_bytes, recording_path, save_chunk
 from ..minutes_draft import (
     MINUTES_OFF,
     MINUTES_PENDING,
-    MINUTES_READY,
 )
 from ..models import (
     BoardMeeting,
+    DocumentRecord,
     MeetingAttendance,
     MeetingDocument,
     MeetingInvitation,
@@ -60,7 +54,16 @@ from ..models import (
     User,
 )
 from ..notify import notify_meeting_email
-from ..pdf_watermark import stamp_pdf_bytes
+from ..diarization import speaker_labels
+from ..services.minutes import (
+    ACTION_STATUSES,
+    MINUTES_DRAFT,
+    MinutesWorkflowError,
+    body_sha256,
+    list_items as list_minutes_items,
+    minutes_state,
+    save_edit,
+)
 from ..tx_live import iter_captions
 from .meeting_common import (
     _load_meeting_document_or_404,
@@ -68,9 +71,8 @@ from .meeting_common import (
     _meeting_transcription_status,
     _meeting_workspace_extras,
     _minutes_view,
-    _serve_meeting_document_file,
+    _stream_meeting_document,
     _transcription_view,
-    _validate_pdf_upload,
 )
 
 logger = logging.getLogger("bcp_project.routers.meetings")
@@ -228,6 +230,13 @@ async def meeting_detail(
     )
     doc_result = await db.execute(doc_statement)
     documents = doc_result.scalars().all()
+    archive_ids = [d.archive_doc_id for d in documents if d.archive_doc_id]
+    archive_status = {}
+    if archive_ids:
+        rows = await db.execute(
+            select(DocumentRecord.doc_id, DocumentRecord.ingest_status).where(DocumentRecord.doc_id.in_(archive_ids))
+        )
+        archive_status = {doc_id: state for doc_id, state in rows.all()}
 
     invite_statement = (
         select(MeetingInvitation, User)
@@ -251,6 +260,8 @@ async def meeting_detail(
     attendance = {row.username: row for row in attendance_result.scalars().all()}
     extras = await _meeting_workspace_extras(db, meeting)
     transcript_segments = list(meeting.transcription_json or [])
+    items = await list_minutes_items(db, meeting_id)
+    recording = recording_path(meeting_id)
 
     return templates.TemplateResponse(
         request,
@@ -259,12 +270,20 @@ async def meeting_detail(
             "user": current_user,
             "meeting": meeting,
             "documents": documents,
+            "archive_status": archive_status,
             "invitations": invitations,
             "attendance": attendance,
             "status": status,
             "transcript_segments": transcript_segments,
             "audio_chunk_count": len(list_chunk_paths(meeting_id)),
-            "minutes_view": _minutes_view(meeting),
+            "minutes_view": _minutes_view(meeting, current_user.username),
+            "decisions": items["decisions"],
+            "actions": items["actions"],
+            "action_statuses": ACTION_STATUSES,
+            "speakers": speaker_labels(transcript_segments),
+            "recording_name": meeting.recording_filename if recording else None,
+            "recording_max_mb": recording_max_bytes() // (1024 * 1024),
+            "can_amend": current_user.role == Role.admin,
             **extras,
         },
     )
@@ -323,6 +342,8 @@ async def start_meeting_transcription(
             url=f"/meetings/{meeting_id}?status=transcription_processing#transcription",
             status_code=status.HTTP_303_SEE_OTHER,
         )
+    if minutes_state(meeting) != MINUTES_DRAFT:
+        return RedirectResponse(url=f"/meetings/{meeting_id}?status=minutes_locked#minutes", status_code=status.HTTP_303_SEE_OTHER)
 
     clear_meeting_audio(meeting_id)
     meeting.transcription_status = TRANSCRIPTION_LIVE
@@ -452,12 +473,12 @@ async def stop_meeting_transcription(
 
     queued = False
     if job_queue_enabled():
-        job_id = await enqueue_job(JOB_MEETING_TRANSCRIBE, {"meeting_id": meeting_id})
+        job_id = await enqueue_job(JOB_MEETING_TRANSCRIBE, {"meeting_id": meeting_id, "source": "live"})
         queued = bool(job_id)
         if job_id:
             logger.info("Queued meeting_transcribe job %s for meeting %s", job_id, meeting_id)
     if not queued:
-        background_tasks.add_task(run_meeting_transcribe, meeting_id)
+        background_tasks.add_task(run_meeting_transcribe, meeting_id, "live")
         logger.info("Scheduled in-process meeting_transcribe for meeting %s", meeting_id)
 
     return RedirectResponse(
@@ -493,8 +514,8 @@ async def meeting_transcription_ws(websocket: WebSocket, meeting_id: int) -> Non
     """Phase B: live caption stream for organizers (cookie auth)."""
     await websocket.accept()
     token = websocket.cookies.get("access_token")
-    payload = decode_access_token(token) if token else None
-    if not payload or not payload.get("sub"):
+    payload = session_payload(token)
+    if not payload:
         await websocket.close(code=4401)
         return
     role = str(payload.get("role") or "")
@@ -549,17 +570,17 @@ async def save_meeting_minutes(
 ) -> RedirectResponse:
     require_meeting_organizer(current_user)
     meeting = await _load_meeting_or_404(meeting_id, db)
-    meeting.minutes_draft = (body_md or "").strip()
-    meeting.minutes_status = MINUTES_READY
-    meeting.minutes_source = meeting.minutes_source or "edited"
-    meeting.minutes_generated_at = meeting.minutes_generated_at or datetime.utcnow()
+    try:
+        changed = save_edit(meeting, body_md, current_user.username)
+    except MinutesWorkflowError:
+        return RedirectResponse(url=f"/meetings/{meeting_id}?status=minutes_locked#minutes", status_code=status.HTTP_303_SEE_OTHER)
     await write_audit(
         db,
         username=current_user.username,
         action="minutes_save",
         resource_type="meeting",
         resource_id=str(meeting_id),
-        detail=f"chars={len(meeting.minutes_draft or '')}",
+        detail=f"chars={len(meeting.minutes_draft or '')} changed={changed} sha256={body_sha256(meeting.minutes_draft or '')}",
         ip_address=_client_ip(request),
         commit=False,
     )
@@ -580,6 +601,8 @@ async def regenerate_meeting_minutes(
 ) -> RedirectResponse:
     require_meeting_organizer(current_user)
     meeting = await _load_meeting_or_404(meeting_id, db)
+    if minutes_state(meeting) != MINUTES_DRAFT:
+        return RedirectResponse(url=f"/meetings/{meeting_id}?status=minutes_locked#minutes", status_code=status.HTTP_303_SEE_OTHER)
     if not list(meeting.transcription_json or []):
         return RedirectResponse(
             url=f"/meetings/{meeting_id}?status=minutes_no_transcript#minutes",
@@ -801,42 +824,79 @@ async def resend_meeting_invitations(
         status_code=status.HTTP_303_SEE_OTHER,
     )
 
+MEETING_PAPER_TYPE = "Board Meeting Paper"
+
+
+async def _meeting_archive_doc_id(db: AsyncSession, meeting_id: int) -> str:
+    count = await db.scalar(
+        select(func.count()).select_from(MeetingDocument).where(MeetingDocument.meeting_id == meeting_id)
+    )
+    n = int(count or 0) + 1
+    while True:
+        candidate = f"MTG-{meeting_id}-{n:02d}"
+        taken = await db.scalar(select(DocumentRecord.id).where(DocumentRecord.doc_id == candidate))
+        if taken is None:
+            return candidate
+        n += 1
+
+
 @router.post("/meetings/{meeting_id}/documents")
 async def upload_meeting_document(
+    request: Request,
     meeting_id: int,
+    background_tasks: BackgroundTasks,
     title: str = Form(..., min_length=1, max_length=255),
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> RedirectResponse:
+    """Meeting papers are archived like any upload: write-once original, OCR, review, search."""
+    from ..minutes_draft import meeting_sensitivity
+    from ..services.document_versions import intake_new_document
+    from .ingest import dispatch_after_commit, read_validated
+
     require_meeting_organizer(current_user)
-    await _load_meeting_or_404(meeting_id, db)
-    _validate_pdf_upload(file)
-
-    meeting_dir = MEETING_UPLOAD_DIR / str(meeting_id)
-    meeting_dir.mkdir(parents=True, exist_ok=True)
-    safe_name = Path(file.filename or "document.pdf").name.replace("..", "")
-    filename = f"{uuid.uuid4().hex}_{safe_name}"
-    destination = meeting_dir / filename
-    file_bytes = await file.read()
-    destination.write_bytes(file_bytes)
-
-    storage_key = f"meetings/{meeting_id}/{filename}"
+    meeting = await _load_meeting_or_404(meeting_id, db)
+    upload = await read_validated(file)
+    doc_id = await _meeting_archive_doc_id(db, meeting_id)
     try:
-        remote_location = await asyncio.to_thread(store_pdf, str(destination.resolve()), storage_key)
+        result = await intake_new_document(
+            db,
+            upload=upload,
+            doc_id=doc_id,
+            doc_date=(meeting.scheduled_at or datetime.utcnow()).date(),
+            doc_type=MEETING_PAPER_TYPE,
+            keywords=[],
+            sensitivity=meeting_sensitivity(),
+            uploaded_by=current_user.username,
+            metadata={"title": title.strip(), "subject": meeting.title},
+            meeting_id=meeting_id,
+        )
     except Exception as exc:
         logger.exception("Failed to store meeting document for meeting %s", meeting_id)
         raise HTTPException(status_code=502, detail="Failed to store meeting document") from exc
 
-    document = MeetingDocument(
-        meeting_id=meeting_id,
-        title=title,
-        file_location=remote_location,
-        uploaded_by=current_user.username,
+    db.add(
+        MeetingDocument(
+            meeting_id=meeting_id,
+            title=title,
+            file_location=result.document.file_location,
+            uploaded_by=current_user.username,
+            archive_doc_id=doc_id,
+        )
     )
-    db.add(document)
+    await write_audit(
+        db,
+        username=current_user.username,
+        action="upload",
+        resource_type="document",
+        resource_id=doc_id,
+        detail=f"meeting_id={meeting_id} type={upload.content_type} sha256={upload.sha256}",
+        ip_address=_client_ip(request),
+        commit=False,
+    )
     await db.commit()
-
+    dispatch_after_commit(result, background_tasks)
     return RedirectResponse(url=f"/meetings/{meeting_id}?status=doc_uploaded", status_code=status.HTTP_303_SEE_OTHER)
 
 
@@ -850,27 +910,7 @@ async def meeting_document_file(
 ) -> Response:
     require_meeting_organizer(current_user)
     document = await _load_meeting_document_or_404(meeting_id, document_id, db)
-    pdf_bytes = await _load_stored_pdf_bytes(
-        document.file_location,
-        resource_id=f"meeting_document:{document.id}",
-    )
-    seal_text = BRAND.seal_meeting_doc(current_user.username)
-    try:
-        stamped = stamp_pdf_bytes(pdf_bytes, seal_text)
-    except Exception as exc:
-        logger.exception("Watermark stamping failed for meeting document %s", document.id)
-        raise HTTPException(status_code=502, detail="Could not prepare secure meeting document stream") from exc
-    await write_audit(
-        db,
-        username=current_user.username,
-        action="view_file",
-        resource_type="meeting_document",
-        resource_id=str(document.id),
-        detail=f"meeting_id={meeting_id}",
-        ip_address=_client_ip(request),
-        commit=True,
-    )
-    return _serve_meeting_document_file(document, stamped)
+    return await _stream_meeting_document(request, db, document, meeting_id, current_user.username)
 
 
 @router.get("/meetings/{meeting_id}/documents/{document_id}/view", response_class=HTMLResponse)

@@ -1,0 +1,13 @@
+modules:
+  # HTTPS probe for the public URL. Fails on plain HTTP, on TLS below 1.2,
+  # and on a non-2xx response, so it doubles as a TLS-policy check.
+  https_2xx:
+    prober: http
+    timeout: 10s
+    http:
+      method: GET
+      valid_status_codes: []
+      fail_if_not_ssl: true
+      preferred_ip_protocol: ip4
+      tls_config:
+        min_version: TLS12

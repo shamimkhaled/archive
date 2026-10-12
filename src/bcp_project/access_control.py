@@ -13,7 +13,9 @@ from .models import (
     AccessRequestStatus,
     AuditLog,
     DocumentAccessRequest,
+    DocumentRecord,
     Role,
+    Sensitivity,
     User,
 )
 
@@ -111,6 +113,10 @@ def can_download_with_grant(user: User, grant: Optional[DocumentAccessRequest] =
 async def assert_can_view(user: User, doc_id: str, db: AsyncSession) -> DocumentAccessRequest | None:
     if is_archive_view_privileged(user):
         return None
+    if await unverified_doc_ids(db, [doc_id]):
+        from fastapi import HTTPException, status
+
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
     grants = await get_active_grants_for_docs(db, user.username, [doc_id])
     grant = grants.get(doc_id)
     if not can_view_with_grant(user, grant):
@@ -134,12 +140,92 @@ async def assert_can_download(user: User, doc_id: str, db: AsyncSession) -> Docu
     return None
 
 
+# What a caller without view access may still learn about a hit: enough to
+# request access, never excerpts, keywords, summaries, or uploader identity.
+DISCOVERY_FIELDS = frozenset(
+    {
+        "doc_id",
+        "doc_type",
+        "doc_date",
+        "relevance_label",
+        "match_label",
+        "can_view",
+        "can_download",
+        "access_status",
+    }
+)
+
+
+def redact_unviewable(row: dict) -> dict:
+    return {key: value for key, value in row.items() if key in DISCOVERY_FIELDS}
+
+
+async def get_sensitivity_for_docs(db: AsyncSession, doc_ids: Iterable[str]) -> Dict[str, str]:
+    ids = [d for d in doc_ids if d]
+    if not ids:
+        return {}
+    result = await db.execute(
+        select(DocumentRecord.doc_id, DocumentRecord.sensitivity).where(DocumentRecord.doc_id.in_(ids))
+    )
+    return {row[0]: (row[1] or Sensitivity.internal.value) for row in result.all()}
+
+
+async def viewable_doc_ids(db: AsyncSession, user: User, doc_ids: Iterable[str]) -> Set[str]:
+    ids = [d for d in doc_ids if d]
+    if is_archive_view_privileged(user):
+        return set(ids)
+    grants = await get_active_grants_for_docs(db, user.username, ids)
+    return {doc_id for doc_id in ids if can_view_with_grant(user, grants.get(doc_id))}
+
+
+UNSEARCHABLE_VERIFICATION = ("pending", "rejected")
+
+
+async def unverified_doc_ids(db: AsyncSession, doc_ids: Iterable[str]) -> Set[str]:
+    """Documents whose OCR is awaiting (or failed) human verification are not searchable by anyone."""
+    ids = [d for d in doc_ids if d]
+    if not ids:
+        return set()
+    result = await db.execute(
+        select(DocumentRecord.doc_id).where(
+            DocumentRecord.doc_id.in_(ids), DocumentRecord.verification_status.in_(UNSEARCHABLE_VERIFICATION)
+        )
+    )
+    return {row[0] for row in result.all()}
+
+
+async def hidden_restricted_doc_ids(db: AsyncSession, user: User, doc_ids: Iterable[str]) -> Set[str]:
+    """Restricted documents the caller cannot view are invisible, not merely redacted;
+    unverified scans are invisible to everyone until a reviewer approves them."""
+    ids = [d for d in doc_ids if d]
+    if not ids:
+        return set()
+    unverified = await unverified_doc_ids(db, ids)
+    if is_archive_view_privileged(user):
+        return unverified
+    return unverified | await _hidden_restricted(db, user, [d for d in ids if d not in unverified])
+
+
+async def _hidden_restricted(db: AsyncSession, user: User, ids: List[str]) -> Set[str]:
+    if not ids:
+        return set()
+    sensitivity = await get_sensitivity_for_docs(db, ids)
+    restricted = {d for d, label in sensitivity.items() if label == Sensitivity.restricted.value}
+    if not restricted:
+        return set()
+    return restricted - await viewable_doc_ids(db, user, restricted)
+
+
 async def enrich_results_with_access(
     db: AsyncSession,
     user: User,
     results: List[dict],
 ) -> List[dict]:
     doc_ids = [row.get("doc_id") for row in results if row.get("doc_id")]
+    unverified = await unverified_doc_ids(db, doc_ids)
+    if unverified:
+        results = [row for row in results if row.get("doc_id") not in unverified]
+        doc_ids = [d for d in doc_ids if d not in unverified]
     can_dl = is_archive_download_allowed(user)
 
     if is_archive_view_privileged(user):
@@ -153,6 +239,7 @@ async def enrich_results_with_access(
             for row in results
         ]
 
+    sensitivity = await get_sensitivity_for_docs(db, doc_ids)
     grants = await get_active_grants_for_docs(db, user.username, doc_ids)
     pending_ids: Set[str] = set()
     if doc_ids:
@@ -169,6 +256,8 @@ async def enrich_results_with_access(
         doc_id = row.get("doc_id")
         grant = grants.get(doc_id) if doc_id else None
         can_view = can_view_with_grant(user, grant)
+        if not can_view and sensitivity.get(doc_id) == Sensitivity.restricted.value:
+            continue
         if can_view and can_dl:
             status_label = "approved_download"
         elif can_view:
@@ -177,14 +266,13 @@ async def enrich_results_with_access(
             status_label = "pending"
         else:
             status_label = "none"
-        enriched.append(
-            {
-                **row,
-                "can_view": can_view,
-                "can_download": bool(can_view and can_dl),
-                "access_status": status_label,
-            }
-        )
+        decorated = {
+            **row,
+            "can_view": can_view,
+            "can_download": bool(can_view and can_dl),
+            "access_status": status_label,
+        }
+        enriched.append(decorated if can_view else redact_unviewable(decorated))
     return enriched
 
 

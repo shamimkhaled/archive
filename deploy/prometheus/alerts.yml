@@ -1,0 +1,224 @@
+# Alert rules for the Sonali Bank Archive.
+#
+# Severity:
+#   critical  page the on-call engineer (service down or data at risk)
+#   warning   business-hours ticket (degraded, trending to failure)
+#   security  route to the SOC as well as on-call
+#
+# Metric names come from src/bcp_project/observability.py (prefix bcp_).
+# Thresholds are starting points; tune them after UAT (docs/CAPACITY.md).
+
+groups:
+  - name: sonali-availability
+    rules:
+      - alert: SonaliWebDown
+        expr: up{job="sonali-web"} == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: "Web replica {{ $labels.instance }} is not answering /metrics"
+          runbook: docs/DR.md#3-failure-modes
+
+      - alert: SonaliWorkerDown
+        expr: up{job="sonali-workers"} == 0
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: "{{ $labels.service }} is down; its queue is not being processed"
+          runbook: docs/DR.md#3-failure-modes
+
+      - alert: SonaliHigh5xxRate
+        expr: |
+          sum(rate(bcp_http_request_duration_seconds_count{status="5xx"}[5m]))
+            / clamp_min(sum(rate(bcp_http_request_duration_seconds_count[5m])), 1e-9) > 0.02
+        for: 10m
+        labels: { severity: critical }
+        annotations:
+          summary: "More than 2% of requests are failing with 5xx"
+
+      - alert: SonaliSearchSlow
+        expr: |
+          histogram_quantile(0.95, sum by (le) (rate(
+            bcp_http_request_duration_seconds_bucket{route=~"/search|/api/v1/search"}[10m]))) > 3
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: "Search p95 latency is above 3 s ({{ $value | humanizeDuration }})"
+
+      - alert: SonaliAskSlow
+        expr: |
+          histogram_quantile(0.95, sum by (le) (rate(
+            bcp_http_request_duration_seconds_bucket{route="/api/v1/ask"}[10m]))) > 20
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: "Ask Sonali p95 latency is above 20 s ({{ $value | humanizeDuration }})"
+
+  - name: sonali-pipeline
+    rules:
+      - alert: SonaliRedisStreamsDown
+        expr: bcp_job_stream_up == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: "Web cannot read Redis Streams; jobs queue in the outbox and scheduled sweeps are paused"
+          runbook: docs/DR.md#3-failure-modes
+
+      - alert: SonaliQueueBacklog
+        expr: bcp_job_stream_lag{stream!="bcp:stream:dead"} > 500
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.stream }} has {{ $value }} undelivered jobs; add workers (scripts/autoscale_workers.py)"
+
+      - alert: SonaliJobsStuckPending
+        expr: bcp_job_stream_pending{stream!="bcp:stream:dead"} > 100
+        for: 30m
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.stream }} has {{ $value }} delivered but unacknowledged jobs"
+
+      - alert: SonaliDeadLetters
+        expr: delta(bcp_job_stream_length{stream="bcp:stream:dead"}[15m]) > 0
+        labels: { severity: warning }
+        annotations:
+          summary: "Jobs exhausted their retries and moved to the dead-letter stream; review /admin/queues"
+
+      - alert: SonaliOutboxNotDraining
+        expr: bcp_outbox_unpublished > 100
+        for: 10m
+        labels: { severity: critical }
+        annotations:
+          summary: "{{ $value }} outbox events are unpublished; check the outbox relay and Redis"
+
+      - alert: SonaliJobFailureRate
+        expr: |
+          sum by (job_type) (rate(bcp_job_runs_total{outcome!="ok"}[15m]))
+            / clamp_min(sum by (job_type) (rate(bcp_job_runs_total[15m])), 1e-9) > 0.2
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: "More than 20% of {{ $labels.job_type }} jobs are failing"
+
+      - alert: SonaliWorkerStalled
+        expr: time() - bcp_job_worker_heartbeat_timestamp > 1800
+        labels: { severity: warning }
+        annotations:
+          summary: "Worker {{ $labels.service }} has not polled for 30 minutes (one job running too long, or hung)"
+
+  - name: sonali-ai
+    rules:
+      - alert: SonaliAIErrors
+        expr: |
+          sum by (task, provider) (rate(bcp_ai_request_seconds_count{status="error"}[10m]))
+            / clamp_min(sum by (task, provider) (rate(bcp_ai_request_seconds_count[10m])), 1e-9) > 0.1
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.provider }} is failing more than 10% of {{ $labels.task }} calls; consider switching the route at /admin/ai"
+
+      - alert: SonaliAISlow
+        expr: |
+          histogram_quantile(0.95, sum by (le, task, provider) (rate(bcp_ai_request_seconds_bucket[15m]))) > 30
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.task }} on {{ $labels.provider }} p95 is above 30 s"
+
+      - alert: SonaliRestrictedAIBlocked
+        expr: increase(bcp_ai_egress_blocked_total{action="blocked"}[1h]) > 0
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.task }} was refused for restricted content because no local model is configured"
+
+  - name: sonali-security
+    rules:
+      - alert: SonaliLoginFailuresSpike
+        expr: increase(bcp_auth_login_failures_total[10m]) > 30
+        labels: { severity: security }
+        annotations:
+          summary: "{{ $value }} failed sign-ins in 10 minutes (possible password guessing)"
+
+      - alert: SonaliAccountsLocked
+        expr: increase(bcp_auth_login_locked_total[10m]) > 0
+        labels: { severity: security }
+        annotations:
+          summary: "Sign-in lockouts in the last 10 minutes; check the audit log for login* actions"
+
+      - alert: SonaliDirectoryUnavailable
+        expr: increase(bcp_auth_directory_errors_total[10m]) > 5
+        labels: { severity: critical }
+        annotations:
+          summary: "Active Directory (LDAP) is unreachable; only break-glass accounts can sign in"
+
+      - alert: SonaliRateLimitSpike
+        expr: sum by (bucket) (increase(bcp_rate_limit_rejected_total[10m])) > 100
+        labels: { severity: security }
+        annotations:
+          summary: "{{ $value }} requests rejected by the {{ $labels.bucket }} rate limit in 10 minutes"
+
+  - name: sonali-infrastructure
+    rules:
+      - alert: PostgresDown
+        expr: pg_up == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: "PostgreSQL is unreachable from the exporter"
+          runbook: docs/DR.md#6-restore
+
+      - alert: PostgresReplicationLag
+        expr: pg_replication_lag_seconds > 300
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: "Standby is {{ $value | humanizeDuration }} behind; RPO target is 15 minutes"
+
+      - alert: RedisDown
+        expr: redis_up == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: "Redis is down"
+
+      - alert: RedisMemoryHigh
+        expr: redis_memory_used_bytes / clamp_min(redis_memory_max_bytes, 1) > 0.85 and redis_memory_max_bytes > 0
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "Redis is above 85% of maxmemory; streams may be trimmed"
+
+      - alert: QdrantDown
+        expr: up{job="qdrant"} == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: "Qdrant is down; search falls back to keyword results only"
+
+      - alert: HostDiskFilling
+        expr: |
+          (1 - node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}) > 0.85
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.instance }} {{ $labels.mountpoint }} is more than 85% full"
+
+      - alert: HostMemoryPressure
+        expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes < 0.1
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.instance }} has less than 10% memory available"
+
+      - alert: TLSCertificateExpiring
+        expr: probe_ssl_earliest_cert_expiry - time() < 14 * 86400
+        labels: { severity: warning }
+        annotations:
+          summary: "TLS certificate for {{ $labels.instance }} expires in under 14 days"
+
+      - alert: PublicEndpointDown
+        expr: probe_success{job="blackbox-https"} == 0
+        for: 3m
+        labels: { severity: critical }
+        annotations:
+          summary: "{{ $labels.instance }} is not reachable over HTTPS"

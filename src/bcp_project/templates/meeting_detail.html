@@ -61,6 +61,36 @@
 <div class="alert alert-success" role="status">Regenerating minutes draft from the transcript.</div>
 {% elif status == 'minutes_no_transcript' %}
 <div class="alert alert-error" role="alert">No transcript yet — finish a recording first.</div>
+{% elif status == 'minutes_submitted' %}
+<div class="alert alert-success" role="status">Minutes submitted for review. They are locked until approved or returned.</div>
+{% elif status == 'minutes_returned' %}
+<div class="alert alert-success" role="status">Minutes returned to draft with your note.</div>
+{% elif status == 'minutes_approved' %}
+<div class="alert alert-success" role="status">Minutes approved and locked. The approved copy is being archived and indexed for search.</div>
+{% elif status == 'minutes_amending' %}
+<div class="alert alert-success" role="status">Amendment opened. The previously approved minutes stay in the archive until this version is approved.</div>
+{% elif status == 'minutes_locked' %}
+<div class="alert alert-error" role="alert">Minutes are in review or approved, so they cannot be changed. Return them to draft (or open an amendment) first.</div>
+{% elif status == 'minutes_four_eyes' %}
+<div class="alert alert-error" role="alert">Four-eyes rule: minutes must be approved by someone other than the person who submitted or last edited them.</div>
+{% elif status == 'minutes_input_required' %}
+<div class="alert alert-error" role="alert">Add the required text (minutes body, a note, or a reason) and try again.</div>
+{% elif status == 'minutes_archive_failed' %}
+<div class="alert alert-error" role="alert">Approval was not saved: the minutes could not be archived. Try again or contact an administrator.</div>
+{% elif status in ('decision_saved', 'action_saved') %}
+<div class="alert alert-success" role="status">Saved.</div>
+{% elif status in ('decision_deleted', 'action_deleted') %}
+<div class="alert alert-success" role="status">Removed.</div>
+{% elif status == 'items_extracted' %}
+<div class="alert alert-success" role="status">Suggested decisions and actions refreshed. Only items with a supporting quote from the transcript are kept.</div>
+{% elif status == 'recording_processing' %}
+<div class="alert alert-success" role="status">Recording uploaded. Transcribing and drafting minutes — this page will refresh when ready.</div>
+{% elif status == 'recording_unsupported' %}
+<div class="alert alert-error" role="alert">That file is not a supported audio or video recording (WAV, MP3, M4A/MP4, WebM, OGG, FLAC, AMR).</div>
+{% elif status == 'recording_too_large' %}
+<div class="alert alert-error" role="alert">The recording is larger than {{ recording_max_mb }} MB.</div>
+{% elif status == 'speakers_saved' %}
+<div class="alert alert-success" role="status">Speaker names saved.</div>
 {% endif %}
 
 <nav class="section-tabs" aria-label="Meeting sections">
@@ -69,6 +99,7 @@
     <a href="#documents">Papers</a>
     <a href="#invitees">People</a>
     <a href="#minutes">Minutes</a>
+    <a href="#decisions">Decisions</a>
     <a href="#intelligence">Archive</a>
 </nav>
 
@@ -151,22 +182,89 @@
                 <button type="submit" class="button-block">Start AI transcription</button>
             </form>
             {% endif %}
+
+            {% set minutes_state = (minutes_view or {}).get('workflow', {}).get('state', 'draft') %}
+            {% if tx not in ('live', 'processing') and minutes_state == 'draft' %}
+            <details class="recording-upload">
+                <summary>Upload a recording instead</summary>
+                <p class="muted">For a sitting recorded on another device. Audio or video up to {{ recording_max_mb }} MB; it replaces the current transcript and minutes draft.</p>
+                {% if recording_name %}<p class="muted">Last recording: {{ recording_name }}</p>{% endif %}
+                <form action="/meetings/{{ meeting.id }}/recording" method="post" enctype="multipart/form-data" class="form-grid">
+                    <div class="form-group">
+                        <label for="recording-file">Recording file</label>
+                        <input id="recording-file" type="file" name="file" accept="audio/*,video/*" required>
+                    </div>
+                    <button type="submit" class="button-secondary button-block">Upload &amp; transcribe</button>
+                </form>
+            </details>
+            {% endif %}
+
+            {% if speakers and tx not in ('live', 'processing') %}
+            <details class="speaker-names"{% if minutes_state == 'draft' %} open{% endif %}>
+                <summary>Speakers ({{ speakers | length }})</summary>
+                {% if minutes_state == 'draft' %}
+                <form action="/meetings/{{ meeting.id }}/speakers" method="post" class="form-grid">
+                    {% for sp in speakers %}
+                    <div class="form-group">
+                        <label for="speaker-{{ loop.index }}">{{ sp.label }} · {{ sp.segments }} lines</label>
+                        <input id="speaker-{{ loop.index }}" type="text" name="name_{{ sp.label }}" value="{{ (meeting.speaker_map or {}).get(sp.label, '') }}" placeholder="{{ sp.name }}" maxlength="80">
+                    </div>
+                    {% endfor %}
+                    <button type="submit" class="button-secondary">Save speaker names</button>
+                </form>
+                {% else %}
+                <ul>{% for sp in speakers %}<li>{{ sp.name }} ({{ sp.label }})</li>{% endfor %}</ul>
+                {% endif %}
+            </details>
+            {% endif %}
         </article>
     </div>
 </section>
 
 {% set mv = minutes_view or {} %}
-<section class="panel" id="minutes" data-meeting-id="{{ meeting.id }}" data-minutes-status="{{ meeting.minutes_status or 'off' }}">
+{% set wf = mv.workflow or {} %}
+<section class="panel" id="minutes" data-meeting-id="{{ meeting.id }}" data-minutes-status="{{ meeting.minutes_status or 'off' }}" data-minutes-state="{{ wf.state or 'draft' }}">
     <div class="panel-head">
-        <h2>Minutes draft</h2>
+        <h2>Minutes</h2>
         <span class="muted">
-            {% if mv.status == 'ready' %}Ready{% elif mv.generating %}Generating…{% else %}Not generated{% endif %}
+            <span class="badge{% if wf.state == 'approved' %} badge-accent{% elif wf.state == 'in_review' %} badge-warn{% endif %}">{% if wf.state == 'approved' %}Approved{% elif wf.state == 'in_review' %}In review{% else %}Draft{% endif %} · v{{ wf.version or 1 }}</span>
+            {% if mv.generating %} · Generating…{% endif %}
             {% if meeting.minutes_source %} · {{ meeting.minutes_source }}{% endif %}
         </span>
     </div>
-    <p class="muted" style="margin-top:0;">Auto-drafted from the transcript after you stop recording. Edit before circulating.</p>
+    {% if wf.review_note %}<div class="alert alert-error" role="note">{{ wf.review_note }}</div>{% endif %}
+    {% if wf.state == 'approved' %}
+    <p class="muted" style="margin-top:0;">Approved by {{ wf.approved_by }}{% if wf.approved_at %} on {{ wf.approved_at[:16] | replace('T', ' ') }} UTC{% endif %}. Locked; SHA-256 <code>{{ (wf.sha256 or '')[:16] }}…</code>{% if wf.doc_id %} · <a href="/view/{{ wf.doc_id }}">Archived copy ({{ wf.doc_id }})</a>{% endif %}</p>
+    {% elif wf.state == 'in_review' %}
+    <p class="muted" style="margin-top:0;">Submitted by {{ wf.submitted_by }}{% if wf.submitted_at %} on {{ wf.submitted_at[:16] | replace('T', ' ') }} UTC{% endif %}. Locked while in review.{% if wf.four_eyes %} Four-eyes approval is on.{% endif %}</p>
+    {% else %}
+    <p class="muted" style="margin-top:0;">Auto-drafted from the transcript. Edit, then submit for review. Only approved minutes are archived and searchable.</p>
+    {% endif %}
+
     {% if mv.generating %}
     <p class="sitting-card-state is-on">Drafting minutes from the transcript…</p>
+    {% elif mv.body_md and wf.locked %}
+    <pre class="minutes-draft minutes-locked" aria-label="Minutes (read-only)">{{ meeting.minutes_draft }}</pre>
+    <div class="form-actions-row" style="margin-top:0.75rem; gap:0.75rem; flex-wrap:wrap;">
+        {% if wf.state == 'in_review' %}
+        {% if wf.approve_blocker %}
+        <p class="muted">{{ wf.approve_blocker }}</p>
+        {% else %}
+        <form action="/meetings/{{ meeting.id }}/minutes/approve" method="post">
+            <button type="submit">Approve &amp; lock</button>
+        </form>
+        {% endif %}
+        <form action="/meetings/{{ meeting.id }}/minutes/reject" method="post" class="inline-form">
+            <input type="text" name="note" required minlength="3" maxlength="1000" placeholder="What needs to change" aria-label="What needs to change">
+            <button type="submit" class="button-secondary">Return to draft</button>
+        </form>
+        {% elif wf.state == 'approved' and can_amend %}
+        <form action="/meetings/{{ meeting.id }}/minutes/amend" method="post" class="inline-form">
+            <input type="text" name="reason" required minlength="3" maxlength="1000" placeholder="Reason for amendment" aria-label="Reason for amendment">
+            <button type="submit" class="button-secondary">Open amendment</button>
+        </form>
+        {% endif %}
+    </div>
     {% elif mv.body_md %}
     <form action="/meetings/{{ meeting.id }}/minutes" method="post" class="form-grid">
         <div class="form-group">
@@ -177,14 +275,140 @@
             <button type="submit">Save minutes</button>
         </div>
     </form>
-    <form action="/meetings/{{ meeting.id }}/minutes/regenerate" method="post" style="margin-top:0.75rem;">
-        <button type="submit" class="button-secondary">Regenerate from transcript</button>
-    </form>
+    <div class="form-actions-row" style="margin-top:0.75rem; gap:0.75rem;">
+        <form action="/meetings/{{ meeting.id }}/minutes/submit" method="post">
+            <button type="submit">Submit for review</button>
+        </form>
+        <form action="/meetings/{{ meeting.id }}/minutes/regenerate" method="post">
+            <button type="submit" class="button-secondary">Regenerate from transcript</button>
+        </form>
+    </div>
     {% else %}
     {{ empty_state("No minutes yet", "Stop a transcription sitting to generate a draft, or regenerate after a transcript exists.") }}
     {% if tx == 'stopped' %}
     <form action="/meetings/{{ meeting.id }}/minutes/regenerate" method="post" style="margin-top:0.75rem;">
         <button type="submit" class="button-secondary">Generate minutes draft</button>
+    </form>
+    {% endif %}
+    {% endif %}
+</section>
+
+{% set items_open = not wf.locked %}
+<section class="panel" id="decisions">
+    <div class="panel-head">
+        <h2>Decisions &amp; actions</h2>
+        <span class="muted">{{ decisions | length }} decisions · {{ actions | length }} actions</span>
+    </div>
+    <p class="muted" style="margin-top:0;">Suggestions from the transcript carry a supporting quote; anything without one is dropped. {% if not items_open %}Decisions are locked with the minutes; action status can still be updated.{% endif %}</p>
+
+    {% if decisions %}
+    <table class="data-table">
+        <thead><tr><th>#</th><th>Decision</th><th>Agenda item</th><th>Source</th>{% if items_open %}<th></th>{% endif %}</tr></thead>
+        <tbody>
+        {% for d in decisions %}
+        <tr>
+            <td>{{ d.seq }}</td>
+            <td>
+                {{ d.text }}
+                {% if d.evidence %}<details><summary class="muted">Evidence</summary><blockquote>{{ d.evidence }}</blockquote></details>{% endif %}
+                {% if items_open %}
+                <details><summary class="muted">Edit</summary>
+                    <form action="/meetings/{{ meeting.id }}/decisions/{{ d.id }}/edit" method="post" class="form-grid">
+                        <textarea name="text" rows="3" required minlength="3" aria-label="Decision text">{{ d.text }}</textarea>
+                        <input type="text" name="agenda_item" value="{{ d.agenda_item or '' }}" placeholder="Agenda item" aria-label="Agenda item">
+                        <button type="submit" class="button-secondary">Save</button>
+                    </form>
+                </details>
+                {% endif %}
+            </td>
+            <td>{{ d.agenda_item or '—' }}</td>
+            <td><span class="badge">{{ d.source }}</span></td>
+            {% if items_open %}
+            <td>
+                <form action="/meetings/{{ meeting.id }}/decisions/{{ d.id }}/delete" method="post">
+                    <button type="submit" class="button-ghost">Remove</button>
+                </form>
+            </td>
+            {% endif %}
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No decisions recorded yet.</p>
+    {% endif %}
+
+    {% if actions %}
+    <h3>Actions</h3>
+    <table class="data-table">
+        <thead><tr><th>Action</th><th>Owner</th><th>Due</th><th>Status</th>{% if items_open %}<th></th>{% endif %}</tr></thead>
+        <tbody>
+        {% for a in actions %}
+        <tr>
+            <td>
+                {{ a.description }}
+                {% if a.evidence %}<details><summary class="muted">Evidence</summary><blockquote>{{ a.evidence }}</blockquote></details>{% endif %}
+                {% if items_open %}
+                <details><summary class="muted">Edit</summary>
+                    <form action="/meetings/{{ meeting.id }}/actions/{{ a.id }}/edit" method="post" class="form-grid">
+                        <textarea name="description" rows="2" required minlength="3" aria-label="Action">{{ a.description }}</textarea>
+                        <input type="text" name="owner" value="{{ a.owner or '' }}" placeholder="Owner" aria-label="Owner">
+                        <input type="date" name="due_date" value="{{ a.due_date.isoformat() if a.due_date else '' }}" aria-label="Due date">
+                        <select name="decision_id" aria-label="Linked decision">
+                            <option value="">No linked decision</option>
+                            {% for d in decisions %}<option value="{{ d.id }}"{% if a.decision_id == d.id %} selected{% endif %}>#{{ d.seq }} {{ d.text[:60] }}</option>{% endfor %}
+                        </select>
+                        <button type="submit" class="button-secondary">Save</button>
+                    </form>
+                </details>
+                {% endif %}
+            </td>
+            <td>{{ a.owner or '—' }}</td>
+            <td>{{ a.due_date.isoformat() if a.due_date else '—' }}</td>
+            <td>
+                <form action="/meetings/{{ meeting.id }}/actions/{{ a.id }}/status" method="post" class="inline-form">
+                    <select name="status" aria-label="Status" onchange="this.form.submit()">
+                        {% for s in action_statuses %}<option value="{{ s }}"{% if a.status == s %} selected{% endif %}>{{ s | replace('_', ' ') }}</option>{% endfor %}
+                    </select>
+                    <noscript><button type="submit" class="button-ghost">Update</button></noscript>
+                </form>
+            </td>
+            {% if items_open %}
+            <td>
+                <form action="/meetings/{{ meeting.id }}/actions/{{ a.id }}/delete" method="post">
+                    <button type="submit" class="button-ghost">Remove</button>
+                </form>
+            </td>
+            {% endif %}
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+    {% if items_open %}
+    <div class="sitting-ops-grid" style="margin-top:1rem;">
+        <form action="/meetings/{{ meeting.id }}/decisions" method="post" class="form-grid">
+            <h3>Add decision</h3>
+            <textarea name="text" rows="3" required minlength="3" placeholder="The Board approved…" aria-label="Decision text"></textarea>
+            <input type="text" name="agenda_item" placeholder="Agenda item (optional)" aria-label="Agenda item">
+            <button type="submit" class="button-secondary">Add decision</button>
+        </form>
+        <form action="/meetings/{{ meeting.id }}/actions" method="post" class="form-grid">
+            <h3>Add action</h3>
+            <textarea name="description" rows="2" required minlength="3" placeholder="Prepare…" aria-label="Action"></textarea>
+            <input type="text" name="owner" placeholder="Owner" aria-label="Owner">
+            <input type="date" name="due_date" aria-label="Due date">
+            <select name="decision_id" aria-label="Linked decision">
+                <option value="">No linked decision</option>
+                {% for d in decisions %}<option value="{{ d.id }}">#{{ d.seq }} {{ d.text[:60] }}</option>{% endfor %}
+            </select>
+            <button type="submit" class="button-secondary">Add action</button>
+        </form>
+    </div>
+    {% if mv.body_md and transcript_segments %}
+    <form action="/meetings/{{ meeting.id }}/minutes/extract" method="post" style="margin-top:0.75rem;">
+        <button type="submit" class="button-secondary">Suggest from transcript</button>
     </form>
     {% endif %}
     {% endif %}
@@ -230,6 +454,7 @@
         <thead>
             <tr>
                 <th>Title</th>
+                <th>Archive</th>
                 <th>Uploaded by</th>
                 <th>Uploaded at</th>
                 <th></th>
@@ -239,9 +464,17 @@
             {% for doc in documents %}
             <tr>
                 <td>{{ doc.title }}</td>
+                <td>
+                    {% if doc.archive_doc_id %}
+                    <code>{{ doc.archive_doc_id }}</code>
+                    {% set st = archive_status.get(doc.archive_doc_id) %}
+                    {% if st == 'needs_review' %}<a class="badge badge-warn" href="/review/{{ doc.archive_doc_id }}">needs OCR review</a>
+                    {% elif st %}<span class="badge">{{ st|replace('_', ' ') }}</span>{% endif %}
+                    {% else %}<span class="muted">not archived</span>{% endif %}
+                </td>
                 <td>{{ doc.uploaded_by }}</td>
                 <td>{{ doc.uploaded_at.strftime('%d %b %Y, %H:%M') }}</td>
-                <td class="doc-actions"><a class="button button-secondary" href="/meetings/{{ meeting.id }}/documents/{{ doc.id }}/view">View</a></td>
+                <td class="doc-actions"><a class="button button-secondary" href="/meetings/{{ meeting.id }}/documents/{{ doc.id }}/view">View</a>{% if doc.archive_doc_id %} <a class="button button-secondary" href="/documents/{{ doc.archive_doc_id }}/briefing">Briefing</a>{% endif %}</td>
             </tr>
             {% endfor %}
         </tbody>
@@ -254,7 +487,7 @@
                 <div><dt>By</dt><dd>{{ doc.uploaded_by }}</dd></div>
                 <div><dt>At</dt><dd>{{ doc.uploaded_at.strftime('%d %b %Y, %H:%M') }}</dd></div>
             </dl>
-            <p style="margin-top: 0.75rem;"><a class="button" href="/meetings/{{ meeting.id }}/documents/{{ doc.id }}/view">View document</a></p>
+            <p style="margin-top: 0.75rem;"><a class="button" href="/meetings/{{ meeting.id }}/documents/{{ doc.id }}/view">View document</a>{% if doc.archive_doc_id %} <a class="button button-secondary" href="/documents/{{ doc.archive_doc_id }}/briefing">Briefing</a>{% endif %}</p>
         </article>
         {% endfor %}
     </div>
@@ -270,7 +503,7 @@
             </div>
             <div class="form-group">
                 <label for="doc_file">PDF file</label>
-                <input id="doc_file" type="file" name="file" required />
+                <input id="doc_file" type="file" name="file" required accept="application/pdf,image/png,image/jpeg,image/tiff,.pdf,.png,.jpg,.jpeg,.tif,.tiff" />
             </div>
             <button type="submit">Upload document</button>
         </form>

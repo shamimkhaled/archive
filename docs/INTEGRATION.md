@@ -169,7 +169,7 @@ Keep authorization and audit inside the app core—adapters must not bypass RBAC
 |---|---|---|
 | Document source | `DOCUMENT_SOURCE=local\|sftp` | Inbox drop or SFTP pull (`paramiko` optional) |
 | Customer | `CUSTOMER_PORT=mock\|http` | Allowlisted fields only |
-| Identity | `OIDC_ENABLED` + `OIDC_*` | Local password default; OIDC scaffolding |
+| Identity | `OIDC_*`, `LDAP_*` | Local password by default. OIDC uses code + PKCE with a JWKS-verified ID token; LDAP/AD uses a bind. Both map groups to roles. See `docs/SECURITY_OPERATIONS.md`. |
 | Events | `WEBHOOK_URLS`, `WEBHOOK_SECRET` | `document.indexed` fan-out |
 | Registry | `/api/v1/integrations/health` | Health + circuit breakers |
 

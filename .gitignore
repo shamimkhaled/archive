@@ -1,34 +1,136 @@
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
 __pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+.eggs/
+build/
+/dist/
+pip-wheel-metadata/
+
+# Virtual environments
 .venv/
 venv/
-*.pyc
-*.pyo
-*.pyd
-.DS_Store
+env/
+.python-version
+
+# Test / lint / type-check caches and coverage
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pyre/
+.pytype/
+.hypothesis/
+.tox/
+.nox/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+junit*.xml
+
+# ---------------------------------------------------------------------------
+# Frontend (React PWA — built in the Docker frontend stage)
+# openapi.json, src/api/schema.d.ts and package-lock.json ARE tracked (CI diffs them)
+# ---------------------------------------------------------------------------
+node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/dev-dist/
+frontend/public/pdfjs/
+frontend/coverage/
+frontend/.vite/
+frontend/.vitest/
+frontend/.cache/
+frontend/.ruff_cache/
+frontend/uploaded_pdfs/
+frontend/stats.html
+frontend/vite.config.*.timestamp-*
+frontend/*.local
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+.yarn/
+.npm/
+.eslintcache
+.stylelintcache
+
+# ---------------------------------------------------------------------------
+# Secrets and environment
+# ---------------------------------------------------------------------------
 .env
 .env.*
 !.env.example
-.qdrant/
-.pytest_cache/
-*.egg-info/
-.cursor/
-.claude/
+*.pem
+*.key
+*.p12
+*.pfx
 
+# Monitoring secrets (deploy/observability.compose.yml)
+deploy/prometheus/metrics_token
+deploy/prometheus/alertmanager.yml
 
-# Local upload storage — real board documents, not source code
+# On-prem AI env (the .example template is tracked)
+deploy/onprem/ai.env
+!deploy/onprem/ai.env.example
+
+# ---------------------------------------------------------------------------
+# Runtime data — real board documents and local state, not source code
+# ---------------------------------------------------------------------------
 uploaded_pdfs/
 BCP01.pdf
+audit_exports/
+inbox_drop/
+.qdrant/
+
+# DR backups and drill scratch space (encrypted backups belong in the bank's backup store)
+var/
+
+# Local databases and logs
+*.db
+*.sqlite
+*.sqlite3
+*.log
+logs/
+
+# Benchmark inputs (synthetic or bank samples) stay local; the JSON reports in eval/reports/ are kept as evidence
+eval/benchmarks/*
+!eval/benchmarks/README.md
+
+# Load-test raw CSVs (the capacity-*.json summaries are kept as evidence)
+loadtest/results/*.csv
+
+# ---------------------------------------------------------------------------
+# Deploy leftovers
+# ---------------------------------------------------------------------------
+FLY_DEPLOY.md
+FLY_DEPLOY.md.bak
+*.bak
+*.orig
+*.tmp
+
+# ---------------------------------------------------------------------------
+# Editors, AI assistants and OS files
+# ---------------------------------------------------------------------------
+.cursor/
+.claude/
 claude.md
 cursor.md
-FLY_DEPLOY.md
-
-
-# Deploy / runtime
-FLY_DEPLOY.md.bak
-*.pem
-
-# Claude Code local-only settings (project settings.json is tracked)
-.claude/settings.local.json
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
 
 # graft's local graph cache — regenerable, not committed (run `graft build`).
 graft/

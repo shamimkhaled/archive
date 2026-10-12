@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}Decision register | {{ brand.product_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div class="title-group">
+        <h1>Decision register</h1>
+        <p>Decisions recorded in approved Board minutes that you have access to.</p>
+    </div>
+</div>
+
+<section class="panel">
+    <form method="get" action="/board/decisions" class="inline-form" role="search">
+        <input type="search" name="q" value="{{ q }}" maxlength="200" placeholder="Search decisions" aria-label="Search decisions">
+        <button type="submit" class="button-secondary">Search</button>
+    </form>
+</section>
+
+<section class="panel">
+    {% if entries %}
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead>
+                <tr><th>Meeting</th><th>Decision</th><th>Actions</th><th></th></tr>
+            </thead>
+            <tbody>
+                {% for e in entries %}
+                <tr>
+                    <td>{{ e.meeting_title }}<br><span class="muted">{{ e.meeting_date }}</span></td>
+                    <td>
+                        {% if e.agenda_item %}<span class="muted">{{ e.agenda_item }}</span><br>{% endif %}
+                        {{ e.text }}
+                    </td>
+                    <td>
+                        {% for a in e.actions %}
+                        <div>{{ a.description }}{% if a.owner %} <span class="muted">· {{ a.owner }}</span>{% endif %}{% if a.due_date %} <span class="muted">· due {{ a.due_date }}</span>{% endif %} <span class="badge{% if a.status == 'done' %} badge-accent{% elif a.status == 'open' %} badge-warn{% endif %}">{{ a.status|replace('_', ' ') }}</span></div>
+                        {% else %}<span class="muted">—</span>{% endfor %}
+                    </td>
+                    <td><a class="button button-secondary" href="{{ e.minutes_url }}">Minutes</a></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="muted">{% if q %}No decisions match “{{ q }}”.{% else %}No decisions from approved minutes you can access yet. Ask the Board secretariat for access to past minutes if you need them.{% endif %}</p>
+    {% endif %}
+</section>
+{% endblock %}

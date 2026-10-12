@@ -1,17 +1,12 @@
 import json
 import re
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
-from .config import load_environment, openai_chat_model, resolve_openai_credentials
+from .config import load_environment
 
 load_environment()
-
-try:
-    from openai import OpenAI
-except ImportError:
-    OpenAI = None
 
 
 class DocumentSummary(BaseModel):
@@ -20,6 +15,36 @@ class DocumentSummary(BaseModel):
     major_projects: List[Dict[str, str]] = Field(default_factory=list)
     finance_and_admin: List[str] = Field(default_factory=list)
     searchable_keywords: List[str] = Field(default_factory=list)
+
+
+MAX_MERGED_ITEMS = 40
+
+
+def merge_summaries(parts: List[DocumentSummary]) -> DocumentSummary:
+    """Reduce step for long documents: first non-empty value per core field, de-duplicated lists."""
+    core: Dict[str, Any] = {}
+    for part in parts:
+        for key, value in (part.core_info or {}).items():
+            if value not in (None, "", [], {}) and key not in core:
+                core[key] = value
+
+    def union(items: List[Any]) -> List[Any]:
+        seen, out = set(), []
+        for item in items:
+            key = json.dumps(item, sort_keys=True, ensure_ascii=False).casefold() if not isinstance(item, str) else item.strip().casefold()
+            if item in (None, "", {}) or key in seen:
+                continue
+            seen.add(key)
+            out.append(item)
+        return out[:MAX_MERGED_ITEMS]
+
+    return DocumentSummary(
+        core_info=core,
+        key_personnel=union([p for part in parts for p in part.key_personnel]),
+        major_projects=union([p for part in parts for p in part.major_projects]),
+        finance_and_admin=union([p for part in parts for p in part.finance_and_admin]),
+        searchable_keywords=union([p for part in parts for p in part.searchable_keywords]),
+    )
 
 
 def _strip_code_fence(text: str) -> str:
@@ -109,21 +134,17 @@ def _build_prompt(text: str) -> str:
     )
 
 
-def extract_document_summary(text: str) -> DocumentSummary:
-    if OpenAI is None:
-        raise RuntimeError("The openai package is required to extract document summaries.")
-    api_key, base_url = resolve_openai_credentials()
-    client = OpenAI(api_key=api_key, base_url=base_url) if base_url else OpenAI(api_key=api_key)
-    prompt = _build_prompt(text)
-    response = client.chat.completions.create(
-        model=openai_chat_model(),
-        messages=[
-            {"role": "user", "content": prompt},
-        ],
+def extract_document_summary(text: str, *, sensitivity: Optional[str] = None) -> DocumentSummary:
+    from . import ai
+
+    raw = ai.chat(
+        "summary",
+        [{"role": "user", "content": _build_prompt(text)}],
+        sensitivity=sensitivity,
         temperature=0,
         max_tokens=1500,
+        json_mode=True,
     )
-    raw = response.choices[0].message.content
     payload = _extract_json(raw)
     try:
         parsed = json.loads(payload)

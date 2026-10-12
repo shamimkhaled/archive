@@ -18,7 +18,15 @@ Roles used below: `admin`, `board_secretary`, `uploader`, `board_member`.
 | GET | `/healthz` | No | Liveness |
 | GET | `/readyz` | No | Readiness |
 | GET | `/favicon.ico` | No | Icon |
-| GET | `/sw.js` | No | Service worker |
+| GET | `/sw.js` | No | Service worker (Jinja PWA) |
+| GET | `/app`, `/app/{path}` | No | React PWA shell and assets; client routes fall back to `index.html` ([FRONTEND.md](FRONTEND.md)) |
+| GET | `/api/app/session` | Cookie | Username, role, screen permissions, enabled rollout screens |
+| GET | `/api/app/documents/{doc_id}` | Cookie | Viewer payload (metadata, file URL, download/versions/briefing flags); audited as `view` |
+| GET | `/api/app/meetings/{id}` | Cookie | Meeting, papers, agenda; organizers get the minutes workflow, invitees only approved minutes |
+| GET | `/api/review/{doc_id}?v=` | Cookie (reviewer) | OCR text per page and metadata to confirm; audited as `verify_open` |
+
+Form routes answer JSON instead of a 303 when the request carries `X-BCP-Client: spa`:
+`{ok, status, error, redirect}`, with HTTP 409 for refusals (locked, four-eyes, input, failed).
 
 ---
 
@@ -207,7 +215,20 @@ Privileged archive bypass for trusted automation: scope `docs:search:privileged`
 
 Outbound event: `document.indexed` (HMAC-signed webhooks via `WEBHOOK_URLS`).
 
-OIDC scaffolding: `GET /auth/oidc/start`, `GET /auth/oidc/callback` when `OIDC_ENABLED=1`.
+Single sign-on, when `OIDC_ENABLED=1`:
+- `GET /auth/oidc/start` begins an authorization-code flow with PKCE and a nonce.
+- `GET /auth/oidc/callback` verifies the ID token against the IdP JWKS, then maps groups to roles.
+
+With `LDAP_ENABLED=1`, `POST /login` and `POST /token` bind against Active Directory. See `docs/SECURITY_OPERATIONS.md`.
+
+### Security administration (Phase 8, admin only)
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/admin/security/status` | Unsealed audit rows, chain tip, SIEM cursor, identity configuration |
+| POST | `/api/admin/audit/verify` | Recompute and walk the audit hash chain; reports the first broken row |
+
+Rate-limited routes return `429` with `Retry-After`. See `RATE_LIMIT_*` in `.env.example`.
 
 ### Ask Sonali + HITL + facades (Phase 3)
 

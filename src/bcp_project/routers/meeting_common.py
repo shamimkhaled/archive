@@ -1,14 +1,19 @@
 """Shared meeting helpers used by meetings and board routers."""
 from __future__ import annotations
 
+import logging
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
-from fastapi import HTTPException, UploadFile, status
+from fastapi import HTTPException, Request, UploadFile, status
 from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..access_control import write_audit
+from ..brand import BRAND
+from ..deps import _client_ip, _load_stored_pdf_bytes
+from ..pdf_delivery import is_initial_request, pdf_response, stamped_pdf
 from ..dummy_transcription import (
     TRANSCRIPTION_OFF,
     transcription_payload,
@@ -16,6 +21,8 @@ from ..dummy_transcription import (
 from ..meeting_audio import list_chunk_paths
 from ..minutes_draft import MINUTES_OFF, minutes_payload
 from ..models import BoardMeeting, MeetingDocument, MeetingInvitation, User
+
+logger = logging.getLogger("bcp_project.routers.meeting_common")
 
 
 async def _load_meeting_or_404(meeting_id: int, db: AsyncSession) -> BoardMeeting:
@@ -31,18 +38,28 @@ def _meeting_transcription_status(meeting: BoardMeeting) -> str:
     return (meeting.transcription_status or TRANSCRIPTION_OFF).strip() or TRANSCRIPTION_OFF
 
 
-def _minutes_view(meeting: BoardMeeting) -> Dict[str, Any]:
-    return minutes_payload(
+def _minutes_view(meeting: BoardMeeting, username: Optional[str] = None) -> Dict[str, Any]:
+    from ..services.minutes import workflow_view
+
+    payload = minutes_payload(
         (meeting.minutes_status or MINUTES_OFF).strip() or MINUTES_OFF,
         meeting.minutes_draft,
         generated_at=meeting.minutes_generated_at,
         source=meeting.minutes_source,
     )
+    payload["workflow"] = workflow_view(meeting, username)
+    return payload
 
 
 def _transcription_view(meeting: BoardMeeting, *, include_segments: bool) -> Dict[str, Any]:
     segments = list(meeting.transcription_json or [])
     is_dummy = any(bool(line.get("dummy")) for line in segments) if segments else False
+    minutes = _minutes_view(meeting)
+    if not include_segments:
+        # Invitees get progress only; minutes text is read from the archive once approved.
+        minutes = {k: v for k, v in minutes.items() if k not in {"body_md", "workflow"}}
+        minutes["state"] = meeting.minutes_state or "draft"
+        minutes["doc_id"] = meeting.minutes_doc_id if meeting.minutes_state == "approved" else None
     return transcription_payload(
         _meeting_transcription_status(meeting),
         segments,
@@ -53,7 +70,7 @@ def _transcription_view(meeting: BoardMeeting, *, include_segments: bool) -> Dic
         dummy=is_dummy,
         chunk_count=len(list_chunk_paths(meeting.id)),
         phase="c",
-        minutes=_minutes_view(meeting),
+        minutes=minutes,
     )
 
 
@@ -90,18 +107,38 @@ def _meeting_document_filename(document: MeetingDocument) -> str:
     return f"{safe_title}{suffix}"
 
 
-def _serve_meeting_document_file(document: MeetingDocument, stamped_pdf: bytes) -> Response:
-    filename = _meeting_document_filename(document)
-    return Response(
-        content=stamped_pdf,
-        media_type="application/pdf",
-        headers={
-            "Content-Disposition": f'inline; filename="{filename}"',
-            "Cache-Control": "no-store",
-            "X-Content-Type-Options": "nosniff",
-            "X-Robots-Tag": "noindex, nofollow",
-        },
-    )
+async def _stream_meeting_document(
+    request: Request,
+    db: AsyncSession,
+    document: MeetingDocument,
+    meeting_id: int,
+    username: str,
+) -> Response:
+    """Watermarked, range-capable stream of a meeting paper; audited once per view."""
+    key = ("meeting_doc", document.id, document.file_location, username)
+    try:
+        stamped = await stamped_pdf(
+            key,
+            lambda: _load_stored_pdf_bytes(document.file_location, resource_id=f"meeting_document:{document.id}"),
+            BRAND.seal_meeting_doc(username),
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Watermark stamping failed for meeting document %s", document.id)
+        raise HTTPException(status_code=502, detail="Could not prepare secure meeting document stream") from exc
+    if is_initial_request(request):
+        await write_audit(
+            db,
+            username=username,
+            action="view_file",
+            resource_type="meeting_document",
+            resource_id=str(document.id),
+            detail=f"meeting_id={meeting_id}",
+            ip_address=_client_ip(request),
+            commit=True,
+        )
+    return pdf_response(request, stamped, filename=_meeting_document_filename(document))
 
 
 def _validate_pdf_upload(upload: UploadFile) -> None:

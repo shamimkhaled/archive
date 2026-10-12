@@ -1,0 +1,7034 @@
+{
+ "components": {
+  "schemas": {
+   "AccessMode": {
+    "enum": [
+     "view_only",
+     "download"
+    ],
+    "title": "AccessMode",
+    "type": "string"
+   },
+   "Body_add_action_meetings__meeting_id__actions_post": {
+    "properties": {
+     "decision_id": {
+      "default": "",
+      "title": "Decision Id",
+      "type": "string"
+     },
+     "description": {
+      "maxLength": 4000,
+      "minLength": 3,
+      "title": "Description",
+      "type": "string"
+     },
+     "due_date": {
+      "default": "",
+      "title": "Due Date",
+      "type": "string"
+     },
+     "owner": {
+      "default": "",
+      "title": "Owner",
+      "type": "string"
+     }
+    },
+    "required": [
+     "description"
+    ],
+    "title": "Body_add_action_meetings__meeting_id__actions_post",
+    "type": "object"
+   },
+   "Body_add_decision_meetings__meeting_id__decisions_post": {
+    "properties": {
+     "agenda_item": {
+      "default": "",
+      "title": "Agenda Item",
+      "type": "string"
+     },
+     "text": {
+      "maxLength": 4000,
+      "minLength": 3,
+      "title": "Text",
+      "type": "string"
+     }
+    },
+    "required": [
+     "text"
+    ],
+    "title": "Body_add_decision_meetings__meeting_id__decisions_post",
+    "type": "object"
+   },
+   "Body_admin_ai_reject_change_admin_ai_changes__change_id__reject_post": {
+    "properties": {
+     "note": {
+      "default": "",
+      "title": "Note",
+      "type": "string"
+     }
+    },
+    "title": "Body_admin_ai_reject_change_admin_ai_changes__change_id__reject_post",
+    "type": "object"
+   },
+   "Body_admin_ai_set_route_admin_ai_route_post": {
+    "properties": {
+     "model": {
+      "title": "Model",
+      "type": "string"
+     },
+     "notes": {
+      "default": "",
+      "title": "Notes",
+      "type": "string"
+     },
+     "provider": {
+      "title": "Provider",
+      "type": "string"
+     },
+     "task": {
+      "title": "Task",
+      "type": "string"
+     }
+    },
+    "required": [
+     "task",
+     "provider",
+     "model"
+    ],
+    "title": "Body_admin_ai_set_route_admin_ai_route_post",
+    "type": "object"
+   },
+   "Body_admin_create_user_admin_users_post": {
+    "properties": {
+     "email": {
+      "default": "",
+      "title": "Email",
+      "type": "string"
+     },
+     "notifications_enabled": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Notifications Enabled"
+     },
+     "password": {
+      "default": "",
+      "title": "Password",
+      "type": "string"
+     },
+     "role": {
+      "default": "",
+      "title": "Role",
+      "type": "string"
+     },
+     "username": {
+      "default": "",
+      "title": "Username",
+      "type": "string"
+     }
+    },
+    "title": "Body_admin_create_user_admin_users_post",
+    "type": "object"
+   },
+   "Body_admin_retention_approve_admin_retention_disposals__disposal_id__approve_post": {
+    "properties": {
+     "note": {
+      "default": "",
+      "title": "Note",
+      "type": "string"
+     }
+    },
+    "title": "Body_admin_retention_approve_admin_retention_disposals__disposal_id__approve_post",
+    "type": "object"
+   },
+   "Body_admin_retention_hold_admin_retention_holds_post": {
+    "properties": {
+     "action": {
+      "default": "set",
+      "title": "Action",
+      "type": "string"
+     },
+     "doc_id": {
+      "title": "Doc Id",
+      "type": "string"
+     },
+     "reason": {
+      "default": "",
+      "title": "Reason",
+      "type": "string"
+     }
+    },
+    "required": [
+     "doc_id"
+    ],
+    "title": "Body_admin_retention_hold_admin_retention_holds_post",
+    "type": "object"
+   },
+   "Body_admin_retention_propose_admin_retention_disposals_post": {
+    "properties": {
+     "doc_id": {
+      "title": "Doc Id",
+      "type": "string"
+     },
+     "reason": {
+      "default": "",
+      "title": "Reason",
+      "type": "string"
+     }
+    },
+    "required": [
+     "doc_id"
+    ],
+    "title": "Body_admin_retention_propose_admin_retention_disposals_post",
+    "type": "object"
+   },
+   "Body_admin_retention_reject_admin_retention_disposals__disposal_id__reject_post": {
+    "properties": {
+     "note": {
+      "default": "",
+      "title": "Note",
+      "type": "string"
+     }
+    },
+    "title": "Body_admin_retention_reject_admin_retention_disposals__disposal_id__reject_post",
+    "type": "object"
+   },
+   "Body_admin_retention_set_rule_admin_retention_rules_post": {
+    "properties": {
+     "authority": {
+      "default": "",
+      "title": "Authority",
+      "type": "string"
+     },
+     "doc_type": {
+      "title": "Doc Type",
+      "type": "string"
+     },
+     "retain_years": {
+      "default": "",
+      "title": "Retain Years",
+      "type": "string"
+     },
+     "trigger": {
+      "default": "doc_date",
+      "title": "Trigger",
+      "type": "string"
+     }
+    },
+    "required": [
+     "doc_type"
+    ],
+    "title": "Body_admin_retention_set_rule_admin_retention_rules_post",
+    "type": "object"
+   },
+   "Body_admin_update_user_admin_users__user_id__update_post": {
+    "properties": {
+     "email": {
+      "default": "",
+      "title": "Email",
+      "type": "string"
+     },
+     "is_active": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Is Active"
+     },
+     "new_password": {
+      "default": "",
+      "title": "New Password",
+      "type": "string"
+     },
+     "notifications_enabled": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Notifications Enabled"
+     },
+     "role": {
+      "title": "Role",
+      "type": "string"
+     },
+     "username": {
+      "default": "",
+      "title": "Username",
+      "type": "string"
+     }
+    },
+    "required": [
+     "role"
+    ],
+    "title": "Body_admin_update_user_admin_users__user_id__update_post",
+    "type": "object"
+   },
+   "Body_amend_minutes_meetings__meeting_id__minutes_amend_post": {
+    "properties": {
+     "reason": {
+      "default": "",
+      "title": "Reason",
+      "type": "string"
+     }
+    },
+    "title": "Body_amend_minutes_meetings__meeting_id__minutes_amend_post",
+    "type": "object"
+   },
+   "Body_api_create_access_request_api_documents__doc_id__access_requests_post": {
+    "properties": {
+     "purpose": {
+      "title": "Purpose",
+      "type": "string"
+     },
+     "requested_mode": {
+      "$ref": "#/components/schemas/AccessMode",
+      "default": "view_only"
+     }
+    },
+    "required": [
+     "purpose"
+    ],
+    "title": "Body_api_create_access_request_api_documents__doc_id__access_requests_post",
+    "type": "object"
+   },
+   "Body_create_access_request_access_requests_post": {
+    "properties": {
+     "doc_id": {
+      "title": "Doc Id",
+      "type": "string"
+     },
+     "purpose": {
+      "title": "Purpose",
+      "type": "string"
+     },
+     "requested_mode": {
+      "$ref": "#/components/schemas/AccessMode"
+     }
+    },
+    "required": [
+     "doc_id",
+     "purpose",
+     "requested_mode"
+    ],
+    "title": "Body_create_access_request_access_requests_post",
+    "type": "object"
+   },
+   "Body_create_meeting_meetings_post": {
+    "properties": {
+     "agenda": {
+      "default": "",
+      "title": "Agenda",
+      "type": "string"
+     },
+     "invitees": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Invitees",
+      "type": "array"
+     },
+     "location": {
+      "default": "",
+      "title": "Location",
+      "type": "string"
+     },
+     "notifications_enabled": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Notifications Enabled"
+     },
+     "scheduled_at": {
+      "title": "Scheduled At",
+      "type": "string"
+     },
+     "title": {
+      "maxLength": 200,
+      "minLength": 3,
+      "title": "Title",
+      "type": "string"
+     }
+    },
+    "required": [
+     "title",
+     "scheduled_at"
+    ],
+    "title": "Body_create_meeting_meetings_post",
+    "type": "object"
+   },
+   "Body_edit_action_meetings__meeting_id__actions__action_id__edit_post": {
+    "properties": {
+     "decision_id": {
+      "default": "",
+      "title": "Decision Id",
+      "type": "string"
+     },
+     "description": {
+      "maxLength": 4000,
+      "minLength": 3,
+      "title": "Description",
+      "type": "string"
+     },
+     "due_date": {
+      "default": "",
+      "title": "Due Date",
+      "type": "string"
+     },
+     "owner": {
+      "default": "",
+      "title": "Owner",
+      "type": "string"
+     }
+    },
+    "required": [
+     "description"
+    ],
+    "title": "Body_edit_action_meetings__meeting_id__actions__action_id__edit_post",
+    "type": "object"
+   },
+   "Body_edit_briefing_section_documents__doc_id__briefing_sections__key__post": {
+    "properties": {
+     "text": {
+      "default": "",
+      "title": "Text",
+      "type": "string"
+     }
+    },
+    "title": "Body_edit_briefing_section_documents__doc_id__briefing_sections__key__post",
+    "type": "object"
+   },
+   "Body_edit_decision_meetings__meeting_id__decisions__decision_id__edit_post": {
+    "properties": {
+     "agenda_item": {
+      "default": "",
+      "title": "Agenda Item",
+      "type": "string"
+     },
+     "text": {
+      "maxLength": 4000,
+      "minLength": 3,
+      "title": "Text",
+      "type": "string"
+     }
+    },
+    "required": [
+     "text"
+    ],
+    "title": "Body_edit_decision_meetings__meeting_id__decisions__decision_id__edit_post",
+    "type": "object"
+   },
+   "Body_ingest_document_api_documents_ingest_post": {
+    "properties": {
+     "category": {
+      "default": "",
+      "title": "Category",
+      "type": "string"
+     },
+     "department": {
+      "default": "",
+      "title": "Department",
+      "type": "string"
+     },
+     "doc_date": {
+      "title": "Doc Date",
+      "type": "string"
+     },
+     "doc_id": {
+      "title": "Doc Id",
+      "type": "string"
+     },
+     "doc_type": {
+      "title": "Doc Type",
+      "type": "string"
+     },
+     "file": {
+      "contentMediaType": "application/octet-stream",
+      "title": "File",
+      "type": "string"
+     },
+     "keywords": {
+      "default": "",
+      "title": "Keywords",
+      "type": "string"
+     },
+     "reference_number": {
+      "default": "",
+      "title": "Reference Number",
+      "type": "string"
+     },
+     "sensitivity": {
+      "default": "internal",
+      "title": "Sensitivity",
+      "type": "string"
+     },
+     "subject": {
+      "default": "",
+      "title": "Subject",
+      "type": "string"
+     },
+     "title": {
+      "default": "",
+      "title": "Title",
+      "type": "string"
+     }
+    },
+    "required": [
+     "doc_date",
+     "doc_id",
+     "doc_type",
+     "file"
+    ],
+    "title": "Body_ingest_document_api_documents_ingest_post",
+    "type": "object"
+   },
+   "Body_login_login_post": {
+    "properties": {
+     "password": {
+      "title": "Password",
+      "type": "string"
+     },
+     "username": {
+      "title": "Username",
+      "type": "string"
+     }
+    },
+    "required": [
+     "username",
+     "password"
+    ],
+    "title": "Body_login_login_post",
+    "type": "object"
+   },
+   "Body_mfa_setup_confirm_login_mfa_setup_post": {
+    "properties": {
+     "code": {
+      "title": "Code",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code"
+    ],
+    "title": "Body_mfa_setup_confirm_login_mfa_setup_post",
+    "type": "object"
+   },
+   "Body_mfa_verify_login_mfa_post": {
+    "properties": {
+     "code": {
+      "title": "Code",
+      "type": "string"
+     }
+    },
+    "required": [
+     "code"
+    ],
+    "title": "Body_mfa_verify_login_mfa_post",
+    "type": "object"
+   },
+   "Body_reject_minutes_meetings__meeting_id__minutes_reject_post": {
+    "properties": {
+     "note": {
+      "default": "",
+      "title": "Note",
+      "type": "string"
+     }
+    },
+    "title": "Body_reject_minutes_meetings__meeting_id__minutes_reject_post",
+    "type": "object"
+   },
+   "Body_reopen_briefing_documents__doc_id__briefing_reopen_post": {
+    "properties": {
+     "reason": {
+      "default": "",
+      "title": "Reason",
+      "type": "string"
+     }
+    },
+    "title": "Body_reopen_briefing_documents__doc_id__briefing_reopen_post",
+    "type": "object"
+   },
+   "Body_return_briefing_documents__doc_id__briefing_return_post": {
+    "properties": {
+     "note": {
+      "default": "",
+      "title": "Note",
+      "type": "string"
+     }
+    },
+    "title": "Body_return_briefing_documents__doc_id__briefing_return_post",
+    "type": "object"
+   },
+   "Body_review_access_request_admin_access_requests__request_id__review_post": {
+    "properties": {
+     "decision": {
+      "title": "Decision",
+      "type": "string"
+     },
+     "grant_days": {
+      "default": 7,
+      "title": "Grant Days",
+      "type": "integer"
+     },
+     "review_note": {
+      "default": "",
+      "title": "Review Note",
+      "type": "string"
+     }
+    },
+    "required": [
+     "decision"
+    ],
+    "title": "Body_review_access_request_admin_access_requests__request_id__review_post",
+    "type": "object"
+   },
+   "Body_save_meeting_minutes_meetings__meeting_id__minutes_post": {
+    "properties": {
+     "body_md": {
+      "title": "Body Md",
+      "type": "string"
+     }
+    },
+    "required": [
+     "body_md"
+    ],
+    "title": "Body_save_meeting_minutes_meetings__meeting_id__minutes_post",
+    "type": "object"
+   },
+   "Body_sign_meeting_attendance_board_meetings__meeting_id__attendance_post": {
+    "properties": {
+     "signature": {
+      "title": "Signature",
+      "type": "string"
+     }
+    },
+    "required": [
+     "signature"
+    ],
+    "title": "Body_sign_meeting_attendance_board_meetings__meeting_id__attendance_post",
+    "type": "object"
+   },
+   "Body_token_token_post": {
+    "properties": {
+     "client_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Client Id"
+     },
+     "client_secret": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "format": "password",
+      "title": "Client Secret"
+     },
+     "grant_type": {
+      "anyOf": [
+       {
+        "pattern": "^password$",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Grant Type"
+     },
+     "password": {
+      "format": "password",
+      "title": "Password",
+      "type": "string"
+     },
+     "scope": {
+      "default": "",
+      "title": "Scope",
+      "type": "string"
+     },
+     "username": {
+      "title": "Username",
+      "type": "string"
+     }
+    },
+    "required": [
+     "username",
+     "password"
+    ],
+    "title": "Body_token_token_post",
+    "type": "object"
+   },
+   "Body_update_action_status_meetings__meeting_id__actions__action_id__status_post": {
+    "properties": {
+     "status": {
+      "title": "Status",
+      "type": "string"
+     }
+    },
+    "required": [
+     "status"
+    ],
+    "title": "Body_update_action_status_meetings__meeting_id__actions__action_id__status_post",
+    "type": "object"
+   },
+   "Body_update_meeting_agenda_meetings__meeting_id__agenda_post": {
+    "properties": {
+     "agenda": {
+      "title": "Agenda",
+      "type": "string"
+     },
+     "notify_invitees": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Notify Invitees"
+     }
+    },
+    "required": [
+     "agenda"
+    ],
+    "title": "Body_update_meeting_agenda_meetings__meeting_id__agenda_post",
+    "type": "object"
+   },
+   "Body_update_meeting_notifications_meetings__meeting_id__notifications_post": {
+    "properties": {
+     "notifications_enabled": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Notifications Enabled"
+     }
+    },
+    "title": "Body_update_meeting_notifications_meetings__meeting_id__notifications_post",
+    "type": "object"
+   },
+   "Body_upload_document_stream_api_upload_stream_post": {
+    "properties": {
+     "category": {
+      "default": "",
+      "title": "Category",
+      "type": "string"
+     },
+     "department": {
+      "default": "",
+      "title": "Department",
+      "type": "string"
+     },
+     "doc_date": {
+      "title": "Doc Date",
+      "type": "string"
+     },
+     "doc_id": {
+      "title": "Doc Id",
+      "type": "string"
+     },
+     "doc_type": {
+      "title": "Doc Type",
+      "type": "string"
+     },
+     "file": {
+      "contentMediaType": "application/octet-stream",
+      "title": "File",
+      "type": "string"
+     },
+     "keywords": {
+      "default": "",
+      "title": "Keywords",
+      "type": "string"
+     },
+     "reference_number": {
+      "default": "",
+      "title": "Reference Number",
+      "type": "string"
+     },
+     "sensitivity": {
+      "default": "internal",
+      "title": "Sensitivity",
+      "type": "string"
+     },
+     "subject": {
+      "default": "",
+      "title": "Subject",
+      "type": "string"
+     },
+     "title": {
+      "default": "",
+      "title": "Title",
+      "type": "string"
+     }
+    },
+    "required": [
+     "doc_date",
+     "doc_id",
+     "doc_type",
+     "file"
+    ],
+    "title": "Body_upload_document_stream_api_upload_stream_post",
+    "type": "object"
+   },
+   "Body_upload_document_upload_post": {
+    "properties": {
+     "category": {
+      "default": "",
+      "title": "Category",
+      "type": "string"
+     },
+     "department": {
+      "default": "",
+      "title": "Department",
+      "type": "string"
+     },
+     "doc_date": {
+      "title": "Doc Date",
+      "type": "string"
+     },
+     "doc_id": {
+      "title": "Doc Id",
+      "type": "string"
+     },
+     "doc_type": {
+      "title": "Doc Type",
+      "type": "string"
+     },
+     "file": {
+      "contentMediaType": "application/octet-stream",
+      "title": "File",
+      "type": "string"
+     },
+     "keywords": {
+      "default": "",
+      "title": "Keywords",
+      "type": "string"
+     },
+     "reference_number": {
+      "default": "",
+      "title": "Reference Number",
+      "type": "string"
+     },
+     "sensitivity": {
+      "default": "internal",
+      "title": "Sensitivity",
+      "type": "string"
+     },
+     "subject": {
+      "default": "",
+      "title": "Subject",
+      "type": "string"
+     },
+     "title": {
+      "default": "",
+      "title": "Title",
+      "type": "string"
+     }
+    },
+    "required": [
+     "doc_date",
+     "doc_id",
+     "doc_type",
+     "file"
+    ],
+    "title": "Body_upload_document_upload_post",
+    "type": "object"
+   },
+   "Body_upload_document_version_api_documents__doc_id__versions_post": {
+    "properties": {
+     "file": {
+      "contentMediaType": "application/octet-stream",
+      "title": "File",
+      "type": "string"
+     },
+     "note": {
+      "default": "",
+      "title": "Note",
+      "type": "string"
+     }
+    },
+    "required": [
+     "file"
+    ],
+    "title": "Body_upload_document_version_api_documents__doc_id__versions_post",
+    "type": "object"
+   },
+   "Body_upload_meeting_document_meetings__meeting_id__documents_post": {
+    "properties": {
+     "file": {
+      "contentMediaType": "application/octet-stream",
+      "title": "File",
+      "type": "string"
+     },
+     "title": {
+      "maxLength": 255,
+      "minLength": 1,
+      "title": "Title",
+      "type": "string"
+     }
+    },
+    "required": [
+     "title",
+     "file"
+    ],
+    "title": "Body_upload_meeting_document_meetings__meeting_id__documents_post",
+    "type": "object"
+   },
+   "Body_upload_meeting_recording_meetings__meeting_id__recording_post": {
+    "properties": {
+     "file": {
+      "contentMediaType": "application/octet-stream",
+      "title": "File",
+      "type": "string"
+     }
+    },
+    "required": [
+     "file"
+    ],
+    "title": "Body_upload_meeting_recording_meetings__meeting_id__recording_post",
+    "type": "object"
+   },
+   "Body_upload_transcription_chunk_api_meetings__meeting_id__transcription_chunks_post": {
+    "properties": {
+     "chunk": {
+      "contentMediaType": "application/octet-stream",
+      "title": "Chunk",
+      "type": "string"
+     },
+     "seq": {
+      "title": "Seq",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "seq",
+     "chunk"
+    ],
+    "title": "Body_upload_transcription_chunk_api_meetings__meeting_id__transcription_chunks_post",
+    "type": "object"
+   },
+   "HTTPValidationError": {
+    "properties": {
+     "detail": {
+      "items": {
+       "$ref": "#/components/schemas/ValidationError"
+      },
+      "title": "Detail",
+      "type": "array"
+     }
+    },
+    "title": "HTTPValidationError",
+    "type": "object"
+   },
+   "ValidationError": {
+    "properties": {
+     "ctx": {
+      "title": "Context",
+      "type": "object"
+     },
+     "input": {
+      "title": "Input"
+     },
+     "loc": {
+      "items": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "integer"
+        }
+       ]
+      },
+      "title": "Location",
+      "type": "array"
+     },
+     "msg": {
+      "title": "Message",
+      "type": "string"
+     },
+     "type": {
+      "title": "Error Type",
+      "type": "string"
+     }
+    },
+    "required": [
+     "loc",
+     "msg",
+     "type"
+    ],
+    "title": "ValidationError",
+    "type": "object"
+   }
+  }
+ },
+ "info": {
+  "title": "Sonali Bank Archive System",
+  "version": "0.1.0"
+ },
+ "openapi": "3.1.0",
+ "paths": {
+  "/": {
+   "get": {
+    "operationId": "read_root__get",
+    "responses": {
+     "200": {
+      "content": {
+       "text/html": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Read Root"
+   }
+  },
+  "/access-requests": {
+   "get": {
+    "operationId": "my_access_requests_page_access_requests_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "status",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Status"
+      }
+     },
+     {
+      "in": "query",
+      "name": "error",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Error"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "text/html": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "My Access Requests Page"
+   },
+   "post": {
+    "operationId": "create_access_request_access_requests_post",
+    "requestBody": {
+     "content": {
+      "application/x-www-form-urlencoded": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_create_access_request_access_requests_post"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Create Access Request"
+   }
+  },
+  "/admin/access-requests": {
+   "get": {
+    "operationId": "review_access_requests_page_admin_access_requests_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "status_filter",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Status Filter"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "text/html": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Review Access Requests Page"
+   }
+  },
+  "/admin/access-requests/{request_id}/review": {
+   "post": {
+    "operationId": "review_access_request_admin_access_requests__request_id__review_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "request_id",
+      "required": true,
+      "schema": {
+       "title": "Request Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/x-www-form-urlencoded": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_review_access_request_admin_access_requests__request_id__review_post"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Review Access Request"
+   }
+  },
+  "/admin/ai": {
+   "get": {
+    "operationId": "admin_ai_page_admin_ai_get",
+    "responses": {
+     "200": {
+      "content": {
+       "text/html": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Admin Ai Page"
+   }
+  },
+  "/admin/ai/changes/{change_id}/approve": {
+   "post": {
+    "operationId": "admin_ai_approve_change_admin_ai_changes__change_id__approve_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "change_id",
+      "required": true,
+      "schema": {
+       "title": "Change Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Admin Ai Approve Change"
+   }
+  },
+  "/admin/ai/changes/{change_id}/reject": {
+   "post": {
+    "operationId": "admin_ai_reject_change_admin_ai_changes__change_id__reject_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "change_id",
+      "required": true,
+      "schema": {
+       "title": "Change Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/x-www-form-urlencoded": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_admin_ai_reject_change_admin_ai_changes__change_id__reject_post"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Admin Ai Reject Change"
+   }
+  },
+  "/admin/ai/history/{entry_id}/activate": {
+   "post": {
+    "description": "Roll back by re-activating an earlier registry row as a new activation.",
+    "operationId": "admin_ai_rollback_admin_ai_history__entry_id__activate_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "entry_id",
+      "required": true,
+      "schema": {
+       "title": "Entry Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Admin Ai Rollback"
+   }
+  },
+  "/admin/ai/route": {
+   "post": {
+    "operationId": "admin_ai_set_route_admin_ai_route_post",
+    "requestBody": {
+     "content": {
+      "application/x-www-form-urlencoded": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_admin_ai_set_route_admin_ai_route_post"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Admin Ai Set Route"
+   }
+  },
+  "/admin/ai/route/{task}/reset": {
+   "post": {
+    "operationId": "admin_ai_reset_route_admin_ai_route__task__reset_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "task",
+      "required": true,
+      "schema": {
+       "title": "Task",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Admin Ai Reset Route"
+   }
+  },
+  "/admin/queues": {
+   "get": {
+    "operationId": "admin_queues_page_admin_queues_get",
+    "responses": {
+     "200": {
+      "content": {
+       "text/html": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Admin Queues Page"
+   }
+  },
+  "/admin/queues/dead/{entry_id}/retry": {
+   "post": {
+    "operationId": "admin_retry_dead_letter_admin_queues_dead__entry_id__retry_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "entry_id",
+      "required": true,
+      "schema": {
+       "title": "Entry Id",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Admin Retry Dead Letter"
+   }
+  },
+  "/admin/retention": {
+   "get": {
+    "operationId": "admin_retention_page_admin_retention_get",
+    "responses": {
+     "200": {
+      "content": {
+       "text/html": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Admin Retention Page"
+   }
+  },
+  "/admin/retention/disposals": {
+   "post": {
+    "operationId": "admin_retention_propose_admin_retention_disposals_post",
+    "requestBody": {
+     "content": {
+      "application/x-www-form-urlencoded": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_admin_retention_propose_admin_retention_disposals_post"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Admin Retention Propose"
+   }
+  },
+  "/admin/retention/disposals/{disposal_id}/approve": {
+   "post": {
+    "operationId": "admin_retention_approve_admin_retention_disposals__disposal_id__approve_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "disposal_id",
+      "required": true,
+      "schema": {
+       "title": "Disposal Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/x-www-form-urlencoded": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_admin_retention_approve_admin_retention_disposals__disposal_id__approve_post"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Admin Retention Approve"
+   }
+  },
+  "/admin/retention/disposals/{disposal_id}/reject": {
+   "post": {
+    "operationId": "admin_retention_reject_admin_retention_disposals__disposal_id__reject_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "disposal_id",
+      "required": true,
+      "schema": {
+       "title": "Disposal Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/x-www-form-urlencoded": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_admin_retention_reject_admin_retention_disposals__disposal_id__reject_post"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Admin Retention Reject"
+   }
+  },
+  "/admin/retention/holds": {
+   "post": {
+    "operationId": "admin_retention_hold_admin_retention_holds_post",
+    "requestBody": {
+     "content": {
+      "application/x-www-form-urlencoded": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_admin_retention_hold_admin_retention_holds_post"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Admin Retention Hold"
+   }
+  },
+  "/admin/retention/rules": {
+   "post": {
+    "operationId": "admin_retention_set_rule_admin_retention_rules_post",
+    "requestBody": {
+     "content": {
+      "application/x-www-form-urlencoded": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_admin_retention_set_rule_admin_retention_rules_post"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Admin Retention Set Rule"
+   }
+  },
+  "/admin/retention/rules/{rule_id}/delete": {
+   "post": {
+    "operationId": "admin_retention_delete_rule_admin_retention_rules__rule_id__delete_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "rule_id",
+      "required": true,
+      "schema": {
+       "title": "Rule Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Admin Retention Delete Rule"
+   }
+  },
+  "/admin/users": {
+   "get": {
+    "operationId": "admin_users_page_admin_users_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "status",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Status"
+      }
+     },
+     {
+      "in": "query",
+      "name": "error",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Error"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "text/html": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Admin Users Page"
+   },
+   "post": {
+    "operationId": "admin_create_user_admin_users_post",
+    "requestBody": {
+     "content": {
+      "application/x-www-form-urlencoded": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_admin_create_user_admin_users_post"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Admin Create User"
+   }
+  },
+  "/admin/users/{user_id}/delete": {
+   "post": {
+    "operationId": "admin_delete_user_admin_users__user_id__delete_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "user_id",
+      "required": true,
+      "schema": {
+       "title": "User Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Admin Delete User"
+   }
+  },
+  "/admin/users/{user_id}/mfa/reset": {
+   "post": {
+    "description": "Lost authenticator: the user re-enrols at next sign-in.",
+    "operationId": "admin_reset_user_mfa_admin_users__user_id__mfa_reset_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "user_id",
+      "required": true,
+      "schema": {
+       "title": "User Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Admin Reset User Mfa"
+   }
+  },
+  "/admin/users/{user_id}/update": {
+   "post": {
+    "operationId": "admin_update_user_admin_users__user_id__update_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "user_id",
+      "required": true,
+      "schema": {
+       "title": "User Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/x-www-form-urlencoded": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_admin_update_user_admin_users__user_id__update_post"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Admin Update User"
+   }
+  },
+  "/api/admin/ai": {
+   "get": {
+    "operationId": "api_admin_ai_api_admin_ai_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "title": "Response Api Admin Ai Api Admin Ai Get",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Api Admin Ai"
+   }
+  },
+  "/api/admin/audit/verify": {
+   "post": {
+    "description": "Recompute every sealed row's hash and walk the chain from genesis (read-only, may take seconds).",
+    "operationId": "api_verify_audit_chain_api_admin_audit_verify_post",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "title": "Response Api Verify Audit Chain Api Admin Audit Verify Post",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Api Verify Audit Chain"
+   }
+  },
+  "/api/admin/queues": {
+   "get": {
+    "operationId": "api_admin_queues_api_admin_queues_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "title": "Response Api Admin Queues Api Admin Queues Get",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Api Admin Queues"
+   }
+  },
+  "/api/admin/retention": {
+   "get": {
+    "operationId": "api_admin_retention_api_admin_retention_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "title": "Response Api Admin Retention Api Admin Retention Get",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Api Admin Retention"
+   }
+  },
+  "/api/admin/security/status": {
+   "get": {
+    "operationId": "api_security_status_api_admin_security_status_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "title": "Response Api Security Status Api Admin Security Status Get",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Api Security Status"
+   }
+  },
+  "/api/app/documents/{doc_id}": {
+   "get": {
+    "description": "What the viewer page renders around the PDF; audited as a view like /view/{doc_id}.",
+    "operationId": "app_document_api_app_documents__doc_id__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "doc_id",
+      "required": true,
+      "schema": {
+       "title": "Doc Id",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "title": "Response App Document Api App Documents  Doc Id  Get",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "App Document"
+   }
+  },
+  "/api/app/meetings/{meeting_id}": {
+   "get": {
+    "description": "Organizers get the minutes workflow; invitees get the meeting, its papers, and approved minutes only.",
+    "operationId": "app_meeting_api_app_meetings__meeting_id__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "meeting_id",
+      "required": true,
+      "schema": {
+       "title": "Meeting Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "title": "Response App Meeting Api App Meetings  Meeting Id  Get",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "App Meeting"
+   }
+  },
+  "/api/app/session": {
+   "get": {
+    "operationId": "app_session_api_app_session_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "title": "Response App Session Api App Session Get",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "App Session"
+   }
+  },
+  "/api/archive/documents": {
+   "get": {
+    "description": "Search-first document picker — paginated for large archives (10k+).",
+    "operationId": "archive_documents_api_archive_documents_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "q",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Q"
+      }
+     },
+     {
+      "in": "query",
+      "name": "doc_type",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Doc Type"
+      }
+     },
+     {
+      "in": "query",
+      "name": "year",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Year"
+      }
+     },
+     {
+      "in": "query",
+      "name": "limit",
+      "required": false,
+      "schema": {
+       "default": 40,
+       "title": "Limit",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "query",
+      "name": "offset",
+      "required": false,
+      "schema": {
+       "default": 0,
+       "title": "Offset",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "title": "Response Archive Documents Api Archive Documents Get"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Archive Documents"
+   }
+  },
+  "/api/archive/graph": {
+   "get": {
+    "description": "Focus-centric mind map. Never 502s: Qdrant timeouts degrade to keyword links.",
+    "operationId": "archive_graph_api_archive_graph_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "limit",
+      "required": false,
+      "schema": {
+       "default": 16,
+       "title": "Limit",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "query",
+      "name": "min_similarity",
+      "required": false,
+      "schema": {
+       "default": 0.68,
+       "title": "Min Similarity",
+       "type": "number"
+      }
+     },
+     {
+      "in": "query",
+      "name": "focus",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Focus"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "title": "Response Archive Graph Api Archive Graph Get"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Archive Graph"
+   }
+  },
+  "/api/decisions": {
+   "get": {
+    "operationId": "decisions_api_api_decisions_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "q",
+      "required": false,
+      "schema": {
+       "default": "",
+       "title": "Q",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Decisions Api"
+   }
+  },
+  "/api/document-types": {
+   "get": {
+    "description": "Suggested + previously used document types (dynamic catalog).",
+    "operationId": "api_document_types_api_document_types_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "title": "Response Api Document Types Api Document Types Get",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Api Document Types"
+   }
+  },
+  "/api/documents/ingest": {
+   "post": {
+    "operationId": "ingest_document_api_documents_ingest_post",
+    "requestBody": {
+     "content": {
+      "multipart/form-data": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_ingest_document_api_documents_ingest_post"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "202": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Ingest Document"
+   }
+  },
+  "/api/documents/next-id": {
+   "get": {
+    "description": "Suggest the next unique Document ID (SB-YYYY-NNN). Editable before upload.",
+    "operationId": "api_next_document_id_api_documents_next_id_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "year",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Year"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "title": "Response Api Next Document Id Api Documents Next Id Get",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Api Next Document Id"
+   }
+  },
+  "/api/documents/{doc_id}/access-requests": {
+   "post": {
+    "operationId": "api_create_access_request_api_documents__doc_id__access_requests_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "doc_id",
+      "required": true,
+      "schema": {
+       "title": "Doc Id",
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/x-www-form-urlencoded": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_api_create_access_request_api_documents__doc_id__access_requests_post"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "title": "Response Api Create Access Request Api Documents  Doc Id  Access Requests Post"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Api Create Access Request"
+   }
+  },
+  "/api/documents/{doc_id}/briefing": {
+   "get": {
+    "description": "`refs=1` is the full page payload (the React briefing screen); it is audited like the HTML page.",
+    "operationId": "briefing_api_api_documents__doc_id__briefing_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "doc_id",
+      "required": true,
+      "schema": {
+       "title": "Doc Id",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "refs",
+      "required": false,
+      "schema": {
+       "default": false,
+       "title": "Refs",
+       "type": "boolean"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Briefing Api"
+   }
+  },
+  "/api/documents/{doc_id}/ingest/retry": {
+   "post": {
+    "operationId": "retry_document_ingest_api_documents__doc_id__ingest_retry_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "doc_id",
+      "required": true,
+      "schema": {
+       "title": "Doc Id",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "202": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "title": "Response Retry Document Ingest Api Documents  Doc Id  Ingest Retry Post",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Retry Document Ingest"
+   }
+  },
+  "/api/documents/{doc_id}/related": {
+   "get": {
+    "operationId": "document_related_api_documents__doc_id__related_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "doc_id",
+      "required": true,
+      "schema": {
+       "title": "Doc Id",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "limit",
+      "required": false,
+      "schema": {
+       "default": 12,
+       "title": "Limit",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "query",
+      "name": "min_similarity",
+      "required": false,
+      "schema": {
+       "default": 0.68,
+       "title": "Min Similarity",
+       "type": "number"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "title": "Response Document Related Api Documents  Doc Id  Related Get"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Document Related"
+   }
+  },
+  "/api/documents/{doc_id}/status": {
+   "get": {
+    "operationId": "document_ingest_status_api_documents__doc_id__status_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "doc_id",
+      "required": true,
+      "schema": {
+       "title": "Doc Id",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "title": "Response Document Ingest Status Api Documents  Doc Id  Status Get",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Document Ingest Status"
+   }
+  },
+  "/api/documents/{doc_id}/versions": {
+   "get": {
+    "operationId": "document_versions_api_documents__doc_id__versions_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "doc_id",
+      "required": true,
+      "schema": {
+       "title": "Doc Id",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "title": "Response Document Versions Api Documents  Doc Id  Versions Get",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Document Versions"
+   },
+   "post": {
+    "operationId": "upload_document_version_api_documents__doc_id__versions_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "doc_id",
+      "required": true,
+      "schema": {
+       "title": "Doc Id",
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "multipart/form-data": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_upload_document_version_api_documents__doc_id__versions_post"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "202": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Upload Document Version"
+   }
+  },
+  "/api/documents/{doc_id}/versions/{version}/verify": {
+   "get": {
+    "description": "Re-read the stored original and compare its SHA-256 with the recorded hash.",
+    "operationId": "verify_document_version_api_documents__doc_id__versions__version__verify_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "doc_id",
+      "required": true,
+      "schema": {
+       "title": "Doc Id",
+       "type": "string"
+      }
+     },
+     {
+      "in": "path",
+      "name": "version",
+      "required": true,
+      "schema": {
+       "title": "Version",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "title": "Response Verify Document Version Api Documents  Doc Id  Versions  Version  Verify Get",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Verify Document Version"
+   }
+  },
+  "/api/meetings/{meeting_id}/minutes": {
+   "get": {
+    "operationId": "meeting_minutes_api_api_meetings__meeting_id__minutes_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "meeting_id",
+      "required": true,
+      "schema": {
+       "title": "Meeting Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Meeting Minutes Api"
+   }
+  },
+  "/api/meetings/{meeting_id}/minutes/workflow": {
+   "get": {
+    "operationId": "minutes_workflow_api_api_meetings__meeting_id__minutes_workflow_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "meeting_id",
+      "required": true,
+      "schema": {
+       "title": "Meeting Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Minutes Workflow Api"
+   }
+  },
+  "/api/meetings/{meeting_id}/transcription": {
+   "get": {
+    "operationId": "meeting_transcription_api_api_meetings__meeting_id__transcription_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "meeting_id",
+      "required": true,
+      "schema": {
+       "title": "Meeting Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Meeting Transcription Api"
+   }
+  },
+  "/api/meetings/{meeting_id}/transcription/chunks": {
+   "post": {
+    "operationId": "upload_transcription_chunk_api_meetings__meeting_id__transcription_chunks_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "meeting_id",
+      "required": true,
+      "schema": {
+       "title": "Meeting Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "multipart/form-data": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_upload_transcription_chunk_api_meetings__meeting_id__transcription_chunks_post"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Upload Transcription Chunk"
+   }
+  },
+  "/api/notifications": {
+   "get": {
+    "operationId": "list_notifications_api_notifications_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "title": "Response List Notifications Api Notifications Get"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "List Notifications"
+   }
+  },
+  "/api/notifications/read": {
+   "post": {
+    "operationId": "mark_notifications_read_api_notifications_read_post",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "title": "Response Mark Notifications Read Api Notifications Read Post"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Mark Notifications Read"
+   }
+  },
+  "/api/review": {
+   "get": {
+    "operationId": "api_review_queue_api_review_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "title": "Response Api Review Queue Api Review Get",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Api Review Queue"
+   }
+  },
+  "/api/review/{doc_id}": {
+   "get": {
+    "description": "What the verification screen needs: OCR text per page, metadata to confirm, and whether this user may act.",
+    "operationId": "api_review_detail_api_review__doc_id__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "doc_id",
+      "required": true,
+      "schema": {
+       "title": "Doc Id",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "v",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "V"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "title": "Response Api Review Detail Api Review  Doc Id  Get",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Api Review Detail"
+   }
+  },
+  "/api/search": {
+   "get": {
+    "description": "Hybrid search (summary vectors + page chunks + keywords) under the caller's ACL and filters.",
+    "operationId": "search_documents_api_search_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "q",
+      "required": true,
+      "schema": {
+       "title": "Q",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "lang",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Lang"
+      }
+     },
+     {
+      "in": "query",
+      "name": "department",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Department"
+      }
+     },
+     {
+      "in": "query",
+      "name": "category",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Category"
+      }
+     },
+     {
+      "in": "query",
+      "name": "doc_type",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Doc Type"
+      }
+     },
+     {
+      "in": "query",
+      "name": "reference_number",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Reference Number"
+      }
+     },
+     {
+      "in": "query",
+      "name": "date_from",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Date From"
+      }
+     },
+     {
+      "in": "query",
+      "name": "date_to",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Date To"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "title": "Response Search Documents Api Search Get"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Search Documents"
+   }
+  },
+  "/api/search/facets": {
+   "get": {
+    "description": "Distinct confirmed metadata values for the search filter dropdowns.",
+    "operationId": "search_facets_api_search_facets_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "title": "Response Search Facets Api Search Facets Get",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Search Facets"
+   }
+  },
+  "/api/search/metadata": {
+   "get": {
+    "operationId": "search_documents_by_metadata_api_search_metadata_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "doc_id",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Doc Id"
+      }
+     },
+     {
+      "in": "query",
+      "name": "doc_type",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Doc Type"
+      }
+     },
+     {
+      "in": "query",
+      "name": "uploaded_by",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Uploaded By"
+      }
+     },
+     {
+      "in": "query",
+      "name": "date_from",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Date From"
+      }
+     },
+     {
+      "in": "query",
+      "name": "date_to",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Date To"
+      }
+     },
+     {
+      "in": "query",
+      "name": "department",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Department"
+      }
+     },
+     {
+      "in": "query",
+      "name": "category",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Category"
+      }
+     },
+     {
+      "in": "query",
+      "name": "reference_number",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Reference Number"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "title": "Response Search Documents By Metadata Api Search Metadata Get"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Search Documents By Metadata"
+   }
+  },
+  "/api/upload/stream": {
+   "post": {
+    "description": "NDJSON progress stream for the in-request pipeline (used when no job worker runs).",
+    "operationId": "upload_document_stream_api_upload_stream_post",
+    "requestBody": {
+     "content": {
+      "multipart/form-data": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_upload_document_stream_api_upload_stream_post"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Upload Document Stream"
+   }
+  },
+  "/api/v1/ask": {
+   "post": {
+    "operationId": "v1_ask_sonali_api_v1_ask_post",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "title": "Response V1 Ask Sonali Api V1 Ask Post"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "V1 Ask Sonali",
+    "tags": [
+     "api-v1"
+    ]
+   }
+  },
+  "/api/v1/connectors/document-source/pull": {
+   "post": {
+    "operationId": "v1_pull_document_source_api_v1_connectors_document_source_pull_post",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "limit",
+      "required": false,
+      "schema": {
+       "default": 20,
+       "maximum": 100,
+       "minimum": 1,
+       "title": "Limit",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "title": "Response V1 Pull Document Source Api V1 Connectors Document Source Pull Post"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "V1 Pull Document Source",
+    "tags": [
+     "api-v1"
+    ]
+   }
+  },
+  "/api/v1/customers/{customer_ref}": {
+   "get": {
+    "operationId": "v1_customer_summary_api_v1_customers__customer_ref__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "customer_ref",
+      "required": true,
+      "schema": {
+       "title": "Customer Ref",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "title": "Response V1 Customer Summary Api V1 Customers  Customer Ref  Get"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "V1 Customer Summary",
+    "tags": [
+     "api-v1"
+    ]
+   }
+  },
+  "/api/v1/documents/search": {
+   "get": {
+    "operationId": "v1_search_documents_api_v1_documents_search_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "q",
+      "required": true,
+      "schema": {
+       "minLength": 1,
+       "title": "Q",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "lang",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Lang"
+      }
+     },
+     {
+      "in": "query",
+      "name": "limit",
+      "required": false,
+      "schema": {
+       "default": 20,
+       "maximum": 50,
+       "minimum": 1,
+       "title": "Limit",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "query",
+      "name": "department",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Department"
+      }
+     },
+     {
+      "in": "query",
+      "name": "category",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Category"
+      }
+     },
+     {
+      "in": "query",
+      "name": "doc_type",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Doc Type"
+      }
+     },
+     {
+      "in": "query",
+      "name": "reference_number",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Reference Number"
+      }
+     },
+     {
+      "in": "query",
+      "name": "date_from",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Date From"
+      }
+     },
+     {
+      "in": "query",
+      "name": "date_to",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Date To"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "title": "Response V1 Search Documents Api V1 Documents Search Get"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "V1 Search Documents",
+    "tags": [
+     "api-v1"
+    ]
+   }
+  },
+  "/api/v1/documents/{doc_id}": {
+   "get": {
+    "operationId": "v1_document_metadata_api_v1_documents__doc_id__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "doc_id",
+      "required": true,
+      "schema": {
+       "title": "Doc Id",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "title": "Response V1 Document Metadata Api V1 Documents  Doc Id  Get"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "V1 Document Metadata",
+    "tags": [
+     "api-v1"
+    ]
+   }
+  },
+  "/api/v1/documents/{doc_id}/status": {
+   "get": {
+    "operationId": "v1_document_status_api_v1_documents__doc_id__status_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "doc_id",
+      "required": true,
+      "schema": {
+       "title": "Doc Id",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "title": "Response V1 Document Status Api V1 Documents  Doc Id  Status Get"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "V1 Document Status",
+    "tags": [
+     "api-v1"
+    ]
+   }
+  },
+  "/api/v1/hitl/requests": {
+   "get": {
+    "operationId": "v1_list_hitl_requests_api_v1_hitl_requests_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "title": "Response V1 List Hitl Requests Api V1 Hitl Requests Get"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "V1 List Hitl Requests",
+    "tags": [
+     "api-v1"
+    ]
+   },
+   "post": {
+    "operationId": "v1_create_hitl_request_api_v1_hitl_requests_post",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "title": "Response V1 Create Hitl Request Api V1 Hitl Requests Post"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "V1 Create Hitl Request",
+    "tags": [
+     "api-v1"
+    ]
+   }
+  },
+  "/api/v1/hitl/requests/{request_id}/review": {
+   "post": {
+    "operationId": "v1_review_hitl_request_api_v1_hitl_requests__request_id__review_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "request_id",
+      "required": true,
+      "schema": {
+       "title": "Request Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "title": "Response V1 Review Hitl Request Api V1 Hitl Requests  Request Id  Review Post"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "V1 Review Hitl Request",
+    "tags": [
+     "api-v1"
+    ]
+   }
+  },
+  "/api/v1/hr/employees/{employee_id}": {
+   "get": {
+    "operationId": "v1_hr_summary_api_v1_hr_employees__employee_id__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "employee_id",
+      "required": true,
+      "schema": {
+       "title": "Employee Id",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "title": "Response V1 Hr Summary Api V1 Hr Employees  Employee Id  Get"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "V1 Hr Summary",
+    "tags": [
+     "api-v1"
+    ]
+   }
+  },
+  "/api/v1/integrations/health": {
+   "get": {
+    "operationId": "v1_integrations_health_api_v1_integrations_health_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "title": "Response V1 Integrations Health Api V1 Integrations Health Get"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "V1 Integrations Health",
+    "tags": [
+     "api-v1"
+    ]
+   }
+  },
+  "/api/v1/loans/{loan_ref}": {
+   "get": {
+    "operationId": "v1_loan_summary_api_v1_loans__loan_ref__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "loan_ref",
+      "required": true,
+      "schema": {
+       "title": "Loan Ref",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "title": "Response V1 Loan Summary Api V1 Loans  Loan Ref  Get"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "V1 Loan Summary",
+    "tags": [
+     "api-v1"
+    ]
+   }
+  },
+  "/api/v1/mcp/tools": {
+   "get": {
+    "operationId": "v1_list_mcp_tools_api_v1_mcp_tools_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "title": "Response V1 List Mcp Tools Api V1 Mcp Tools Get"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "V1 List Mcp Tools",
+    "tags": [
+     "api-v1"
+    ]
+   }
+  },
+  "/api/v1/mcp/tools/{tool_name}": {
+   "post": {
+    "operationId": "v1_invoke_mcp_tool_api_v1_mcp_tools__tool_name__post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "tool_name",
+      "required": true,
+      "schema": {
+       "title": "Tool Name",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "title": "Response V1 Invoke Mcp Tool Api V1 Mcp Tools  Tool Name  Post"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "V1 Invoke Mcp Tool",
+    "tags": [
+     "api-v1"
+    ]
+   }
+  },
+  "/api/v1/meetings": {
+   "get": {
+    "operationId": "v1_list_meetings_api_v1_meetings_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "limit",
+      "required": false,
+      "schema": {
+       "default": 20,
+       "maximum": 50,
+       "minimum": 1,
+       "title": "Limit",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "title": "Response V1 List Meetings Api V1 Meetings Get"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "V1 List Meetings",
+    "tags": [
+     "api-v1"
+    ]
+   }
+  },
+  "/api/v1/metrics": {
+   "get": {
+    "operationId": "v1_metrics_api_v1_metrics_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "title": "Response V1 Metrics Api V1 Metrics Get"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "V1 Metrics",
+    "tags": [
+     "api-v1"
+    ]
+   }
+  },
+  "/appearance": {
+   "get": {
+    "operationId": "appearance_page_appearance_get",
+    "responses": {
+     "200": {
+      "content": {
+       "text/html": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Appearance Page"
+   }
+  },
+  "/archive/map": {
+   "get": {
+    "operationId": "archive_map_page_archive_map_get",
+    "responses": {
+     "200": {
+      "content": {
+       "text/html": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Archive Map Page"
+   }
+  },
+  "/ask": {
+   "get": {
+    "operationId": "ask_page_ask_get",
+    "responses": {
+     "200": {
+      "content": {
+       "text/html": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Ask Page"
+   }
+  },
+  "/auth/oidc/callback": {
+   "get": {
+    "description": "Exchange the code (with the PKCE verifier), verify the ID token, then map it to a local user.",
+    "operationId": "oidc_callback_auth_oidc_callback_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "code",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Code"
+      }
+     },
+     {
+      "in": "query",
+      "name": "state",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "State"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Oidc Callback"
+   }
+  },
+  "/auth/oidc/start": {
+   "get": {
+    "operationId": "oidc_start_auth_oidc_start_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Oidc Start"
+   }
+  },
+  "/board/decisions": {
+   "get": {
+    "operationId": "decisions_page_board_decisions_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "q",
+      "required": false,
+      "schema": {
+       "default": "",
+       "title": "Q",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "text/html": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Decisions Page"
+   }
+  },
+  "/board/meetings": {
+   "get": {
+    "operationId": "board_meetings_list_board_meetings_get",
+    "responses": {
+     "200": {
+      "content": {
+       "text/html": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Board Meetings List"
+   }
+  },
+  "/board/meetings/{meeting_id}": {
+   "get": {
+    "operationId": "board_meeting_detail_board_meetings__meeting_id__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "meeting_id",
+      "required": true,
+      "schema": {
+       "title": "Meeting Id",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "query",
+      "name": "status",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Status"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "text/html": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Board Meeting Detail"
+   }
+  },
+  "/board/meetings/{meeting_id}/attendance": {
+   "post": {
+    "operationId": "sign_meeting_attendance_board_meetings__meeting_id__attendance_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "meeting_id",
+      "required": true,
+      "schema": {
+       "title": "Meeting Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/x-www-form-urlencoded": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_sign_meeting_attendance_board_meetings__meeting_id__attendance_post"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Sign Meeting Attendance"
+   }
+  },
+  "/board/meetings/{meeting_id}/documents/{document_id}/file": {
+   "get": {
+    "operationId": "board_meeting_document_file_board_meetings__meeting_id__documents__document_id__file_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "meeting_id",
+      "required": true,
+      "schema": {
+       "title": "Meeting Id",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "path",
+      "name": "document_id",
+      "required": true,
+      "schema": {
+       "title": "Document Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Board Meeting Document File"
+   }
+  },
+  "/board/meetings/{meeting_id}/documents/{document_id}/view": {
+   "get": {
+    "operationId": "board_meeting_document_view_board_meetings__meeting_id__documents__document_id__view_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "meeting_id",
+      "required": true,
+      "schema": {
+       "title": "Meeting Id",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "path",
+      "name": "document_id",
+      "required": true,
+      "schema": {
+       "title": "Document Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "text/html": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Board Meeting Document View"
+   }
+  },
+  "/documents/{doc_id}/briefing": {
+   "get": {
+    "operationId": "briefing_page_documents__doc_id__briefing_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "doc_id",
+      "required": true,
+      "schema": {
+       "title": "Doc Id",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "text/html": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Briefing Page"
+   }
+  },
+  "/documents/{doc_id}/briefing/approve": {
+   "post": {
+    "operationId": "approve_briefing_documents__doc_id__briefing_approve_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "doc_id",
+      "required": true,
+      "schema": {
+       "title": "Doc Id",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Approve Briefing"
+   }
+  },
+  "/documents/{doc_id}/briefing/generate": {
+   "post": {
+    "operationId": "generate_briefing_route_documents__doc_id__briefing_generate_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "doc_id",
+      "required": true,
+      "schema": {
+       "title": "Doc Id",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Generate Briefing Route"
+   }
+  },
+  "/documents/{doc_id}/briefing/reopen": {
+   "post": {
+    "operationId": "reopen_briefing_documents__doc_id__briefing_reopen_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "doc_id",
+      "required": true,
+      "schema": {
+       "title": "Doc Id",
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/x-www-form-urlencoded": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_reopen_briefing_documents__doc_id__briefing_reopen_post"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Reopen Briefing"
+   }
+  },
+  "/documents/{doc_id}/briefing/return": {
+   "post": {
+    "operationId": "return_briefing_documents__doc_id__briefing_return_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "doc_id",
+      "required": true,
+      "schema": {
+       "title": "Doc Id",
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/x-www-form-urlencoded": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_return_briefing_documents__doc_id__briefing_return_post"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Return Briefing"
+   }
+  },
+  "/documents/{doc_id}/briefing/review": {
+   "post": {
+    "operationId": "review_briefing_documents__doc_id__briefing_review_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "doc_id",
+      "required": true,
+      "schema": {
+       "title": "Doc Id",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Review Briefing"
+   }
+  },
+  "/documents/{doc_id}/briefing/sections/{key}": {
+   "post": {
+    "operationId": "edit_briefing_section_documents__doc_id__briefing_sections__key__post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "doc_id",
+      "required": true,
+      "schema": {
+       "title": "Doc Id",
+       "type": "string"
+      }
+     },
+     {
+      "in": "path",
+      "name": "key",
+      "required": true,
+      "schema": {
+       "title": "Key",
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/x-www-form-urlencoded": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_edit_briefing_section_documents__doc_id__briefing_sections__key__post"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Edit Briefing Section"
+   }
+  },
+  "/documents/{doc_id}/versions": {
+   "get": {
+    "operationId": "document_versions_page_documents__doc_id__versions_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "doc_id",
+      "required": true,
+      "schema": {
+       "title": "Doc Id",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "text/html": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Document Versions Page"
+   }
+  },
+  "/download/{doc_id}": {
+   "get": {
+    "operationId": "download_document_download__doc_id__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "doc_id",
+      "required": true,
+      "schema": {
+       "title": "Doc Id",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Download Document"
+   }
+  },
+  "/healthz": {
+   "get": {
+    "operationId": "healthz_healthz_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": {
+          "type": "string"
+         },
+         "title": "Response Healthz Healthz Get",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Healthz"
+   }
+  },
+  "/login": {
+   "get": {
+    "operationId": "login_page_login_get",
+    "responses": {
+     "200": {
+      "content": {
+       "text/html": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Login Page"
+   },
+   "post": {
+    "operationId": "login_login_post",
+    "requestBody": {
+     "content": {
+      "application/x-www-form-urlencoded": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_login_login_post"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Login"
+   }
+  },
+  "/login/mfa": {
+   "get": {
+    "operationId": "mfa_verify_page_login_mfa_get",
+    "responses": {
+     "200": {
+      "content": {
+       "text/html": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Mfa Verify Page"
+   },
+   "post": {
+    "operationId": "mfa_verify_login_mfa_post",
+    "requestBody": {
+     "content": {
+      "application/x-www-form-urlencoded": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_mfa_verify_login_mfa_post"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "title": "Response Mfa Verify Login Mfa Post"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Mfa Verify"
+   }
+  },
+  "/login/mfa/setup": {
+   "get": {
+    "operationId": "mfa_setup_page_login_mfa_setup_get",
+    "responses": {
+     "200": {
+      "content": {
+       "text/html": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Mfa Setup Page"
+   },
+   "post": {
+    "operationId": "mfa_setup_confirm_login_mfa_setup_post",
+    "requestBody": {
+     "content": {
+      "application/x-www-form-urlencoded": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_mfa_setup_confirm_login_mfa_setup_post"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "text/html": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Mfa Setup Confirm"
+   }
+  },
+  "/logout": {
+   "get": {
+    "operationId": "logout_logout_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Logout"
+   }
+  },
+  "/meetings": {
+   "get": {
+    "operationId": "list_meetings_meetings_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "status",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Status"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "text/html": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "List Meetings"
+   },
+   "post": {
+    "operationId": "create_meeting_meetings_post",
+    "requestBody": {
+     "content": {
+      "application/x-www-form-urlencoded": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_create_meeting_meetings_post"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Create Meeting"
+   }
+  },
+  "/meetings/new": {
+   "get": {
+    "operationId": "new_meeting_page_meetings_new_get",
+    "responses": {
+     "200": {
+      "content": {
+       "text/html": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "New Meeting Page"
+   }
+  },
+  "/meetings/{meeting_id}": {
+   "get": {
+    "operationId": "meeting_detail_meetings__meeting_id__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "meeting_id",
+      "required": true,
+      "schema": {
+       "title": "Meeting Id",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "query",
+      "name": "status",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Status"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "text/html": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Meeting Detail"
+   }
+  },
+  "/meetings/{meeting_id}/actions": {
+   "post": {
+    "operationId": "add_action_meetings__meeting_id__actions_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "meeting_id",
+      "required": true,
+      "schema": {
+       "title": "Meeting Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/x-www-form-urlencoded": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_add_action_meetings__meeting_id__actions_post"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Add Action"
+   }
+  },
+  "/meetings/{meeting_id}/actions/{action_id}/delete": {
+   "post": {
+    "operationId": "delete_action_meetings__meeting_id__actions__action_id__delete_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "meeting_id",
+      "required": true,
+      "schema": {
+       "title": "Meeting Id",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "path",
+      "name": "action_id",
+      "required": true,
+      "schema": {
+       "title": "Action Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Delete Action"
+   }
+  },
+  "/meetings/{meeting_id}/actions/{action_id}/edit": {
+   "post": {
+    "operationId": "edit_action_meetings__meeting_id__actions__action_id__edit_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "meeting_id",
+      "required": true,
+      "schema": {
+       "title": "Meeting Id",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "path",
+      "name": "action_id",
+      "required": true,
+      "schema": {
+       "title": "Action Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/x-www-form-urlencoded": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_edit_action_meetings__meeting_id__actions__action_id__edit_post"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Edit Action"
+   }
+  },
+  "/meetings/{meeting_id}/actions/{action_id}/status": {
+   "post": {
+    "description": "Progress tracking stays open after approval; it does not change what was decided.",
+    "operationId": "update_action_status_meetings__meeting_id__actions__action_id__status_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "meeting_id",
+      "required": true,
+      "schema": {
+       "title": "Meeting Id",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "path",
+      "name": "action_id",
+      "required": true,
+      "schema": {
+       "title": "Action Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/x-www-form-urlencoded": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_update_action_status_meetings__meeting_id__actions__action_id__status_post"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Update Action Status"
+   }
+  },
+  "/meetings/{meeting_id}/agenda": {
+   "post": {
+    "operationId": "update_meeting_agenda_meetings__meeting_id__agenda_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "meeting_id",
+      "required": true,
+      "schema": {
+       "title": "Meeting Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/x-www-form-urlencoded": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_update_meeting_agenda_meetings__meeting_id__agenda_post"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Update Meeting Agenda"
+   }
+  },
+  "/meetings/{meeting_id}/attendance/close": {
+   "post": {
+    "operationId": "close_meeting_attendance_meetings__meeting_id__attendance_close_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "meeting_id",
+      "required": true,
+      "schema": {
+       "title": "Meeting Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Close Meeting Attendance"
+   }
+  },
+  "/meetings/{meeting_id}/attendance/open": {
+   "post": {
+    "operationId": "open_meeting_attendance_meetings__meeting_id__attendance_open_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "meeting_id",
+      "required": true,
+      "schema": {
+       "title": "Meeting Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Open Meeting Attendance"
+   }
+  },
+  "/meetings/{meeting_id}/attendance/print": {
+   "get": {
+    "operationId": "print_meeting_attendance_meetings__meeting_id__attendance_print_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "meeting_id",
+      "required": true,
+      "schema": {
+       "title": "Meeting Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "text/html": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Print Meeting Attendance"
+   }
+  },
+  "/meetings/{meeting_id}/attendance/{username}/signature": {
+   "get": {
+    "operationId": "meeting_attendance_signature_meetings__meeting_id__attendance__username__signature_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "meeting_id",
+      "required": true,
+      "schema": {
+       "title": "Meeting Id",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "path",
+      "name": "username",
+      "required": true,
+      "schema": {
+       "title": "Username",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Meeting Attendance Signature"
+   }
+  },
+  "/meetings/{meeting_id}/decisions": {
+   "post": {
+    "operationId": "add_decision_meetings__meeting_id__decisions_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "meeting_id",
+      "required": true,
+      "schema": {
+       "title": "Meeting Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/x-www-form-urlencoded": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_add_decision_meetings__meeting_id__decisions_post"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Add Decision"
+   }
+  },
+  "/meetings/{meeting_id}/decisions/{decision_id}/delete": {
+   "post": {
+    "operationId": "delete_decision_meetings__meeting_id__decisions__decision_id__delete_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "meeting_id",
+      "required": true,
+      "schema": {
+       "title": "Meeting Id",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "path",
+      "name": "decision_id",
+      "required": true,
+      "schema": {
+       "title": "Decision Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Delete Decision"
+   }
+  },
+  "/meetings/{meeting_id}/decisions/{decision_id}/edit": {
+   "post": {
+    "operationId": "edit_decision_meetings__meeting_id__decisions__decision_id__edit_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "meeting_id",
+      "required": true,
+      "schema": {
+       "title": "Meeting Id",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "path",
+      "name": "decision_id",
+      "required": true,
+      "schema": {
+       "title": "Decision Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/x-www-form-urlencoded": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_edit_decision_meetings__meeting_id__decisions__decision_id__edit_post"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Edit Decision"
+   }
+  },
+  "/meetings/{meeting_id}/documents": {
+   "post": {
+    "description": "Meeting papers are archived like any upload: write-once original, OCR, review, search.",
+    "operationId": "upload_meeting_document_meetings__meeting_id__documents_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "meeting_id",
+      "required": true,
+      "schema": {
+       "title": "Meeting Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "multipart/form-data": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_upload_meeting_document_meetings__meeting_id__documents_post"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Upload Meeting Document"
+   }
+  },
+  "/meetings/{meeting_id}/documents/{document_id}/file": {
+   "get": {
+    "operationId": "meeting_document_file_meetings__meeting_id__documents__document_id__file_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "meeting_id",
+      "required": true,
+      "schema": {
+       "title": "Meeting Id",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "path",
+      "name": "document_id",
+      "required": true,
+      "schema": {
+       "title": "Document Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Meeting Document File"
+   }
+  },
+  "/meetings/{meeting_id}/documents/{document_id}/view": {
+   "get": {
+    "operationId": "meeting_document_view_meetings__meeting_id__documents__document_id__view_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "meeting_id",
+      "required": true,
+      "schema": {
+       "title": "Meeting Id",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "path",
+      "name": "document_id",
+      "required": true,
+      "schema": {
+       "title": "Document Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "text/html": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Meeting Document View"
+   }
+  },
+  "/meetings/{meeting_id}/minutes": {
+   "post": {
+    "operationId": "save_meeting_minutes_meetings__meeting_id__minutes_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "meeting_id",
+      "required": true,
+      "schema": {
+       "title": "Meeting Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/x-www-form-urlencoded": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_save_meeting_minutes_meetings__meeting_id__minutes_post"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Save Meeting Minutes"
+   }
+  },
+  "/meetings/{meeting_id}/minutes/amend": {
+   "post": {
+    "operationId": "amend_minutes_meetings__meeting_id__minutes_amend_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "meeting_id",
+      "required": true,
+      "schema": {
+       "title": "Meeting Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/x-www-form-urlencoded": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_amend_minutes_meetings__meeting_id__minutes_amend_post"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Amend Minutes"
+   }
+  },
+  "/meetings/{meeting_id}/minutes/approve": {
+   "post": {
+    "description": "Lock the minutes, archive them as a write-once PDF version, and index the approved text.",
+    "operationId": "approve_minutes_meetings__meeting_id__minutes_approve_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "meeting_id",
+      "required": true,
+      "schema": {
+       "title": "Meeting Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Approve Minutes"
+   }
+  },
+  "/meetings/{meeting_id}/minutes/extract": {
+   "post": {
+    "description": "Suggest decisions and actions from the draft; each must quote the transcript.",
+    "operationId": "extract_minutes_items_meetings__meeting_id__minutes_extract_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "meeting_id",
+      "required": true,
+      "schema": {
+       "title": "Meeting Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Extract Minutes Items"
+   }
+  },
+  "/meetings/{meeting_id}/minutes/regenerate": {
+   "post": {
+    "operationId": "regenerate_meeting_minutes_meetings__meeting_id__minutes_regenerate_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "meeting_id",
+      "required": true,
+      "schema": {
+       "title": "Meeting Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Regenerate Meeting Minutes"
+   }
+  },
+  "/meetings/{meeting_id}/minutes/reject": {
+   "post": {
+    "operationId": "reject_minutes_meetings__meeting_id__minutes_reject_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "meeting_id",
+      "required": true,
+      "schema": {
+       "title": "Meeting Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/x-www-form-urlencoded": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_reject_minutes_meetings__meeting_id__minutes_reject_post"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Reject Minutes"
+   }
+  },
+  "/meetings/{meeting_id}/minutes/submit": {
+   "post": {
+    "operationId": "submit_minutes_meetings__meeting_id__minutes_submit_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "meeting_id",
+      "required": true,
+      "schema": {
+       "title": "Meeting Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Submit Minutes"
+   }
+  },
+  "/meetings/{meeting_id}/notifications": {
+   "post": {
+    "operationId": "update_meeting_notifications_meetings__meeting_id__notifications_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "meeting_id",
+      "required": true,
+      "schema": {
+       "title": "Meeting Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/x-www-form-urlencoded": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_update_meeting_notifications_meetings__meeting_id__notifications_post"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Update Meeting Notifications"
+   }
+  },
+  "/meetings/{meeting_id}/notifications/resend": {
+   "post": {
+    "operationId": "resend_meeting_invitations_meetings__meeting_id__notifications_resend_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "meeting_id",
+      "required": true,
+      "schema": {
+       "title": "Meeting Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Resend Meeting Invitations"
+   }
+  },
+  "/meetings/{meeting_id}/recording": {
+   "post": {
+    "description": "A sitting recorded on another device: store it, then transcribe and draft minutes in the worker.",
+    "operationId": "upload_meeting_recording_meetings__meeting_id__recording_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "meeting_id",
+      "required": true,
+      "schema": {
+       "title": "Meeting Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "multipart/form-data": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_upload_meeting_recording_meetings__meeting_id__recording_post"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Upload Meeting Recording"
+   }
+  },
+  "/meetings/{meeting_id}/speakers": {
+   "post": {
+    "description": "Name diarized speakers (\"Speaker 1\" -> \"Chairman\"). The transcript is minutes evidence,\nso names are fixed once the minutes leave draft.",
+    "operationId": "update_speaker_names_meetings__meeting_id__speakers_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "meeting_id",
+      "required": true,
+      "schema": {
+       "title": "Meeting Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Update Speaker Names"
+   }
+  },
+  "/meetings/{meeting_id}/transcription/start": {
+   "post": {
+    "operationId": "start_meeting_transcription_meetings__meeting_id__transcription_start_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "meeting_id",
+      "required": true,
+      "schema": {
+       "title": "Meeting Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Start Meeting Transcription"
+   }
+  },
+  "/meetings/{meeting_id}/transcription/stop": {
+   "post": {
+    "operationId": "stop_meeting_transcription_meetings__meeting_id__transcription_stop_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "meeting_id",
+      "required": true,
+      "schema": {
+       "title": "Meeting Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Stop Meeting Transcription"
+   }
+  },
+  "/notifications": {
+   "get": {
+    "operationId": "notifications_page_notifications_get",
+    "responses": {
+     "200": {
+      "content": {
+       "text/html": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Notifications Page"
+   }
+  },
+  "/readyz": {
+   "get": {
+    "operationId": "readyz_readyz_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "title": "Response Readyz Readyz Get",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Readyz"
+   }
+  },
+  "/review": {
+   "get": {
+    "operationId": "review_queue_page_review_get",
+    "responses": {
+     "200": {
+      "content": {
+       "text/html": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Review Queue Page"
+   }
+  },
+  "/review/{doc_id}": {
+   "get": {
+    "operationId": "review_detail_page_review__doc_id__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "doc_id",
+      "required": true,
+      "schema": {
+       "title": "Doc Id",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "v",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "V"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "text/html": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Review Detail Page"
+   }
+  },
+  "/review/{doc_id}/v/{version}/approve": {
+   "post": {
+    "operationId": "review_approve_review__doc_id__v__version__approve_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "doc_id",
+      "required": true,
+      "schema": {
+       "title": "Doc Id",
+       "type": "string"
+      }
+     },
+     {
+      "in": "path",
+      "name": "version",
+      "required": true,
+      "schema": {
+       "title": "Version",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Review Approve"
+   }
+  },
+  "/review/{doc_id}/v/{version}/page/{page}.png": {
+   "get": {
+    "operationId": "review_page_image_review__doc_id__v__version__page__page__png_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "doc_id",
+      "required": true,
+      "schema": {
+       "title": "Doc Id",
+       "type": "string"
+      }
+     },
+     {
+      "in": "path",
+      "name": "version",
+      "required": true,
+      "schema": {
+       "title": "Version",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "path",
+      "name": "page",
+      "required": true,
+      "schema": {
+       "title": "Page",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Review Page Image"
+   }
+  },
+  "/review/{doc_id}/v/{version}/reject": {
+   "post": {
+    "operationId": "review_reject_review__doc_id__v__version__reject_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "doc_id",
+      "required": true,
+      "schema": {
+       "title": "Doc Id",
+       "type": "string"
+      }
+     },
+     {
+      "in": "path",
+      "name": "version",
+      "required": true,
+      "schema": {
+       "title": "Version",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Review Reject"
+   }
+  },
+  "/search": {
+   "get": {
+    "operationId": "search_page_search_get",
+    "responses": {
+     "200": {
+      "content": {
+       "text/html": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Search Page"
+   }
+  },
+  "/sw.js": {
+   "get": {
+    "operationId": "service_worker_sw_js_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Service Worker"
+   }
+  },
+  "/token": {
+   "post": {
+    "operationId": "token_token_post",
+    "requestBody": {
+     "content": {
+      "application/x-www-form-urlencoded": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_token_token_post"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "title": "Response Token Token Post"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Token"
+   }
+  },
+  "/upload": {
+   "get": {
+    "operationId": "upload_page_upload_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "status",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Status"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "text/html": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Upload Page"
+   },
+   "post": {
+    "description": "No-JS fallback: same intake as the API, then redirect while the ingest runs.",
+    "operationId": "upload_document_upload_post",
+    "requestBody": {
+     "content": {
+      "multipart/form-data": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_upload_document_upload_post"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Upload Document"
+   }
+  },
+  "/view/{doc_id}": {
+   "get": {
+    "operationId": "view_document_view__doc_id__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "doc_id",
+      "required": true,
+      "schema": {
+       "title": "Doc Id",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "text/html": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "View Document"
+   }
+  },
+  "/view/{doc_id}/file": {
+   "get": {
+    "operationId": "view_document_file_view__doc_id__file_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "doc_id",
+      "required": true,
+      "schema": {
+       "title": "Doc Id",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "View Document File"
+   }
+  },
+  "/view/{doc_id}/versions/{version}/file": {
+   "get": {
+    "description": "Watermarked stream of one version (the PDF rendition for image uploads).",
+    "operationId": "view_version_file_view__doc_id__versions__version__file_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "doc_id",
+      "required": true,
+      "schema": {
+       "title": "Doc Id",
+       "type": "string"
+      }
+     },
+     {
+      "in": "path",
+      "name": "version",
+      "required": true,
+      "schema": {
+       "title": "Version",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "View Version File"
+   }
+  }
+ }
+}

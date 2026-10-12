@@ -32,6 +32,35 @@
             <button id="searchButton" type="button">Search</button>
         </div>
         <p class="search-intel-note">Matches meaning, page text, and keywords — then ranks one list.</p>
+        <details class="soft-details search-refine" id="searchRefine">
+            <summary>Refine</summary>
+            <div class="form-grid metadata-search-grid">
+                <div class="form-group">
+                    <label for="refineDepartment">Department</label>
+                    <select id="refineDepartment" data-facet="departments"><option value="">Any</option></select>
+                </div>
+                <div class="form-group">
+                    <label for="refineCategory">Category</label>
+                    <select id="refineCategory" data-facet="categories"><option value="">Any</option></select>
+                </div>
+                <div class="form-group">
+                    <label for="refineDocType">Document type</label>
+                    <select id="refineDocType" data-facet="doc_types"><option value="">Any</option></select>
+                </div>
+                <div class="form-group">
+                    <label for="refineReference">Reference number</label>
+                    <input id="refineReference" type="text" autocomplete="off" placeholder="Exact, e.g. SB/HO/2026/114" />
+                </div>
+                <div class="form-group">
+                    <label for="refineDateFrom">Date from</label>
+                    <input id="refineDateFrom" type="date" />
+                </div>
+                <div class="form-group">
+                    <label for="refineDateTo">Date to</label>
+                    <input id="refineDateTo" type="date" />
+                </div>
+            </div>
+        </details>
     </div>
 
     <div id="metadataPanel" class="search-panel is-hidden" role="tabpanel" data-search-panel="metadata" aria-hidden="true">
@@ -47,6 +76,18 @@
             <div class="form-group">
                 <label for="metaUploadedBy">Uploaded by</label>
                 <input id="metaUploadedBy" type="text" placeholder="Username" autocomplete="off" />
+            </div>
+            <div class="form-group">
+                <label for="metaDepartment">Department</label>
+                <select id="metaDepartment" data-facet="departments"><option value="">Any</option></select>
+            </div>
+            <div class="form-group">
+                <label for="metaCategory">Category</label>
+                <select id="metaCategory" data-facet="categories"><option value="">Any</option></select>
+            </div>
+            <div class="form-group">
+                <label for="metaReference">Reference number</label>
+                <input id="metaReference" type="text" autocomplete="off" />
             </div>
             <div class="form-group">
                 <label for="metaDateFrom">Date from</label>

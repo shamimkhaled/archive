@@ -94,7 +94,7 @@
             <tr>
                 <td>{{ doc.title }}</td>
                 <td>{{ doc.uploaded_at.strftime('%d %b %Y, %H:%M') }}</td>
-                <td><a class="button button-secondary" href="/board/meetings/{{ meeting.id }}/documents/{{ doc.id }}/view">View</a></td>
+                <td><a class="button button-secondary" href="/board/meetings/{{ meeting.id }}/documents/{{ doc.id }}/view">View</a>{% if doc.archive_doc_id in briefed_doc_ids %} <a class="button button-secondary" href="/documents/{{ doc.archive_doc_id }}/briefing">Briefing</a>{% endif %}</td>
             </tr>
             {% endfor %}
         </tbody>
@@ -106,7 +106,7 @@
             <dl>
                 <div><dt>Uploaded</dt><dd>{{ doc.uploaded_at.strftime('%d %b %Y, %H:%M') }}</dd></div>
             </dl>
-            <p style="margin-top: 0.75rem;"><a class="button" href="/board/meetings/{{ meeting.id }}/documents/{{ doc.id }}/view">View document</a></p>
+            <p style="margin-top: 0.75rem;"><a class="button" href="/board/meetings/{{ meeting.id }}/documents/{{ doc.id }}/view">View document</a>{% if doc.archive_doc_id in briefed_doc_ids %} <a class="button button-secondary" href="/documents/{{ doc.archive_doc_id }}/briefing">Approved briefing</a>{% endif %}</p>
         </article>
         {% endfor %}
     </div>

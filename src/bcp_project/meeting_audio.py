@@ -1,4 +1,4 @@
-"""Local audio paths for Phase A meeting transcription (chunked WebM)."""
+"""Local audio paths for meeting transcription: live chunks (WebM) and uploaded recordings."""
 
 from __future__ import annotations
 
@@ -114,3 +114,62 @@ def merge_chunks(meeting_id: int) -> Optional[Path]:
         for chunk in chunks:
             dest.write(chunk.read_bytes())
     return out
+
+
+# --- Recorded-file upload (a meeting recorded elsewhere, transcribed after the fact) ---
+
+RECORDING_STEM = "recording"
+NORMALIZED_NAME = "recording.16k.wav"
+
+
+def recording_max_bytes() -> int:
+    return int(float(os.getenv("MEETING_RECORDING_MAX_MB") or 500) * 1024 * 1024)
+
+
+def sniff_recording(head: bytes) -> Optional[str]:
+    """File extension for a supported audio/video container, judged by magic bytes only."""
+    if head[:4] == b"RIFF" and head[8:12] == b"WAVE":
+        return ".wav"
+    if head[:4] == b"OggS":
+        return ".ogg"
+    if head[:4] == b"fLaC":
+        return ".flac"
+    if head[:4] == b"\x1a\x45\xdf\xa3":
+        return ".webm"
+    if head[4:8] == b"ftyp":
+        return ".m4a" if head[8:12] in {b"M4A ", b"M4B "} else ".mp4"
+    if head[:3] == b"ID3" or (len(head) > 1 and head[0] == 0xFF and (head[1] & 0xE0) == 0xE0):
+        return ".mp3"
+    if head[:6] == b"#!AMR\n":
+        return ".amr"
+    return None
+
+
+def recording_path(meeting_id: int) -> Optional[Path]:
+    for path in sorted(meeting_audio_dir(meeting_id).glob(f"{RECORDING_STEM}.*")):
+        if path.name != NORMALIZED_NAME:
+            return path
+    return None
+
+
+def clear_recording(meeting_id: int) -> None:
+    for path in meeting_audio_dir(meeting_id).glob(f"{RECORDING_STEM}.*"):
+        path.unlink(missing_ok=True)
+
+
+def normalize_recording(meeting_id: int, source: Path) -> Path:
+    """16 kHz mono WAV for speech models and diarization; the original is used if ffmpeg is missing."""
+    if not _ffmpeg_available():
+        return source
+    out = meeting_audio_dir(meeting_id) / NORMALIZED_NAME
+    try:
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", str(source), "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", str(out)],
+            check=True,
+            capture_output=True,
+            timeout=int(os.getenv("MEETING_RECORDING_FFMPEG_TIMEOUT") or 1800),
+        )
+        return out
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
+        logger.warning("ffmpeg could not normalize the recording for meeting %s: %s", meeting_id, exc)
+        return source

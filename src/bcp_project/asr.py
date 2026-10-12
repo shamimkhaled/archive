@@ -19,7 +19,15 @@ def _device() -> str:
     return (os.getenv("WHISPER_DEVICE") or "cpu").strip() or "cpu"
 
 
+def _remote_stt() -> bool:
+    from .ai.routing import stt_route
+
+    return stt_route().provider not in {"local_whisper", "none"}
+
+
 def whisper_available() -> bool:
+    if _remote_stt():
+        return True
     try:
         import faster_whisper  # noqa: F401
 
@@ -102,7 +110,7 @@ def _segments_from_openai_whisper(path: Path) -> List[Dict[str, Any]]:
 
 
 def transcribe_audio_file(path: Path) -> List[Dict[str, Any]]:
-    """Return transcript segments for a local audio file."""
+    """Return transcript segments for a local audio file, using the AI_STT_PROVIDER route."""
     if not path.exists() or path.stat().st_size == 0:
         return [
             {
@@ -112,7 +120,27 @@ def transcribe_audio_file(path: Path) -> List[Dict[str, Any]]:
                 "dummy": False,
             }
         ]
+    if not _remote_stt():
+        return transcribe_local(path)
 
+    from . import ai
+    from .minutes_draft import meeting_sensitivity
+
+    language = (os.getenv("WHISPER_LANGUAGE") or "").strip() or None
+    try:
+        segments = ai.transcribe(str(path), language=language, sensitivity=meeting_sensitivity())
+    except Exception as exc:
+        logger.exception("Remote speech-to-text failed for %s", path)
+        return [{"id": 1, "speaker": "System", "text": f"Speech recognition failed: {exc}", "dummy": False}]
+    for seg in segments:
+        seg.setdefault("dummy", False)
+        if seg.get("speaker") == "Speaker":
+            seg["speaker"] = "Transcript"
+    return segments
+
+
+def transcribe_local(path: Path) -> List[Dict[str, Any]]:
+    """faster-whisper, then openai-whisper, on this machine."""
     try:
         import faster_whisper  # noqa: F401
 

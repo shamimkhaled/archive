@@ -101,6 +101,25 @@ ENV_LABELS = {
     "digitalocean": "DigitalOcean",
 }
 
+SYSTEM_SUMMARY = (
+    "The Sonali Bank Archive System is a FastAPI web tier plus separate worker services. "
+    "Uploads and meeting jobs are written to a Postgres outbox in the same transaction as the record, "
+    "relayed to Redis Streams, and processed by ingest, meeting, and notify workers (consumer groups, "
+    "retries, dead-letter stream). The browser app is a React TypeScript PWA under /app with the "
+    "server-rendered Jinja pages kept as a fallback. Production originals must live in S3-compatible "
+    "object storage because Railway (and typical PaaS) disks are ephemeral."
+)
+
+HARD_CONSTRAINTS = [
+    "PDF and image uploads (JPEG, PNG, TIFF), 50 MB cap; originals are write-once with a SHA-256 per version.",
+    "OCR at 300 DPI (Tesseract eng+ben + Poppler) runs in the ingest worker — this dominates worker RAM.",
+    "Views are watermarked per viewer, cached briefly, and served as byte ranges (PDF_STAMP_CACHE_MB per web replica).",
+    "Qdrant collections are named by embedding model and dimension behind an alias "
+    "(1536-d for text-embedding-3-small, 1024-d for bge-m3); 512-token chunks / 50 overlap.",
+    "Redis carries the job streams, the search cache, and shared rate-limit counters — size it as durable, not as a cache.",
+    "Web replicas scale freely; scheduled sweeps (reminders, audit sealing) take a Redis lock so only one replica runs each.",
+]
+
 # (headline, region, monthly, replica, callout_title, callout_body, services[])
 # service = (name, sku, cpu, ram, disk, bandwidth, notes)
 SPECS = {
@@ -117,7 +136,7 @@ SPECS = {
                 ("App (FastAPI)", "venv or Dockerfile", "shares host", "4 GB reserved", "UPLOAD_DIR local", "LAN only", "OCR + watermark in-process"),
                 ("PostgreSQL 16", "compose postgres:16", "1 vCPU", "1 GB", "postgres_data volume", "localhost", "bcpdb; no backups unless you add them"),
                 ("Qdrant 1.13", "compose qdrant/qdrant:v1.13.0", "1 vCPU", "2 GB", "qdrant_data volume", ":6333 / :6334", "1536-d cosine; summaries + chunks"),
-                ("Redis 7", "compose redis:7-alpine", "shared", "256 MB", "none (ephemeral cache)", ":6379", "Search cache only — not a queue"),
+                ("Redis 7", "compose redis:7-alpine", "shared", "256 MB", "appendonly volume", ":6379", "Job streams + cache; persistence keeps queued jobs across restarts"),
                 ("PDF storage", "local UPLOAD_DIR", "—", "—", "~4 GB used / 50 GB disk", "LAN", "No lifecycle or replication"),
             ],
         ),
@@ -168,21 +187,23 @@ SPECS = {
                 ("Qdrant", "Qdrant Cloud 1 GB", "managed", "1 GB", "managed", "TLS :443", "QDRANT_URL + QDRANT_API_KEY"),
                 ("Redis", "Upstash 256 MB", "managed", "256 MB", "none", "rediss://", "Or UPSTASH_REDIS_REST_* pair"),
                 ("PDF objects", "R2 or S3 Standard", "—", "—", "50 GB provisioned", "egress billed", "~3 GB used at 500 docs"),
-                ("LLM / embed", "OpenRouter or OpenAI", "—", "—", "—", "API calls", "text-embedding-3-small, 1536-d, batch 24"),
+                ("LLM / embed", "OpenRouter or OpenAI", "—", "—", "—", "API calls", "text-embedding-3-small, 1536-d; switchable per task in /admin/ai"),
             ],
         ),
         "production": (
-            "Documented production path in railway.toml",
+            "Five services from .railway/railway.ts (web, outbox-relay, three workers)",
             "Railway + ap-south-1 / R2 for objects if serving BD",
-            "~$120–250 / month",
-            "1 service (do not autoscale replicas yet)",
-            "Stay on one app replica",
-            "Reminders run on AsyncIOScheduler every 15 minutes inside the web process. A second replica would double Resend emails until that job is externalized.",
+            "~$180–350 / month",
+            "web 2× + relay 1× + worker-ingest 1–3× + worker-meeting 1× + worker-notify 1×",
+            "Scale workers on stream lag, web on HTTP load",
+            "Jobs flow from the Postgres outbox to Redis Streams to worker consumer groups. scripts/autoscale_workers.py reads stream lag and sets worker replicas. Scheduled sweeps take a Redis lock, so extra web replicas do not double reminders.",
             [
-                ("App", "Railway Pro 8 GB", "2 vCPU", "8 GB", "ephemeral", "shared; watch 502s on meeting days", "Watermark loads full PDF into RAM"),
-                ("PostgreSQL", "Neon 1 CU", "1 CU", "managed", "20 GB", "pooled", "Point-in-time recovery on"),
+                ("web", "Railway Pro 4 GB × 2", "2 vCPU", "4 GB", "ephemeral", "shared; HTTP + byte-range PDF views", "Search, view, meetings, Ask; no OCR in the web tier"),
+                ("worker-ingest", "Railway Pro 8 GB × 1–3", "2 vCPU", "8 GB", "ephemeral scratch", "to S3 + Qdrant + AI", "OCR 300 DPI, embed, Qdrant upsert"),
+                ("worker-meeting / notify / relay", "Railway 2–4 GB", "1–2 vCPU", "2–4 GB", "ephemeral", "low", "STT via provider; notify is light; relay claims outbox rows with SKIP LOCKED"),
+                ("PostgreSQL", "Neon 1 CU", "1 CU", "managed", "20 GB", "pooled", "Point-in-time recovery on; nightly encrypted dump via scripts/dr_backup.py"),
                 ("Qdrant", "Qdrant Cloud 4 GB", "managed", "4 GB", "managed", "TLS", "~1.8 GB vectors at 5k docs; headroom for HNSW"),
-                ("Redis", "Upstash 256–512 MB", "managed", "512 MB", "none", "rediss://", "Cache stays small; SEARCH_CACHE_TTL=3600"),
+                ("Redis", "Upstash or Railway Redis 512 MB–1 GB", "managed", "1 GB", "persistence on", "rediss://", "Job streams + dead letters + cache + rate limits; not ephemeral"),
                 ("PDF objects", "S3 / R2", "—", "—", "200 GB", "200–500 GB/mo egress", "Each view ≈ 2× PDF size (fetch + watermarked body)"),
                 ("Email", "Resend", "—", "—", "—", "low", "Invites + 48h/24h reminders"),
             ],
@@ -191,15 +212,15 @@ SPECS = {
             "Split ingest off the web dyno; grow Qdrant and object store",
             "Same as production",
             "~$400–800 / month",
-            "API 1× + worker 1×",
+            "web 2–4× + worker-ingest 2–4× (autoscaled) + meeting/notify/relay",
             "Scale storage and Qdrant first",
-            "Postgres metadata stays modest even at 25k docs. PDF bytes and HNSW RAM dominate cost. Add a worker before adding a second web replica.",
+            "Postgres metadata stays modest even at 25k docs. PDF bytes and HNSW RAM dominate cost. Raise worker-ingest max replicas for backfills; web replicas follow concurrent users.",
             [
-                ("API", "Railway 8 GB", "2 vCPU", "8 GB", "ephemeral", "1 TB+ egress possible", "Search, view, meetings only"),
-                ("Ingest worker", "Second Railway service", "2 vCPU", "8 GB", "ephemeral scratch", "to S3 + Qdrant + LLM", "Move _index_document_chunks + OCR here"),
+                ("web", "Railway 4 GB × 2–4", "2 vCPU", "4 GB", "ephemeral", "1 TB+ egress possible", "Search, view, meetings, Ask"),
+                ("worker-ingest", "Railway 8 GB × 2–4", "2 vCPU", "8 GB", "ephemeral scratch", "to S3 + Qdrant + AI", "Autoscaled on bcp:stream:ingest backlog"),
                 ("PostgreSQL", "Neon 2 CU", "2 CU", "managed", "50 GB", "pooled", "Yearly archive of audit_logs to R2"),
                 ("Qdrant", "Qdrant Cloud 8–16 GB", "managed", "16 GB", "managed snapshots", "TLS", "~9 GB at 25k docs; consider quantization later"),
-                ("Redis", "Upstash 1 GB", "managed", "1 GB", "none", "rediss://", "Use for rate-limit + reminder lock if going multi-replica"),
+                ("Redis", "Upstash or Railway Redis 1–2 GB", "managed", "2 GB", "persistence on", "rediss://", "Streams, locks, rate limits, cache"),
                 ("PDF objects", "S3 / R2 + lifecycle", "—", "—", "1 TB", "1 TB+/mo", "Do not CDN raw docs — watermark is per-user, Cache-Control: no-store"),
             ],
         ),
@@ -311,7 +332,7 @@ SCALE_TRIGGERS = [
     ("Qdrant RAM > 70% or search latency climbs", "Next Qdrant RAM tier (HNSW is RAM-bound). 1 → 4 → 8 → 16 GB"),
     ("Postgres disk > 70%", "Grow volume; partition/archive audit_logs older than 3 years"),
     ("Concurrent OCR uploads stall the UI", "Extract parse/OCR + _index_document_chunks to a worker; keep API thin"),
-    ("Meeting-day view storms / 502s", "Vertical scale app 4 → 8 GB. Stay on 1 replica until scheduler is a cron"),
+    ("Meeting-day view storms / 502s", "Add web replicas (scheduled sweeps are lock-protected); raise PDF_STAMP_CACHE_MB"),
     ("Egress cost spikes", "Accept 2× PDF bytes per view. Do not CDN raw docs (watermark + no-store)"),
     ("Need 2+ app replicas", "Externalize reminders (cron + Redis lock) and login rate limit (Redis) first"),
     ("25k+ documents", "Qdrant 16 GB; consider quantized vectors. Postgres is still modest"),
@@ -572,8 +593,8 @@ def build_pdf_story(styles):
     story.append(Spacer(1, 4 * mm))
     story.append(
         _p(
-            "Recommended production starting point: 8 GB app RAM, 20 GB Postgres, 4 GB Qdrant, "
-            "200 GB S3/R2/Spaces, one web replica, STORAGE_BACKEND=s3.",
+            "Recommended production starting point: two 4 GB web replicas, an 8 GB ingest worker, "
+            "20 GB Postgres, 4 GB Qdrant, persistent Redis, 200 GB S3/R2/Spaces, STORAGE_BACKEND=s3.",
             styles["note"],
         )
     )
@@ -581,13 +602,7 @@ def build_pdf_story(styles):
 
     story.append(_p("1. What this system actually is", styles["h1"]))
     story.append(
-        _p(
-            "The Sonali Bank Archive System is a single FastAPI process (no Celery/RQ workers). "
-            "OCR, LLM summarization, watermarking, and chunk indexing all share that process. "
-            "The PWA is server-rendered Jinja2. Production PDFs must live in S3-compatible object storage "
-            "because Railway (and typical PaaS) disks are ephemeral.",
-            styles["body"],
-        )
+        _p(SYSTEM_SUMMARY, styles["body"])
     )
     story.append(
         _p(
@@ -595,14 +610,7 @@ def build_pdf_story(styles):
             styles["body"],
         )
     )
-    for item in [
-        "PDFs only, 50 MB upload cap.",
-        "OCR at 300 DPI (Tesseract eng+ben + Poppler in the Docker image) — this dominates RAM.",
-        "View/download loads the full PDF twice (object fetch + watermarked response); no range streaming.",
-        "Qdrant collections document_summaries + document_chunks, 1536-d cosine, 512-token chunks / 50 overlap.",
-        "Redis is a fail-open search cache, not a job queue.",
-        "One web replica only until the in-process APScheduler (15 min reminders) and in-memory login rate limit are externalized.",
-    ]:
+    for item in HARD_CONSTRAINTS:
         story.append(_p(f"•  {item}", styles["bullet"]))
 
     story.append(_p("2. Sizing assumptions", styles["h1"]))
@@ -612,7 +620,7 @@ def build_pdf_story(styles):
             [
                 ["Typical PDF", "5 MB (range 1–20 MB, hard cap 50 MB)"],
                 ["Chunks per document", "~25 plus 1 summary vector"],
-                ["Vector bytes", "1536 × 4 B ≈ 6 KB raw; ~12–16 KB with Qdrant HNSW"],
+                ["Vector bytes", "1536 × 4 B ≈ 6 KB raw (1024-d bge-m3 ≈ 4 KB); ~12–16 KB with Qdrant HNSW"],
                 ["Concurrent staff", "5–15 typical; 30+ on meeting days"],
                 ["Users", "20–80 (admin / board_secretary / uploader / board_member)"],
                 ["View bandwidth", "Each successful open ≈ 2× PDF size on the wire"],
@@ -764,7 +772,7 @@ def build_pdf_story(styles):
         "REDIS_URL=rediss://… or Upstash REST pair. Do not leave redis://127.0.0.1 on a PaaS.",
         "STORAGE_BACKEND=s3 with AWS_BUCKET_NAME, keys, region; set AWS_S3_ENDPOINT_URL for R2/Spaces/MinIO.",
         "OPENAI_API_KEY or OPENROUTER_API_KEY for summaries and text-embedding-3-small.",
-        "Health check /healthz. One web replica until reminders and rate limits are externalized.",
+        "Load balancer checks /readyz. Two or more web replicas; workers scale on stream backlog.",
         "Operational log retention 3–6 months; audit_logs retained 3–6 years with a yearly archive job.",
     ]:
         story.append(_p(f"•  {item}", styles["bullet"]))
@@ -894,7 +902,7 @@ def write_docx() -> None:
         doc,
         ["Piece", "Target"],
         [
-            ["App RAM", "8 GB (OCR + watermark share one process; 4 GB is a pilot floor)"],
+            ["App RAM", "web 4 GB × 2; worker-ingest 8 GB (OCR runs there); 4 GB single service is a pilot floor"],
             ["Postgres", "20–50 GB provisioned — metadata stays small"],
             ["Qdrant", "4 GB now → 16 GB at ~25k docs (HNSW is RAM-bound)"],
             ["PDFs", "S3 / R2 / Spaces — not Railway/app disk. ~5 MB × document count"],
@@ -905,21 +913,8 @@ def write_docx() -> None:
     )
 
     _add_heading(doc, "1. What this system actually is", 1)
-    _add_para(
-        doc,
-        "The Sonali Bank Archive System is a single FastAPI process (no Celery/RQ workers). "
-        "OCR, LLM summarization, watermarking, and chunk indexing all share that process. "
-        "The PWA is server-rendered Jinja2. Production PDFs must live in S3-compatible object storage "
-        "because Railway (and typical PaaS) disks are ephemeral.",
-    )
-    for item in [
-        "PDFs only, 50 MB upload cap.",
-        "OCR at 300 DPI (Tesseract eng+ben + Poppler) — this dominates RAM.",
-        "View/download loads the full PDF twice (object fetch + watermarked response); no range streaming.",
-        "Qdrant collections document_summaries + document_chunks, 1536-d cosine, 512-token chunks / 50 overlap.",
-        "Redis is a fail-open search cache, not a job queue.",
-        "One web replica only until the in-process APScheduler (15 min reminders) and in-memory login rate limit are externalized.",
-    ]:
+    _add_para(doc, SYSTEM_SUMMARY)
+    for item in HARD_CONSTRAINTS:
         doc.add_paragraph(item, style="List Bullet")
 
     _add_heading(doc, "2. Sizing assumptions", 1)
@@ -929,7 +924,7 @@ def write_docx() -> None:
         [
             ["Typical PDF", "5 MB (range 1–20 MB, hard cap 50 MB)"],
             ["Chunks per document", "~25 plus 1 summary vector"],
-            ["Vector bytes", "1536 × 4 B ≈ 6 KB raw; ~12–16 KB with Qdrant HNSW"],
+            ["Vector bytes", "1536 × 4 B ≈ 6 KB raw (1024-d bge-m3 ≈ 4 KB); ~12–16 KB with Qdrant HNSW"],
             ["Concurrent staff", "5–15 typical; 30+ on meeting days"],
             ["Users", "20–80 (admin / board_secretary / uploader / board_member)"],
             ["View bandwidth", "Each successful open ≈ 2× PDF size on the wire"],
@@ -1026,7 +1021,7 @@ def write_docx() -> None:
         "REDIS_URL=rediss://… or Upstash REST pair. Do not leave redis://127.0.0.1 on a PaaS.",
         "STORAGE_BACKEND=s3 with AWS_BUCKET_NAME, keys, region; set AWS_S3_ENDPOINT_URL for R2/Spaces/MinIO.",
         "OPENAI_API_KEY or OPENROUTER_API_KEY for summaries and text-embedding-3-small.",
-        "Health check /healthz. One web replica until reminders and rate limits are externalized.",
+        "Load balancer checks /readyz. Two or more web replicas; workers scale on stream backlog.",
         "Operational log retention 3–6 months; audit_logs retained 3–6 years with a yearly archive job.",
     ]:
         doc.add_paragraph(item, style="List Bullet")

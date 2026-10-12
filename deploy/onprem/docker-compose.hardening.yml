@@ -1,0 +1,49 @@
+# Hardened runtime for the application containers (CIS Docker Benchmark section 5).
+#
+#   docker compose -f docker-compose.yml -f deploy/onprem/docker-compose.hardening.yml \
+#     --profile pipeline up -d
+#
+# Containers run as uid 10001 from the first instruction (the entrypoint skips
+# its chown step), with a read-only root filesystem, no Linux capabilities, and
+# no privilege escalation. Only /tmp (tmpfs) and the uploads volume are
+# writable. Pre-own the uploads volume once:
+#   docker run --rm -v <project>_uploads:/data/uploads alpine chown -R 10001:10001 /data/uploads
+
+x-hardened: &hardened
+  user: "10001:10001"
+  read_only: true
+  tmpfs:
+    - /tmp:size=512m,mode=1777
+  cap_drop: [ALL]
+  security_opt:
+    - no-new-privileges:true
+  pids_limit: 512
+  ulimits:
+    nofile: { soft: 8192, hard: 8192 }
+  logging:
+    driver: json-file
+    options: { max-size: "20m", max-file: "5" }
+
+services:
+  web:
+    <<: *hardened
+    mem_limit: 4g
+  outbox-relay:
+    <<: *hardened
+    mem_limit: 512m
+  worker-ingest:
+    <<: *hardened
+    mem_limit: 8g
+  worker-meeting:
+    <<: *hardened
+    mem_limit: 4g
+    environment:
+      HF_HOME: /models/hf
+    volumes:
+      - whisper_models:/models
+  worker-notify:
+    <<: *hardened
+    mem_limit: 512m
+
+volumes:
+  whisper_models:

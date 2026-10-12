@@ -1,4 +1,6 @@
 import logging
+import os
+import re
 import threading
 import time
 import uuid
@@ -7,12 +9,7 @@ from typing import Any, Dict, List, Optional, Union
 from qdrant_client import QdrantClient
 from qdrant_client.http import models as rest
 
-from .config import (
-    load_environment,
-    openai_embedding_model,
-    resolve_openai_credentials,
-    resolve_qdrant_settings,
-)
+from .config import load_environment, resolve_qdrant_settings
 
 load_environment()
 
@@ -39,24 +36,98 @@ def normalize_doc_point_id(point_id: Union[str, int, uuid.UUID]) -> Union[int, u
             return uuid.uuid5(DOC_POINT_NAMESPACE, stripped)
     raise TypeError(f"Unsupported point id type: {type(point_id)!r}")
 
-try:
-    from openai import OpenAI
-except ImportError:
-    OpenAI = None
+SUMMARIES_COLLECTION = "document_summaries"
+CHUNKS_COLLECTION = "document_chunks"
+LOGICAL_COLLECTIONS = (SUMMARIES_COLLECTION, CHUNKS_COLLECTION)
+_ROUTED_METHODS = frozenset(
+    {
+        "upsert",
+        "query_points",
+        "query_points_groups",
+        "search_groups",
+        "retrieve",
+        "scroll",
+        "count",
+        "delete",
+        "set_payload",
+        "search",
+        "create_payload_index",
+    }
+)
+# Only what search reads; summary payloads also carry people, finance notes, etc.
+SUMMARY_HIT_FIELDS = ["doc_id", "document_id", "doc_type", "searchable_keywords", "major_projects"]
+CHUNK_HIT_FIELDS = ["parent_doc_id", "document_id", "doc_id", "page_number", "text"]
 
-def _openai_client() -> "OpenAI":
-    if OpenAI is None:
-        raise RuntimeError("The openai package is required for embedding text.")
-    api_key, base_url = resolve_openai_credentials()
-    if base_url:
-        return OpenAI(api_key=api_key, base_url=base_url)
-    return OpenAI(api_key=api_key)
+
+def physical_collection_name(logical: str, model: str, dim: int) -> str:
+    """``document_chunks`` + ``bge-m3`` + 1024 -> ``document_chunks__bge-m3__1024``."""
+    slug = re.sub(r"[^a-z0-9]+", "-", model.lower().split("/")[-1]).strip("-") or "model"
+    return f"{logical}__{slug}__{int(dim)}"
 
 
-def embed_texts(inputs: List[str], model: Optional[str] = None) -> List[List[float]]:
-    client = _openai_client()
-    response = client.embeddings.create(model=model or openai_embedding_model(), input=inputs)
-    return [item.embedding for item in response.data]
+def active_embedding_space() -> tuple[str, int]:
+    from .ai import embed_route
+
+    route = embed_route()
+    return route.model, int(route.params["dim"])
+
+
+def _env_int(name: str) -> Optional[int]:
+    raw = (os.getenv(name) or "").strip()
+    return int(raw) if raw else None
+
+
+def hnsw_config(*, explicit_only: bool = False) -> Optional[rest.HnswConfigDiff]:
+    """HNSW graph settings for new collections (m=16, ef_construct=128 unless overridden).
+
+    Higher m / ef_construct raise recall and memory; ``explicit_only`` returns None unless
+    QDRANT_HNSW_* is set, so existing collections are only rebuilt on purpose.
+    """
+    m, ef = _env_int("QDRANT_HNSW_M"), _env_int("QDRANT_HNSW_EF_CONSTRUCT")
+    if explicit_only and m is None and ef is None:
+        return None
+    return rest.HnswConfigDiff(m=m or 16, ef_construct=ef or 128)
+
+
+def search_hnsw_ef() -> Optional[int]:
+    """Query-time beam width; unset keeps Qdrant's default (ef_construct)."""
+    return _env_int("QDRANT_SEARCH_HNSW_EF")
+
+
+def upsert_batch_size() -> int:
+    return max(1, _env_int("QDRANT_UPSERT_BATCH") or 32)
+
+
+class _RoutedClient:
+    """QdrantClient proxy that maps logical collection names to this process's physical one."""
+
+    def __init__(self, client: QdrantClient, resolve):
+        self._client = client
+        self._resolve = resolve
+
+    def __getattr__(self, name: str) -> Any:
+        attr = getattr(self._client, name)
+        if name not in _ROUTED_METHODS or not callable(attr):
+            return attr
+
+        def call(*args: Any, **kwargs: Any) -> Any:
+            if "collection_name" in kwargs:
+                kwargs["collection_name"] = self._resolve(kwargs["collection_name"])
+            return attr(*args, **kwargs)
+
+        return call
+
+
+def embed_texts(
+    inputs: List[str], model: Optional[str] = None, *, sensitivity: Optional[str] = None
+) -> List[List[float]]:
+    from . import ai
+    from .ai.routing import Route
+
+    route = ai.embed_route()
+    if model and model != route.model:
+        route = Route(task="embed", provider=route.provider, model=model, params=route.params)
+    return ai.embed(inputs, sensitivity=sensitivity, route=route)
 
 
 def _casefold_contains(haystack: str, needle: str) -> bool:
@@ -211,18 +282,100 @@ class QdrantIndexer:
     ):
         self._url = url or f"http://{host}:{port}"
         self._api_key = api_key
+        self._known: Optional[set[str]] = None
+        self._known_at = 0.0
+        self._checked: set[tuple[str, int]] = set()
         # Older qdrant-client versions forward unknown kwargs into httpx.Client,
         # so do not pass check_compatibility here.
         self.client = self._new_client()
 
-    def _new_client(self) -> QdrantClient:
-        return QdrantClient(
-            url=self._url,
-            api_key=self._api_key,
-            timeout=60,
+    def _new_client(self) -> Any:
+        if self._url == ":memory:":
+            raw = QdrantClient(location=":memory:")
+        else:
+            raw = QdrantClient(
+                url=self._url,
+                api_key=self._api_key,
+                timeout=60,
+            )
+        return _RoutedClient(raw, self.resolve_collection)
+
+    def _reconnectable(self) -> bool:
+        return self._url != ":memory:"
+
+    @property
+    def raw_client(self) -> QdrantClient:
+        return self.client._client
+
+    def _known_names(self, *, refresh: bool = False) -> set[str]:
+        """Collection and alias names, cached for a minute."""
+        if refresh or self._known is None or time.monotonic() - self._known_at > 60:
+            names = {c.name for c in self.raw_client.get_collections().collections}
+            try:
+                names |= {a.alias_name for a in self.raw_client.get_aliases().aliases}
+            except Exception:
+                pass
+            self._known = names
+            self._known_at = time.monotonic()
+        return self._known
+
+    def resolve_collection(self, name: str) -> str:
+        """Physical collection for this process's embedding model, else the logical name."""
+        if name not in LOGICAL_COLLECTIONS:
+            return name
+        try:
+            model, dim = active_embedding_space()
+            physical = physical_collection_name(name, model, dim)
+            return physical if physical in self._known_names() else name
+        except Exception:
+            return name
+
+    def aliases(self) -> Dict[str, str]:
+        return {a.alias_name: a.collection_name for a in self.raw_client.get_aliases().aliases}
+
+    def collection_vector_size(self, name: str) -> Optional[int]:
+        vectors = self.raw_client.get_collection(name).config.params.vectors
+        size = getattr(vectors, "size", None)
+        if size is None and isinstance(vectors, dict) and vectors:
+            size = getattr(next(iter(vectors.values())), "size", None)
+        return int(size) if size else None
+
+    def ensure_physical_collection(self, name: str, vector_size: int) -> bool:
+        """Create ``name`` if missing. True when it was created."""
+        if name in self._known_names(refresh=True):
+            return False
+        self.raw_client.create_collection(
+            collection_name=name,
+            vectors_config=rest.VectorParams(size=vector_size, distance=rest.Distance.COSINE),
+            hnsw_config=hnsw_config(),
         )
+        self._known_names(refresh=True)
+        return True
+
+    def apply_hnsw_tuning(self, name: str) -> None:
+        """Push QDRANT_HNSW_* to an existing collection; Qdrant rebuilds the graph in the background."""
+        config = hnsw_config(explicit_only=True)
+        if config is None:
+            return
+        try:
+            self.raw_client.update_collection(collection_name=self.resolve_collection(name), hnsw_config=config)
+        except Exception as exc:
+            logger.warning("HNSW tuning not applied to %s: %s", name, exc)
+
+    def point_alias(self, alias: str, collection: str) -> None:
+        """Atomically (re)point ``alias`` at ``collection``."""
+        ops: List[Any] = []
+        if alias in self.aliases():
+            ops.append(rest.DeleteAliasOperation(delete_alias=rest.DeleteAlias(alias_name=alias)))
+        ops.append(
+            rest.CreateAliasOperation(create_alias=rest.CreateAlias(collection_name=collection, alias_name=alias))
+        )
+        self.raw_client.update_collection_aliases(change_aliases_operations=ops)
+        self._known_names(refresh=True)
 
     def _reconnect(self) -> None:
+        if not self._reconnectable():
+            return
         try:
             close = getattr(self.client, "close", None)
             if callable(close):
@@ -262,8 +415,36 @@ class QdrantIndexer:
             if last_exc is not None:
                 raise last_exc
 
+    def ensure_payload_indexes(self, collection: str, fields: Dict[str, Any]) -> None:
+        """Best-effort keyword/integer indexes so payload filters stay fast; existing ones are kept."""
+        for field_name, schema in fields.items():
+            try:
+                self.client.create_payload_index(
+                    collection_name=collection, field_name=field_name, field_schema=schema, wait=False
+                )
+            except Exception as exc:
+                if "already exists" not in str(exc).lower():
+                    logger.debug("Payload index %s.%s not created: %s", collection, field_name, exc)
+
+    def delete_document_chunks(self, doc_id: str, collection_name: str = CHUNKS_COLLECTION) -> None:
+        """Remove every chunk of ``doc_id`` before indexing a new version of it."""
+        selector = rest.FilterSelector(
+            filter=rest.Filter(
+                must=[rest.FieldCondition(key="parent_doc_id", match=rest.MatchValue(value=doc_id))]
+            )
+        )
+        try:
+            self.client.delete(collection_name=collection_name, points_selector=selector, wait=True)
+        except Exception as exc:
+            if "not found" in str(exc).lower() or "404" in str(exc):
+                return
+            raise
+
     def _query_points(self, **kwargs: Any) -> Any:
         """Query Qdrant, reconnecting once after a dropped connection."""
+        ef = search_hnsw_ef()
+        if ef and "search_params" not in kwargs:
+            kwargs["search_params"] = rest.SearchParams(hnsw_ef=ef)
         try:
             return self.client.query_points(**kwargs)
         except TypeError:
@@ -280,15 +461,22 @@ class QdrantIndexer:
 
     def create_collections(
         self,
-        summaries_collection: str = "document_summaries",
-        chunks_collection: str = "document_chunks",
-        vector_size: int = 1536,
+        summaries_collection: str = SUMMARIES_COLLECTION,
+        chunks_collection: str = CHUNKS_COLLECTION,
+        vector_size: Optional[int] = None,
     ) -> None:
-        summary_config = rest.VectorParams(size=vector_size, distance=rest.Distance.COSINE)
-        chunk_config = rest.VectorParams(size=vector_size, distance=rest.Distance.COSINE)
+        """Make sure the collections for the active embedding model exist.
 
+        Fresh installs get ``{logical}__{model}__{dim}`` plus an alias at the logical
+        name. A pre-versioning collection at the logical name keeps serving as long as
+        its dimension matches; a mismatch means the model changed without a reindex.
+        """
+        model, dim = active_embedding_space()
+        size = int(vector_size or dim)
+        if all((name, size) in self._checked for name in (summaries_collection, chunks_collection)):
+            return
         try:
-            existing = {c.name for c in self.client.get_collections().collections}
+            existing = self._known_names(refresh=True)
         except Exception as exc:
             message = str(exc)
             if "404" in message or "Not Found" in message:
@@ -299,11 +487,48 @@ class QdrantIndexer:
                 ) from exc
             raise
 
-        if summaries_collection not in existing:
-            self.client.create_collection(collection_name=summaries_collection, vectors_config=summary_config)
+        for logical in (summaries_collection, chunks_collection):
+            if logical not in LOGICAL_COLLECTIONS:
+                if logical not in existing:
+                    self.ensure_physical_collection(logical, size)
+                self._checked.add((logical, size))
+                continue
+            physical = physical_collection_name(logical, model, size)
+            if physical in existing:
+                self._checked.add((logical, size))
+                continue
+            if logical in existing:
+                current = self.collection_vector_size(logical)
+                if current and current != size:
+                    raise RuntimeError(
+                        f"Qdrant collection {logical!r} holds {current}-d vectors but embedding model "
+                        f"{model!r} produces {size}-d. Run scripts/reindex_embeddings.py before switching "
+                        "AI_EMBED_MODEL."
+                    )
+                self._checked.add((logical, size))
+                continue
+            self.ensure_physical_collection(physical, size)
+            self.point_alias(logical, physical)
+            logger.info("Created Qdrant collection %s (alias %s)", physical, logical)
+            self._checked.add((logical, size))
+        from .search_acl import payload_index_schema
 
-        if chunks_collection not in existing:
-            self.client.create_collection(collection_name=chunks_collection, vectors_config=chunk_config)
+        keyword = rest.PayloadSchemaType.KEYWORD
+        self.ensure_payload_indexes(summaries_collection, {"doc_id": keyword, **payload_index_schema()})
+        self.ensure_payload_indexes(chunks_collection, {"parent_doc_id": keyword, **payload_index_schema()})
+        for name in (summaries_collection, chunks_collection):
+            self.apply_hnsw_tuning(name)
+
+    def set_search_payload(self, doc_id: str, payload: Dict[str, Any]) -> None:
+        """Overwrite the ACL/metadata fields on every vector of ``doc_id`` (summary and chunks)."""
+        for collection, key in ((SUMMARIES_COLLECTION, "doc_id"), (CHUNKS_COLLECTION, "parent_doc_id")):
+            selector = rest.Filter(must=[rest.FieldCondition(key=key, match=rest.MatchValue(value=doc_id))])
+            try:
+                self.client.set_payload(collection_name=collection, payload=payload, points=selector, wait=True)
+            except Exception as exc:
+                if "not found" in str(exc).lower() or "404" in str(exc):
+                    continue
+                raise
 
     def _normalize_id(self, point_id: str) -> Union[int, uuid.UUID]:
         try:
@@ -491,7 +716,7 @@ class QdrantIndexer:
                     payload=payload,
                 )
             )
-        self._upsert_points(collection_name, points, batch_size=8)
+        self._upsert_points(collection_name, points, batch_size=upsert_batch_size())
 
     def _normalize_query_response(self, point: Any, query_lower: str) -> Dict[str, Any]:
         """Label keyword/project hits vs pure summary similarity."""
@@ -546,14 +771,16 @@ class QdrantIndexer:
         *,
         limit: int = 10,
         collection_name: str = "document_summaries",
+        query_filter: Any = None,
     ) -> List[Dict[str, Any]]:
         query_lower = (query or "").casefold()
         try:
             response = self._query_points(
                 collection_name=collection_name,
                 query=query_vector,
+                query_filter=query_filter,
                 limit=max(limit * 5, 40),
-                with_payload=True,
+                with_payload=SUMMARY_HIT_FIELDS,
             )
             points = response.points if getattr(response, "points", None) is not None else []
         except Exception as exc:
@@ -567,20 +794,43 @@ class QdrantIndexer:
         *,
         limit: int = 10,
         collection_name: str = "document_chunks",
+        query_filter: Any = None,
     ) -> Dict[str, Dict[str, Any]]:
-        """Search OCR / extracted page text. Independent from summary search."""
+        """Best page-text chunk per document. Independent from summary search.
+
+        Groups by document inside Qdrant so only one chunk per document crosses the
+        network; falls back to over-fetching when the server cannot group.
+        """
         chunk_best: Dict[str, Dict[str, Any]] = {}
+        points: List[Any] = []
+        grouped = dict(
+            collection_name=collection_name,
+            query_filter=query_filter,
+            group_by="parent_doc_id",
+            group_size=1,
+            limit=limit,
+            with_payload=CHUNK_HIT_FIELDS,
+        )
         try:
-            response = self._query_points(
-                collection_name=collection_name,
-                query=query_vector,
-                limit=max(limit * 8, 60),
-                with_payload=True,
-            )
-            points = response.points if getattr(response, "points", None) is not None else []
+            if hasattr(self.raw_client, "query_points_groups"):
+                groups = self.client.query_points_groups(query=query_vector, **grouped)
+            else:
+                groups = self.client.search_groups(query_vector=query_vector, **grouped)
+            points = [group.hits[0] for group in groups.groups if group.hits]
         except Exception as exc:
-            logger.warning("Chunk vector search failed: %s", exc)
-            return {}
+            logger.info("Grouped chunk search unavailable (%s); over-fetching", exc)
+            try:
+                response = self._query_points(
+                    collection_name=collection_name,
+                    query=query_vector,
+                    query_filter=query_filter,
+                    limit=max(limit * 8, 60),
+                    with_payload=CHUNK_HIT_FIELDS,
+                )
+                points = response.points if getattr(response, "points", None) is not None else []
+            except Exception as exc2:
+                logger.warning("Chunk vector search failed: %s", exc2)
+                return {}
 
         for point in points:
             payload = getattr(point, "payload", None) or {}
@@ -606,6 +856,38 @@ class QdrantIndexer:
                     "source": "chunk",
                 }
         return chunk_best
+
+    def search_passages(
+        self,
+        query_vector: List[float],
+        *,
+        limit: int = 12,
+        query_filter: Any = None,
+        collection_name: str = CHUNKS_COLLECTION,
+    ) -> List[Dict[str, Any]]:
+        """Top page-text chunks with full text, for grounded answers."""
+        response = self._query_points(
+            collection_name=collection_name,
+            query=query_vector,
+            query_filter=query_filter,
+            limit=limit,
+            with_payload=True,
+        )
+        passages = []
+        for point in getattr(response, "points", None) or []:
+            payload = getattr(point, "payload", None) or {}
+            parent = payload.get("parent_doc_id") or payload.get("document_id")
+            if not parent:
+                continue
+            passages.append(
+                {
+                    "doc_id": str(parent),
+                    "page": payload.get("page_number"),
+                    "text": str(payload.get("text") or ""),
+                    "score": float(getattr(point, "score", 0) or 0),
+                }
+            )
+        return passages
 
     def fuse_hybrid_results(
         self,
@@ -651,9 +933,12 @@ class QdrantIndexer:
                     "match_reasons": ["chunk"],
                     "snippet": chunk_row.get("snippet") or "",
                     "sources": ["chunk"],
+                    "page": chunk_row.get("page_number"),
                 }
             else:
                 entry = by_id[doc_id]
+                if entry.get("page") is None:
+                    entry["page"] = chunk_row.get("page_number")
                 if "chunk" not in entry["match_reasons"]:
                     entry["match_reasons"].append("chunk")
                 if "chunk" not in entry["sources"]:

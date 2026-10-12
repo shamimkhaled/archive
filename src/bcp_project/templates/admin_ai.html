@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+
+{% block title %}AI providers | {{ brand.product_name }}{% endblock %}
+
+{% block content %}
+{% set ov = overview %}
+<div class="page-header">
+    <div class="title-group">
+        <h1>AI providers</h1>
+        <p>Which model serves each task. Switching takes effect on every service within about 30 seconds, with no redeploy.</p>
+    </div>
+</div>
+
+{% if status == 'switched' %}
+<div class="alert alert-success" role="status">Route switched. Workers pick it up on their next job.</div>
+{% elif status == 'reset' %}
+<div class="alert alert-success" role="status">Route returned to the environment setting.</div>
+{% elif status == 'rolled_back' %}
+<div class="alert alert-success" role="status">Earlier route re-activated.</div>
+{% elif status == 'pending' %}
+<div class="alert alert-success" role="status">Change recorded. It takes effect when a second administrator approves it.</div>
+{% elif status == 'approved' %}
+<div class="alert alert-success" role="status">Change approved and applied.</div>
+{% elif status in ['rejected', 'cancelled'] %}
+<div class="alert alert-success" role="status">Change {{ status }}.</div>
+{% endif %}
+{% if error %}
+<div class="alert alert-error" role="alert">{{ error }}</div>
+{% endif %}
+
+<section class="panel">
+    <h2>Egress policy: <code>{{ ov.egress_policy }}</code></h2>
+    <p class="muted">
+        Restricted documents are never sent to a cloud provider.
+        {% if ov.egress_policy == 'restricted_local_only' %}Confidential documents also stay on bank hardware.{% endif %}
+        {% if ov.egress_policy == 'internal_only' %}No document content leaves the bank.{% endif %}
+        When a cloud route is blocked, the call moves to the local server if <code>LOCAL_LLM_BASE_URL</code> is set; otherwise that step is skipped and the document stays keyword-searchable.
+    </p>
+    <p>
+        {% for name, ok in ov.configured.items() %}
+        <span class="badge">{{ name }}: {{ 'configured' if ok else 'not configured' }}</span>
+        {% endfor %}
+    </p>
+</section>
+
+{% if ov.four_eyes or ov.changes %}
+<section class="panel">
+    <h2>Changes awaiting approval</h2>
+    <p class="muted">
+        {% if ov.four_eyes %}Two-person control is on (<code>AI_ROUTE_FOUR_EYES=1</code>): a route change takes effect only after a different administrator approves it.
+        {% else %}Two-person control is off; earlier requests are listed for the record.{% endif %}
+    </p>
+    {% if ov.changes %}
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead><tr><th>#</th><th>Change</th><th>Requested</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+                {% for c in ov.changes %}
+                <tr>
+                    <td>{{ c.id }}</td>
+                    <td><code>{{ c.summary }}</code>{% if c.notes %}<br><span class="muted">{{ c.notes }}</span>{% endif %}</td>
+                    <td>{{ c.requested_by }}<br><span class="muted">{{ c.requested_at }}</span></td>
+                    <td>{{ c.status }}{% if c.reviewed_by %} by {{ c.reviewed_by }}{% endif %}{% if c.review_note %}<br><span class="muted">{{ c.review_note }}</span>{% endif %}</td>
+                    <td>
+                        {% if c.status == 'pending' %}
+                        {% if c.requested_by != user.username %}
+                        <form action="/admin/ai/changes/{{ c.id }}/approve" method="post" class="inline-form">
+                            <button type="submit" class="button">Approve</button>
+                        </form>
+                        {% endif %}
+                        <form action="/admin/ai/changes/{{ c.id }}/reject" method="post" class="inline-form">
+                            <input type="text" name="note" placeholder="Note" aria-label="Note">
+                            <button type="submit" class="button button-secondary">{{ 'Cancel' if c.requested_by == user.username else 'Reject' }}</button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p>No changes are waiting.</p>
+    {% endif %}
+</section>
+{% endif %}
+
+<section class="panel">
+    <h2>Active routes</h2>
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead><tr><th>Task</th><th>Provider</th><th>Model</th><th>Source</th><th></th></tr></thead>
+            <tbody>
+                {% for r in ov.routes %}
+                <tr>
+                    <td><code>{{ r.task }}</code></td>
+                    <td>{{ r.provider }}{% if r.cloud %} <span class="badge">cloud</span>{% endif %}</td>
+                    <td><code>{{ r.model }}</code>{% if r.params and r.params.dim %} ({{ r.params.dim }}-d){% endif %}</td>
+                    <td>
+                        {% if r.locked %}env, change with a reindex
+                        {% elif r.source == 'registry' %}admin switch
+                        {% else %}env{% endif %}
+                    </td>
+                    <td>
+                        {% if r.source == 'registry' %}
+                        <form action="/admin/ai/route/{{ r.task }}/reset" method="post" class="inline-form">
+                            <button type="submit" class="button button-secondary">Use env</button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="panel">
+    <h2>Switch a route</h2>
+    <form action="/admin/ai/route" method="post" class="form-grid">
+        <label>Task
+            <select name="task" required>
+                {% for t in ov.tasks %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+            </select>
+        </label>
+        <label>Provider
+            <select name="provider" required>
+                {% for p in (ov.providers.chat + ['local_whisper', 'none'])|unique %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
+            </select>
+        </label>
+        <label>Model
+            <input type="text" name="model" required placeholder="e.g. qwen2.5:14b-instruct or openai/gpt-4.1-mini">
+        </label>
+        <label>Note
+            <input type="text" name="notes" maxlength="200" placeholder="Why (recorded in the audit log)">
+        </label>
+        <div><button type="submit" class="button">Activate</button></div>
+    </form>
+    <p class="muted">Embedding changes need a reindex into a new collection: see <code>scripts/reindex_embeddings.py</code>.</p>
+</section>
+
+<section class="panel">
+    <h2>History</h2>
+    {% if ov.history %}
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead><tr><th>#</th><th>Task</th><th>Provider / model</th><th>By</th><th>Activated</th><th>State</th><th></th></tr></thead>
+            <tbody>
+                {% for h in ov.history %}
+                <tr>
+                    <td>{{ h.id }}</td>
+                    <td><code>{{ h.task }}</code></td>
+                    <td>{{ h.provider }} / <code>{{ h.model }}</code>{% if h.notes %}<br><span class="muted">{{ h.notes }}</span>{% endif %}</td>
+                    <td>{{ h.activated_by or '—' }}</td>
+                    <td>{{ h.activated_at }}</td>
+                    <td>{{ 'active' if h.is_active else 'retired' }}</td>
+                    <td>
+                        {% if not h.is_active %}
+                        <form action="/admin/ai/history/{{ h.id }}/activate" method="post" class="inline-form">
+                            <button type="submit" class="button button-secondary">Roll back to this</button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="muted">No admin switches yet; every task uses its environment setting.</p>
+    {% endif %}
+</section>
+{% endblock %}

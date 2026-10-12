@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..access_control import write_audit
 from ..auth import get_password_hash
 from ..deps import _client_ip, get_current_user, get_db, require_role, templates
+from ..mfa import reset_enrollment
 from ..models import Role, User
 
 logger = logging.getLogger("bcp_project.routers.admin")
@@ -264,3 +265,29 @@ async def admin_delete_user(
     )
     await db.commit()
     return RedirectResponse(url="/admin/users?status=deleted", status_code=303)
+
+
+@router.post("/admin/users/{user_id}/mfa/reset")
+async def admin_reset_user_mfa(
+    request: Request,
+    user_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> RedirectResponse:
+    """Lost authenticator: the user re-enrols at next sign-in."""
+    require_role(current_user, [Role.admin])
+    target = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    if target is None:
+        return RedirectResponse(url="/admin/users?error=User+not+found", status_code=303)
+    removed = await reset_enrollment(db, target.username)
+    await write_audit(
+        db,
+        username=current_user.username,
+        action="mfa_reset",
+        resource_type="user",
+        resource_id=target.username,
+        detail="removed" if removed else "not_enrolled",
+        ip_address=_client_ip(request),
+        commit=True,
+    )
+    return RedirectResponse(url="/admin/users?status=mfa_reset", status_code=303)

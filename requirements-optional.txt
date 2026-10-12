@@ -1,0 +1,5 @@
+# Optional integrations, installed on top of requirements.txt only where used.
+# LDAP / Active Directory sign-in (LDAP_ENABLED=1)
+ldap3>=2.9
+# Load testing (loadtest/locustfile.py); run from a separate machine, not the app image
+locust>=2.20

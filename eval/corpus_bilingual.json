@@ -1,0 +1,182 @@
+[
+  {
+    "doc_id": "SB-EVAL-001", "title": "Board Meeting Minutes - ICT Procurement", "doc_type": "Minutes",
+    "department": "Board Affairs", "category": "board_minutes", "doc_date": "2026-01-14", "sensitivity": "internal",
+    "keywords": ["board", "ICT procurement", "core banking", "servers", "tender"],
+    "pages": [
+      "The Board approved the procurement of core banking servers from the ICT budget of Tk 12 crore. The Managing Director instructed the ICT Division to complete the tender within ninety days. Data centre redundancy at Mirpur will be upgraded.",
+      "পরিচালনা পর্ষদ আইসিটি বাজেট থেকে ১২ কোটি টাকায় কোর ব্যাংকিং সার্ভার ক্রয়ের অনুমোদন দিয়েছে। ব্যবস্থাপনা পরিচালক নব্বই দিনের মধ্যে দরপত্র সম্পন্ন করার নির্দেশ দেন।"
+    ]
+  },
+  {
+    "doc_id": "SB-EVAL-002", "title": "Circular - Agricultural Loan Interest Rate", "doc_type": "Circular",
+    "department": "Credit", "category": "circular", "doc_date": "2026-02-03", "sensitivity": "internal",
+    "keywords": ["agricultural loan", "crop loan", "interest rate", "farmers"],
+    "pages": [
+      "Sonali Bank circular on agricultural loans: the interest rate for crop loans is reduced to 8 percent with effect from 1 March 2026. Farmers in flood-affected districts receive a six month grace period. Branch managers must report disbursement weekly.",
+      "কৃষি ঋণ বিষয়ক সার্কুলার: শস্য ঋণের সুদের হার ৮ শতাংশে নামিয়ে আনা হয়েছে। বন্যাকবলিত জেলার কৃষকরা ছয় মাসের গ্রেস পিরিয়ড পাবেন। শাখা ব্যবস্থাপকগণ সাপ্তাহিক বিতরণ প্রতিবেদন পাঠাবেন।"
+    ]
+  },
+  {
+    "doc_id": "SB-EVAL-003", "title": "Treasury - Foreign Exchange Reserve Policy", "doc_type": "Policy",
+    "department": "Treasury", "category": "policy", "doc_date": "2026-01-22", "sensitivity": "internal",
+    "keywords": ["treasury", "foreign exchange", "reserve", "ALCO", "correspondent bank"],
+    "pages": [
+      "The Treasury Division shall maintain a minimum foreign exchange reserve of USD 250 million. Dollar purchases above USD 5 million require approval of the Asset Liability Committee (ALCO). Exposure to a single correspondent bank is capped at 15 percent.",
+      "ট্রেজারি বিভাগ ন্যূনতম ২৫০ মিলিয়ন মার্কিন ডলার বৈদেশিক মুদ্রার রিজার্ভ বজায় রাখবে। একক করেসপন্ডেন্ট ব্যাংকের এক্সপোজার ১৫ শতাংশে সীমাবদ্ধ।"
+    ]
+  },
+  {
+    "doc_id": "SB-EVAL-004", "title": "HR - Officer Promotion Guidelines", "doc_type": "Guideline",
+    "department": "Human Resources", "category": "policy", "doc_date": "2025-11-10", "sensitivity": "internal",
+    "keywords": ["promotion", "principal officer", "performance appraisal"],
+    "pages": [
+      "Promotion of senior officers to principal officer requires five years of service and a satisfactory annual performance appraisal. Officers with pending disciplinary proceedings are not eligible. The promotion board meets every June.",
+      "সিনিয়র অফিসার থেকে প্রিন্সিপাল অফিসার পদে পদোন্নতির জন্য পাঁচ বছরের চাকরি এবং সন্তোষজনক বার্ষিক কর্মমূল্যায়ন প্রয়োজন। পদোন্নতি বোর্ড প্রতি জুন মাসে সভা করে।"
+    ]
+  },
+  {
+    "doc_id": "SB-EVAL-005", "title": "Risk Management Committee - Cyber Security Review", "doc_type": "Minutes",
+    "department": "Risk Management", "category": "board_minutes", "doc_date": "2026-03-05", "sensitivity": "internal",
+    "keywords": ["cyber security", "phishing", "multi-factor authentication", "penetration test"],
+    "pages": [
+      "The Risk Management Committee reviewed the phishing incident at the Motijheel branch. Multi-factor authentication will be mandatory for all internet banking users by 30 June 2026. A penetration test of the payment gateway is scheduled for April.",
+      "ঝুঁকি ব্যবস্থাপনা কমিটি মতিঝিল শাখার ফিশিং ঘটনা পর্যালোচনা করেছে। সকল ইন্টারনেট ব্যাংকিং গ্রাহকের জন্য মাল্টি-ফ্যাক্টর অথেনটিকেশন বাধ্যতামূলক করা হবে।"
+    ]
+  },
+  {
+    "doc_id": "SB-EVAL-006", "title": "Compliance - Anti Money Laundering Circular", "doc_type": "Circular",
+    "department": "Compliance", "category": "circular", "doc_date": "2026-02-18", "sensitivity": "internal",
+    "keywords": ["AML", "BFIU", "cash transaction report", "suspicious transaction"],
+    "pages": [
+      "Cash transactions of Tk 10 lakh or more must be reported to the Bangladesh Financial Intelligence Unit (BFIU) as cash transaction reports. Customer due diligence must be refreshed every three years for high risk accounts. Suspicious transaction reports are filed within seven working days.",
+      "১০ লক্ষ টাকা বা তার বেশি নগদ লেনদেন বাংলাদেশ ফাইন্যান্সিয়াল ইন্টেলিজেন্স ইউনিটে (বিএফআইইউ) রিপোর্ট করতে হবে। সন্দেহজনক লেনদেন রিপোর্ট সাত কর্মদিবসের মধ্যে দাখিল করতে হবে।"
+    ]
+  },
+  {
+    "doc_id": "SB-EVAL-007", "title": "Operations - Branch Opening Hours Notice", "doc_type": "Notice",
+    "department": "Operations", "category": "notice", "doc_date": "2026-03-20", "sensitivity": "public",
+    "keywords": ["Ramadan", "branch hours", "cash counter"],
+    "pages": [
+      "During Ramadan all branches will operate from 9:30 am to 2:30 pm. Cash counters close at 1:30 pm. Agent banking outlets keep regular hours.",
+      "রমজান মাসে সকল শাখা সকাল সাড়ে ৯টা থেকে দুপুর আড়াইটা পর্যন্ত খোলা থাকবে। নগদ লেনদেন কাউন্টার দুপুর দেড়টায় বন্ধ হবে।"
+    ]
+  },
+  {
+    "doc_id": "SB-EVAL-008", "title": "Audit - Internal Audit Report Khulna Region", "doc_type": "Report",
+    "department": "Audit", "category": "audit_report", "doc_date": "2025-12-08", "sensitivity": "internal",
+    "keywords": ["internal audit", "Khulna", "loan files", "vault shortage"],
+    "pages": [
+      "Internal audit of the Khulna region found 37 irregular loan files and a shortage of Tk 4.2 lakh in the Daulatpur branch vault. The audit recommends rotation of cash officers every two years.",
+      "খুলনা অঞ্চলের অভ্যন্তরীণ নিরীক্ষায় ৩৭টি অনিয়মিত ঋণ নথি পাওয়া গেছে। দৌলতপুর শাখার ভল্টে ৪.২ লক্ষ টাকা ঘাটতি পাওয়া গেছে।"
+    ]
+  },
+  {
+    "doc_id": "SB-EVAL-009", "title": "Finance - Annual Budget 2026", "doc_type": "Budget",
+    "department": "Finance", "category": "budget", "doc_date": "2026-01-05", "sensitivity": "internal",
+    "keywords": ["budget", "operating profit", "capital expenditure", "NPL recovery"],
+    "pages": [
+      "The annual budget for 2026 targets an operating profit of Tk 3,500 crore. Capital expenditure is allocated Tk 600 crore, of which digital banking receives Tk 220 crore. Non-performing loan recovery target is Tk 1,800 crore.",
+      "২০২৬ সালের বার্ষিক বাজেটে পরিচালন মুনাফার লক্ষ্যমাত্রা ৩,৫০০ কোটি টাকা। খেলাপি ঋণ আদায়ের লক্ষ্যমাত্রা ১,৮০০ কোটি টাকা।"
+    ]
+  },
+  {
+    "doc_id": "SB-EVAL-010", "title": "Board Meeting Minutes - Branch Expansion", "doc_type": "Minutes",
+    "department": "Board Affairs", "category": "board_minutes", "doc_date": "2026-02-25", "sensitivity": "internal",
+    "keywords": ["board", "branch expansion", "rural branches", "solar"],
+    "pages": [
+      "The Board approved opening 25 new rural branches in Rangpur and Sylhet divisions. Each new branch receives a start-up allocation of Tk 1.5 crore. Solar power will be installed in all new branches.",
+      "পরিচালনা পর্ষদ রংপুর ও সিলেট বিভাগে ২৫টি নতুন গ্রামীণ শাখা খোলার অনুমোদন দিয়েছে। সকল নতুন শাখায় সৌর বিদ্যুৎ স্থাপন করা হবে।"
+    ]
+  },
+  {
+    "doc_id": "SB-EVAL-011", "title": "ICT - Data Backup and Disaster Recovery Policy", "doc_type": "Policy",
+    "department": "ICT", "category": "policy", "doc_date": "2025-10-15", "sensitivity": "internal",
+    "keywords": ["backup", "disaster recovery", "RTO", "RPO"],
+    "pages": [
+      "Core banking databases are backed up every four hours to the disaster recovery site in Jessore. Recovery time objective is two hours and recovery point objective is fifteen minutes.",
+      "কোর ব্যাংকিং ডাটাবেস প্রতি চার ঘণ্টা পরপর যশোরের দুর্যোগ পুনরুদ্ধার কেন্দ্রে ব্যাকআপ নেওয়া হয়। পুনরুদ্ধার সময় লক্ষ্য দুই ঘণ্টা। ব্যাকআপ টেপ ব্যাংকের ভল্টে সংরক্ষিত থাকবে।"
+    ]
+  },
+  {
+    "doc_id": "SB-EVAL-012", "title": "Credit - SME Loan Policy", "doc_type": "Policy",
+    "department": "Credit", "category": "policy", "doc_date": "2025-09-30", "sensitivity": "internal",
+    "keywords": ["SME", "women entrepreneurs", "collateral-free"],
+    "pages": [
+      "Small and medium enterprise loans up to Tk 50 lakh may be sanctioned by the regional office. Women entrepreneurs receive collateral-free loans up to Tk 25 lakh.",
+      "ক্ষুদ্র ও মাঝারি উদ্যোক্তা ঋণ ৫০ লক্ষ টাকা পর্যন্ত আঞ্চলিক কার্যালয় মঞ্জুর করতে পারবে। নারী উদ্যোক্তারা ২৫ লক্ষ টাকা পর্যন্ত জামানতবিহীন ঋণ পাবেন। ঋণ পরিশোধের সর্বোচ্চ মেয়াদ পাঁচ বছর।"
+    ]
+  },
+  {
+    "doc_id": "SB-EVAL-013", "title": "HR - Leave Rules", "doc_type": "Guideline",
+    "department": "Human Resources", "category": "policy", "doc_date": "2025-08-12", "sensitivity": "internal",
+    "keywords": ["leave", "earned leave", "maternity leave"],
+    "pages": [
+      "Employees are entitled to 20 days of earned leave per year and six months of maternity leave. Leave without pay requires approval from the Deputy Managing Director.",
+      "কর্মচারীরা বছরে ২০ দিন অর্জিত ছুটি এবং ছয় মাস মাতৃত্বকালীন ছুটি পাবেন। বিনা বেতনে ছুটির জন্য উপ-ব্যবস্থাপনা পরিচালকের অনুমোদন প্রয়োজন। অসুস্থতাজনিত ছুটির জন্য মেডিকেল সনদ লাগবে।"
+    ]
+  },
+  {
+    "doc_id": "SB-EVAL-014", "title": "Treasury - Government Securities Investment", "doc_type": "Report",
+    "department": "Treasury", "category": "report", "doc_date": "2026-03-12", "sensitivity": "internal",
+    "keywords": ["treasury bills", "bonds", "yield", "investment"],
+    "pages": [
+      "The bank holds Tk 18,000 crore in treasury bills and bonds. The weighted average yield on the portfolio is 11.2 percent.",
+      "ব্যাংক ট্রেজারি বিল ও বন্ডে ১৮,০০০ কোটি টাকা বিনিয়োগ করেছে। পোর্টফোলিওর গড় মুনাফার হার ১১.২ শতাংশ। নতুন বিনিয়োগ শুধুমাত্র পাঁচ বছর মেয়াদি বন্ডে করা হবে।"
+    ]
+  },
+  {
+    "doc_id": "SB-EVAL-015", "title": "Compliance - Remittance Incentive Circular", "doc_type": "Circular",
+    "department": "Compliance", "category": "circular", "doc_date": "2026-01-28", "sensitivity": "public",
+    "keywords": ["remittance", "incentive", "wage earners"],
+    "pages": [
+      "Wage earners sending remittance through formal channels receive a 2.5 percent government incentive. Remittance must be credited to the beneficiary account within one working day.",
+      "বৈধ পথে রেমিট্যান্স প্রেরণকারী প্রবাসীরা ২.৫ শতাংশ সরকারি প্রণোদনা পাবেন। রেমিট্যান্স এক কর্মদিবসের মধ্যে সুবিধাভোগীর হিসাবে জমা করতে হবে। প্রণোদনার জন্য কোনো কাগজপত্র লাগবে না।"
+    ]
+  },
+  {
+    "doc_id": "SB-EVAL-016", "title": "Operations - ATM Network Expansion", "doc_type": "Report",
+    "department": "Operations", "category": "report", "doc_date": "2026-02-10", "sensitivity": "internal",
+    "keywords": ["ATM", "cash recycler", "eWallet"],
+    "pages": [
+      "Sonali Bank will install 300 new ATMs and 150 cash recycler machines by December 2026. Card-less cash withdrawal through the Sonali eWallet launches in July.",
+      "সোনালী ব্যাংক ডিসেম্বর ২০২৬ এর মধ্যে ৩০০টি নতুন এটিএম স্থাপন করবে। সোনালী ই-ওয়ালেটের মাধ্যমে কার্ড ছাড়া টাকা উত্তোলন জুলাই মাসে চালু হবে। প্রতিটি উপজেলায় অন্তত একটি এটিএম থাকবে।"
+    ]
+  },
+  {
+    "doc_id": "SB-EVAL-017", "title": "Audit Committee Minutes - External Auditor Appointment", "doc_type": "Minutes",
+    "department": "Audit", "category": "board_minutes", "doc_date": "2026-03-28", "sensitivity": "internal",
+    "keywords": ["audit committee", "external auditor", "audit fee"],
+    "pages": [
+      "The Audit Committee recommended appointing Rahman Hossain and Co. as external auditor for 2026 with a fee of Tk 85 lakh. The auditor must rotate the engagement partner after three years.",
+      "অডিট কমিটি ২০২৬ সালের জন্য রহমান হোসেন অ্যান্ড কোং কে বহিঃনিরীক্ষক নিয়োগের সুপারিশ করেছে। নিরীক্ষা ফি ৮৫ লক্ষ টাকা। নিরীক্ষা প্রতিবেদন মে মাসের মধ্যে দাখিল করতে হবে।"
+    ]
+  },
+  {
+    "doc_id": "SB-EVAL-018", "title": "Risk - Climate Risk and Green Finance Guideline", "doc_type": "Guideline",
+    "department": "Risk Management", "category": "policy", "doc_date": "2025-12-20", "sensitivity": "internal",
+    "keywords": ["green finance", "climate risk", "solar irrigation", "brick kilns"],
+    "pages": [
+      "At least 5 percent of new term loans must finance green projects such as solar irrigation and effluent treatment plants. Brick kilns using old technology are excluded from financing.",
+      "নতুন মেয়াদি ঋণের অন্তত ৫ শতাংশ সবুজ প্রকল্পে অর্থায়ন করতে হবে। সৌরচালিত সেচ প্রকল্প অগ্রাধিকার পাবে। পুরনো প্রযুক্তির ইটভাটা অর্থায়ন থেকে বাদ থাকবে।"
+    ]
+  },
+  {
+    "doc_id": "SB-EVAL-019", "title": "Board Memo - Large Loan Write-off", "doc_type": "Memo",
+    "department": "Board Affairs", "category": "board_paper", "doc_date": "2026-03-30", "sensitivity": "restricted",
+    "keywords": ["write-off", "classified loans", "Hallmark"],
+    "pages": [
+      "Confidential: the Board is asked to approve the write-off of Tk 2,150 crore of classified loans owed by Hallmark Group. Legal recovery suits remain active.",
+      "গোপনীয়: হলমার্ক গ্রুপের নিকট পাওনা ২,১৫০ কোটি টাকার শ্রেণিকৃত ঋণ অবলোপনের অনুমোদন চাওয়া হয়েছে। আইনি আদায় মামলা চলমান থাকবে। অবলোপন প্রস্তাব পরবর্তী বোর্ড সভায় উপস্থাপন করা হবে।"
+    ]
+  },
+  {
+    "doc_id": "SB-EVAL-020", "title": "HR Memo - Executive Compensation Revision", "doc_type": "Memo",
+    "department": "Human Resources", "category": "board_paper", "doc_date": "2026-03-15", "sensitivity": "restricted",
+    "keywords": ["compensation", "salary", "bonus"],
+    "pages": [
+      "Confidential: the monthly salary of the Managing Director is revised to Tk 12 lakh effective July 2026. General Managers receive a 15 percent performance bonus.",
+      "গোপনীয়: ব্যবস্থাপনা পরিচালকের মাসিক বেতন জুলাই ২০২৬ থেকে ১২ লক্ষ টাকা নির্ধারণ করা হয়েছে। মহাব্যবস্থাপকগণ ১৫ শতাংশ কর্মদক্ষতা বোনাস পাবেন। সংশোধিত বেতন কাঠামো পর্ষদের অনুমোদন সাপেক্ষে কার্যকর হবে।"
+    ]
+  }
+]

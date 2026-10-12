@@ -66,7 +66,7 @@ def test_merge_service_scopes_intersects_with_user():
     merged = merge_service_scopes(client_scopes, member)
     assert Scope.docs_search.value in merged
     assert Scope.docs_meta.value in merged
-    assert Scope.docs_search_privileged.value in merged  # client-side privilege retained
+    assert Scope.docs_search_privileged.value not in merged  # never above the represented user
     assert Scope.mcp_invoke.value in merged
     assert Scope.audit_read.value not in merged  # member role lacks it
 

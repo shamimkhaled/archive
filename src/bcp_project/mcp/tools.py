@@ -11,6 +11,7 @@ from ..jobs.handlers import JOB_CONNECTOR_PULL
 from ..jobs.queue import enqueue_job, job_queue_enabled
 from ..policy import Principal, Scope, require_scope
 from ..ports.loan_hr import get_hr_port, get_loan_port
+from ..search_acl import SearchFilters
 from ..services import ask_sonali, customer_query, document_query, hitl
 from ..services.connector_sync import pull_document_source
 
@@ -24,6 +25,12 @@ TOOL_DEFINITIONS = [
                 "q": {"type": "string", "description": "Search query (English or Bangla)"},
                 "lang": {"type": "string", "enum": ["en", "bn", "any"]},
                 "limit": {"type": "integer", "minimum": 1, "maximum": 50, "default": 10},
+                "department": {"type": "string", "description": "Exact department, case-insensitive"},
+                "category": {"type": "string"},
+                "doc_type": {"type": "string"},
+                "reference_number": {"type": "string"},
+                "date_from": {"type": "string", "format": "date"},
+                "date_to": {"type": "string", "format": "date"},
             },
             "required": ["q"],
         },
@@ -179,12 +186,19 @@ async def invoke_tool(
         await _require_hitl_approval(db, name, args)
 
     if name == "search_documents":
+        try:
+            filters = SearchFilters.from_params(
+                **{key: args.get(key) for key in ("department", "category", "doc_type", "reference_number", "date_from", "date_to")}
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
         return await document_query.search_documents_for_principal(
             db,
             principal,
             str(args.get("q") or ""),
             lang=args.get("lang"),
             limit=int(args.get("limit") or 10),
+            filters=filters,
             ip_address=ip_address,
             tool_name=name,
         )

@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}Versions of {{ document.doc_id }} | {{ brand.product_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div class="title-group">
+        <h1>Versions of {{ document.doc_id }}</h1>
+        <p>Every upload is kept unchanged with its SHA-256 fingerprint. Search shows the current approved version.</p>
+    </div>
+    <div><a class="button button-secondary" href="/view/{{ document.doc_id }}">Open document</a></div>
+</div>
+
+<section class="panel">
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead>
+                <tr><th>Version</th><th>Status</th><th>Uploaded</th><th>Type / size</th><th>SHA-256</th><th></th></tr>
+            </thead>
+            <tbody>
+                {% for v in versions %}
+                <tr>
+                    <td>v{{ v.version }}{% if v.is_current %} <span class="badge">current</span>{% endif %}</td>
+                    <td>{{ v.status|replace('_', ' ') }}{% if v.note %}<br><span class="muted">{{ v.note }}</span>{% endif %}</td>
+                    <td>{{ v.created_by }}<br><span class="muted">{{ (v.created_at or '')[:16]|replace('T', ' ') }}</span></td>
+                    <td>{{ v.content_type or '—' }}{% if v.size_bytes %}<br><span class="muted">{{ (v.size_bytes / 1024)|round(1) }} KB</span>{% endif %}</td>
+                    <td><code title="{{ v.sha256 or '' }}">{{ (v.sha256 or 'not recorded')[:16] }}{% if v.sha256 %}…{% endif %}</code></td>
+                    <td class="actions">
+                        <a class="button button-secondary" href="{{ v.view_url }}" target="_blank" rel="noopener">View</a>
+                        {% if can_verify and v.sha256 %}
+                        <button type="button" class="button button-secondary" data-verify="/api/documents/{{ document.doc_id }}/versions/{{ v.version }}/verify">Check integrity</button>
+                        {% endif %}
+                        {% if v.status == 'pending_review' %}
+                        <a class="button" href="/review/{{ document.doc_id }}?v={{ v.version }}">Verify OCR</a>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <p class="muted" id="verifyResult" role="status"></p>
+</section>
+
+{% if can_upload %}
+<section class="panel">
+    <h2>Upload a new version</h2>
+    <form id="versionForm" class="form-grid" enctype="multipart/form-data">
+        <div class="form-group">
+            <label for="version_file">File (PDF, PNG, JPEG, TIFF)</label>
+            <input id="version_file" type="file" name="file" required accept="application/pdf,image/png,image/jpeg,image/tiff,.pdf,.png,.jpg,.jpeg,.tif,.tiff" />
+        </div>
+        <div class="form-group">
+            <label for="version_note">What changed</label>
+            <input id="version_note" type="text" name="note" maxlength="300" />
+        </div>
+        <div><button type="submit" class="button">Upload version</button></div>
+    </form>
+    <p class="muted" id="versionResult" role="status"></p>
+</section>
+{% endif %}
+
+<script>
+(function () {
+    function headers() {
+        const h = (window.BCPCsrf && window.BCPCsrf.headers) ? window.BCPCsrf.headers() : {};
+        h['Accept'] = 'application/json';
+        return h;
+    }
+    document.querySelectorAll('[data-verify]').forEach(function (btn) {
+        btn.addEventListener('click', async function () {
+            const out = document.getElementById('verifyResult');
+            out.textContent = 'Checking…';
+            const res = await fetch(btn.dataset.verify, { credentials: 'same-origin', headers: headers() });
+            const data = await res.json().catch(function () { return {}; });
+            if (!res.ok) { out.textContent = data.detail || 'Check failed.'; return; }
+            out.textContent = data.match
+                ? 'v' + data.version + ': stored file matches its recorded SHA-256.'
+                : 'v' + data.version + ': MISMATCH. Stored file hash ' + data.actual_sha256 + ' differs from the recorded ' + data.recorded_sha256 + '.';
+        });
+    });
+    const form = document.getElementById('versionForm');
+    if (form) {
+        form.addEventListener('submit', async function (event) {
+            event.preventDefault();
+            const out = document.getElementById('versionResult');
+            out.textContent = 'Uploading…';
+            const res = await fetch('/api/documents/{{ document.doc_id|urlencode }}/versions', {
+                method: 'POST', body: new FormData(form), credentials: 'same-origin', headers: headers(),
+            });
+            const data = await res.json().catch(function () { return {}; });
+            if (res.status !== 202) { out.textContent = data.detail || ('Upload failed (' + res.status + ').'); return; }
+            out.textContent = 'Version ' + data.version + ' received and queued for processing.';
+            setTimeout(function () { window.location.reload(); }, 1500);
+        });
+    }
+})();
+</script>
+{% endblock %}

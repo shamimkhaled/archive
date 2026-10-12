@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block title %}Job queues | {{ brand.product_name }}{% endblock %}
+
+{% block content %}
+{% set ov = overview %}
+<div class="page-header">
+    <div class="title-group">
+        <h1>Job queues</h1>
+        <p>Background work on Redis Streams: ingest, meeting transcription, and notifications.</p>
+    </div>
+</div>
+
+{% if status == 'retried' %}
+<div class="alert alert-success" role="status">Job sent back to its queue.</div>
+{% endif %}
+{% if not ov.redis_ok %}
+<div class="alert alert-error" role="alert">Redis is unreachable. Uploads still queue in the database outbox and publish when Redis returns.</div>
+{% endif %}
+
+<section class="panel">
+    <h2>Streams</h2>
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead><tr><th>Stream</th><th>Waiting</th><th>In progress</th><th>Lag</th><th>Workers</th></tr></thead>
+            <tbody>
+                {% for name, row in ov.streams.items() %}
+                <tr>
+                    <td><code>{{ name }}</code></td>
+                    <td>{{ row.length }}</td>
+                    <td>{{ row.pending if row.pending is defined else '—' }}</td>
+                    <td>{{ row.lag if row.lag is not none and row.lag is defined else '—' }}</td>
+                    <td>{{ row.consumers if row.consumers is defined else '—' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <p class="muted">Outbox rows waiting to publish: <strong>{{ ov.outbox_unpublished }}</strong></p>
+</section>
+
+<section class="panel">
+    <h2>Documents by ingest state</h2>
+    <p>
+        {% for state, count in ov.ingest_counts.items() %}
+        <span class="badge">{{ state }}: {{ count }}</span>
+        {% endfor %}
+    </p>
+    <h2>Jobs by status</h2>
+    <p>
+        {% for state, count in ov.job_status_counts.items() %}
+        <span class="badge">{{ state }}: {{ count }}</span>
+        {% else %}<span class="muted">No job history yet.</span>
+        {% endfor %}
+    </p>
+</section>
+
+<section class="panel">
+    <h2>Recent failures</h2>
+    {% if ov.recent_failures %}
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead><tr><th>Job</th><th>Type</th><th>Status</th><th>Attempts</th><th>Resource</th><th>Error</th></tr></thead>
+            <tbody>
+                {% for row in ov.recent_failures %}
+                <tr>
+                    <td><code>{{ row.id[:8] }}</code></td>
+                    <td>{{ row.job_type }}</td>
+                    <td>{{ row.status }}</td>
+                    <td>{{ row.attempts }}</td>
+                    <td>{{ row.resource }}</td>
+                    <td class="muted">{{ row.last_error }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="muted">No failed jobs.</p>
+    {% endif %}
+</section>
+
+<section class="panel">
+    <h2>Dead letters</h2>
+    {% if ov.dead_letters %}
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead><tr><th>Job</th><th>Type</th><th>Reason</th><th>Error</th><th>When</th><th></th></tr></thead>
+            <tbody>
+                {% for row in ov.dead_letters %}
+                <tr>
+                    <td><code>{{ (row.job_id or '')[:8] }}</code></td>
+                    <td>{{ row.type }}</td>
+                    <td>{{ row.reason }}</td>
+                    <td class="muted">{{ (row.error or '')[:200] }}</td>
+                    <td>{{ row.dead_at }}</td>
+                    <td>
+                        <form action="/admin/queues/dead/{{ row.entry_id }}/retry" method="post" class="inline-form">
+                            <button type="submit" class="button button-secondary">Retry</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="muted">The dead-letter stream is empty.</p>
+    {% endif %}
+</section>
+{% endblock %}

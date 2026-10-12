@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}Verification queue | {{ brand.product_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div class="title-group">
+        <h1>Verification queue</h1>
+        <p>Scans whose OCR confidence was too low to trust. They stay out of search until someone checks the text and confirms the metadata.</p>
+    </div>
+</div>
+
+{% if status == 'approved' %}
+<div class="alert alert-success" role="status">Approved. The corrected text is being indexed and will be searchable shortly.</div>
+{% elif status == 'rejected' %}
+<div class="alert alert-success" role="status">Rejected. The version will not be indexed.</div>
+{% endif %}
+{% if four_eyes %}
+<p class="muted">Four-eyes rule is on: you cannot verify a document you uploaded.</p>
+{% endif %}
+
+<section class="panel">
+    {% if items %}
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead>
+                <tr><th>Document</th><th>Type</th><th>Classification</th><th>OCR confidence</th><th>Pages</th><th>Uploaded</th><th></th></tr>
+            </thead>
+            <tbody>
+                {% for it in items %}
+                <tr>
+                    <td>
+                        <strong>{{ it.doc_id }}</strong>{% if it.is_new_version %} <span class="badge">v{{ it.version }}</span>{% endif %}
+                        {% if it.title %}<br><span class="muted">{{ it.title }}</span>{% endif %}
+                    </td>
+                    <td>{{ it.doc_type }}</td>
+                    <td><span class="badge">{{ it.sensitivity }}</span></td>
+                    <td>{% if it.ocr_confidence is not none %}{{ '%.0f'|format(it.ocr_confidence) }}%{% else %}—{% endif %}</td>
+                    <td>{{ it.page_count or '—' }}</td>
+                    <td>{{ it.uploaded_by }}<br><span class="muted">{{ (it.uploaded_at or '')[:16]|replace('T', ' ') }}</span></td>
+                    <td><a class="button" href="/review/{{ it.doc_id }}?v={{ it.version }}">Verify</a></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="muted">Nothing is waiting for verification.</p>
+    {% endif %}
+</section>
+{% endblock %}

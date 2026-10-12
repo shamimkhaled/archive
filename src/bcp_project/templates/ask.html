@@ -32,6 +32,7 @@
 
   <div id="askStatus" class="ask-status" hidden></div>
   <article id="askAnswer" class="ask-answer" hidden></article>
+  <p id="askProvenance" class="muted ask-provenance" hidden></p>
   <section id="askCitations" class="ask-citations" hidden>
     <h2>Citations</h2>
     <ul id="askCitationList"></ul>
@@ -48,6 +49,13 @@
   var citesEl = document.getElementById("askCitations");
   var listEl = document.getElementById("askCitationList");
   var btn = document.getElementById("askSubmit");
+  var provenanceEl = document.getElementById("askProvenance");
+
+  function citationHref(c) {
+    if (c.url && c.url.indexOf("/view/") === 0) return c.url;
+    var page = parseInt(c.page, 10);
+    return "/view/" + encodeURIComponent(c.doc_id) + (page > 0 ? "?page=" + page : "");
+  }
 
   function csrfToken() {
     var m = document.cookie.match(/(?:^|; )csrf_token=([^;]*)/);
@@ -61,6 +69,7 @@
     statusEl.textContent = "Searching authorized sources…";
     answerEl.hidden = true;
     citesEl.hidden = true;
+    provenanceEl.hidden = true;
     listEl.innerHTML = "";
     try {
       var res = await fetch("/api/v1/ask", {
@@ -85,14 +94,23 @@
       statusEl.textContent = data.disclaimer || "AI support only.";
       answerEl.hidden = false;
       answerEl.textContent = data.answer || "";
+      var by = data.answered_by || {};
+      if (by.provider || by.model) {
+        provenanceEl.hidden = false;
+        provenanceEl.textContent = "Answered by " + [by.provider, by.model].filter(Boolean).join(" · ") +
+          (by.route ? " (" + by.route + ")" : "");
+      }
       var cites = data.citations || [];
       if (cites.length) {
         citesEl.hidden = false;
         cites.forEach(function (c) {
           var li = document.createElement("li");
-          var page = c.page != null ? (" · p." + c.page) : "";
-          li.innerHTML = '<a href="/view/' + encodeURIComponent(c.doc_id) + '">' + c.doc_id + "</a>" + page +
-            (c.quote ? (" — “" + c.quote + "”") : "");
+          var link = document.createElement("a");
+          link.href = citationHref(c);
+          link.textContent = c.doc_id;
+          li.appendChild(link);
+          var tail = (c.page != null ? " · p." + c.page : "") + (c.quote ? " — “" + c.quote + "”" : "");
+          if (tail) li.appendChild(document.createTextNode(tail));
           listEl.appendChild(li);
         });
       }

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List
 
 from sqlalchemy import select
@@ -14,14 +16,23 @@ from ..asr import stamp_segments, transcribe_audio_file, whisper_available
 from ..chunker import chunk_documents
 from ..db import get_session
 from ..dummy_transcription import TRANSCRIPTION_LIVE, TRANSCRIPTION_PROCESSING, TRANSCRIPTION_STOPPED
-from ..meeting_audio import chunk_path, list_chunk_paths, merge_chunks, session_audio_path
+from ..meeting_audio import (
+    chunk_path,
+    list_chunk_paths,
+    merge_chunks,
+    normalize_recording,
+    recording_path,
+    session_audio_path,
+)
 from ..minutes_draft import (
     MINUTES_FAILED,
     MINUTES_GENERATING,
     MINUTES_READY,
     generate_minutes_markdown,
+    meeting_sensitivity,
 )
 from ..models import BoardMeeting
+from ..services.minutes import MINUTES_DRAFT, extract_decisions_and_actions, minutes_state, replace_ai_items
 from ..ports.adapters import get_llm_client, get_vector_store
 from ..tx_live import publish_caption
 
@@ -34,12 +45,15 @@ JOB_MEETING_MINUTES = "meeting_minutes"
 JOB_AUDIT_EXPORT = "audit_export"
 JOB_CONNECTOR_PULL = "connector_pull"
 JOB_WEBHOOK_DISPATCH = "webhook_dispatch"
+JOB_DOCUMENT_INGEST = "document_ingest"
+JOB_BOARD_BRIEFING = "board_briefing"
+JOB_SIEM_FORWARD = "siem_forward"
 
 # Approximate MediaRecorder timeslice used by the client (seconds).
 CHUNK_DURATION_HINT = 5.0
 
 
-def run_chunk_index(doc_id: str, page_payloads: List[Dict[str, Any]]) -> int:
+def run_chunk_index(doc_id: str, page_payloads: List[Dict[str, Any]], *, sensitivity: str | None = None) -> int:
     """Embed + upsert child chunks. Used by worker and in-process fallback."""
     pages = []
     for payload in page_payloads:
@@ -66,7 +80,7 @@ def run_chunk_index(doc_id: str, page_payloads: List[Dict[str, Any]]) -> int:
     vectors: List[List[float]] = []
     batch_size = 24
     for i in range(0, len(texts), batch_size):
-        vectors.extend(llm.embed_texts(texts[i : i + batch_size]))
+        vectors.extend(llm.embed_texts(texts[i : i + batch_size], sensitivity=sensitivity))
     store.upload_chunks(chunks=chunk_records, vectors=vectors)
     logger.info("Chunk index complete for %s (%s chunks)", doc_id, len(chunk_records))
     return len(chunk_records)
@@ -148,6 +162,13 @@ async def run_meeting_minutes(meeting_id: int) -> bool:
         if meeting is None:
             logger.error("meeting_minutes: meeting %s not found", mid)
             return False
+        if minutes_state(meeting) != MINUTES_DRAFT:
+            # Minutes under review or approved are locked; a late job must not overwrite them.
+            logger.info("meeting_minutes: meeting %s minutes are %s; not regenerating", mid, meeting.minutes_state)
+            if meeting.minutes_status != MINUTES_READY:
+                meeting.minutes_status = MINUTES_READY
+                await session.commit()
+            return False
         meeting.minutes_status = MINUTES_GENERATING
         await session.commit()
 
@@ -163,7 +184,15 @@ async def run_meeting_minutes(meeting_id: int) -> bool:
             meeting.minutes_draft = draft["body_md"]
             meeting.minutes_source = draft["source"]
             meeting.minutes_generated_at = datetime.utcnow()
+            meeting.minutes_edited_by = None
+            meeting.minutes_edited_at = None
             meeting.minutes_status = MINUTES_READY
+            if draft["source"] == "llm":
+                extracted = await asyncio.to_thread(
+                    extract_decisions_and_actions, draft["body_md"], segments, sensitivity=meeting_sensitivity()
+                )
+                counts = await replace_ai_items(session, mid, extracted)
+                logger.info("Meeting %s: extracted %s decisions, %s actions", mid, counts["decisions"], counts["actions"])
             await session.commit()
             await publish_caption(
                 mid,
@@ -192,12 +221,33 @@ async def _schedule_minutes(meeting_id: int) -> None:
     await run_meeting_minutes(int(meeting_id))
 
 
-async def run_meeting_transcribe(meeting_id: int) -> int:
-    """Merge recorded chunks and run local Whisper; write segments onto the meeting."""
+def _diarize_segments(mid: int, audio_path: Path, segments: List[Dict[str, Any]], speaker_map: Dict[str, str]):
+    """Returns (segments, diarization_status). Failure keeps the undiarized transcript."""
+    from ..diarization import DIARIZATION_DONE, DIARIZATION_EMPTY, DIARIZATION_FAILED, assign_speakers, diarize
+
+    try:
+        turns = diarize(audio_path)
+    except Exception:
+        logger.exception("Diarization failed for meeting %s", mid)
+        return segments, DIARIZATION_FAILED
+    if not turns:
+        return segments, DIARIZATION_EMPTY
+    return assign_speakers(segments, turns, speaker_map), DIARIZATION_DONE
+
+
+async def run_meeting_transcribe(meeting_id: int, source: str | None = None) -> int:
+    """Transcribe an uploaded recording, or the merged live chunks; write segments onto the meeting."""
+    from ..diarization import DIARIZATION_OFF, diarization_enabled
+
     mid = int(meeting_id)
-    chunks = list_chunk_paths(mid)
-    merged = merge_chunks(mid)
-    audio_path = merged or (session_audio_path(mid) if session_audio_path(mid).exists() else None)
+    chunks: List[Path] = []
+    recording = recording_path(mid) if source != "live" else None
+    if recording is not None:
+        audio_path = await asyncio.to_thread(normalize_recording, mid, recording)
+    else:
+        chunks = list_chunk_paths(mid)
+        merged = merge_chunks(mid)
+        audio_path = merged or (session_audio_path(mid) if session_audio_path(mid).exists() else None)
 
     if audio_path is None and chunks:
         raw_segments: List[Dict[str, Any]] = []
@@ -230,6 +280,15 @@ async def run_meeting_transcribe(meeting_id: int) -> int:
             }
         ]
 
+    diarization_status = DIARIZATION_OFF
+    if audio_path is not None and diarization_enabled():
+        async with get_session() as session:
+            row = await session.get(BoardMeeting, mid)
+            speaker_map = dict((row.speaker_map if row else None) or {})
+        segments_raw, diarization_status = await asyncio.to_thread(
+            _diarize_segments, mid, audio_path, segments_raw, speaker_map
+        )
+
     async with get_session() as session:
         result = await session.execute(select(BoardMeeting).where(BoardMeeting.id == mid))
         meeting = result.scalar_one_or_none()
@@ -240,6 +299,7 @@ async def run_meeting_transcribe(meeting_id: int) -> int:
         for row in stamped:
             row["live"] = False
         meeting.transcription_json = stamped
+        meeting.diarization_status = diarization_status
         if (meeting.transcription_status or "") == TRANSCRIPTION_PROCESSING:
             meeting.transcription_status = TRANSCRIPTION_STOPPED
         await session.commit()
@@ -268,6 +328,7 @@ async def run_audit_export(since_id: int = 0, limit: int = 500) -> Dict[str, Any
     from pathlib import Path
 
     from ..models import AuditLog
+    from ..services.audit_chain import audit_row_payload
 
     export_dir = Path(os.getenv("AUDIT_EXPORT_DIR", "audit_exports"))
     export_dir.mkdir(parents=True, exist_ok=True)
@@ -284,24 +345,36 @@ async def run_audit_export(since_id: int = 0, limit: int = 500) -> Dict[str, Any
         rows = (await session.execute(stmt)).scalars().all()
         with out_path.open("w", encoding="utf-8") as fh:
             for row in rows:
-                payload = {
-                    "id": row.id,
-                    "username": row.username,
-                    "action": row.action,
-                    "resource_type": row.resource_type,
-                    "resource_id": row.resource_id,
-                    "detail": row.detail,
-                    "ip_address": row.ip_address,
-                    "correlation_id": getattr(row, "correlation_id", None),
-                    "actor_type": getattr(row, "actor_type", None),
-                    "tool_name": getattr(row, "tool_name", None),
-                    "created_at": row.created_at.isoformat() if row.created_at else None,
-                }
+                payload = {**audit_row_payload(row), "prev_hash": row.prev_hash, "row_hash": row.row_hash}
                 fh.write(json.dumps(payload, ensure_ascii=False) + "\n")
                 exported += 1
                 last_id = row.id
     logger.info("Audit export wrote %s rows to %s (last_id=%s)", exported, out_path, last_id)
     return {"path": str(out_path), "exported": exported, "last_id": last_id}
+
+
+async def run_audit_maintenance(*, batch: int = 1000, max_batches: int = 20) -> Dict[str, int]:
+    """Seal new audit rows into the hash chain, then forward sealed rows to the SIEM if enabled."""
+    from ..services.audit_chain import seal_pending
+    from ..services.siem import forward_audit, siem_enabled
+
+    sealed = sent = 0
+    for _ in range(max_batches):
+        async with get_session() as session:
+            count = await seal_pending(session, limit=batch)
+        sealed += count
+        if count < batch:
+            break
+    if siem_enabled():
+        for _ in range(max_batches):
+            async with get_session() as session:
+                result = await forward_audit(session, limit=batch)
+            sent += result["sent"]
+            if result["sent"] < batch:
+                break
+    if sealed or sent:
+        logger.info("Audit maintenance: sealed %s rows, forwarded %s to SIEM", sealed, sent)
+    return {"sealed": sealed, "forwarded": sent}
 
 
 async def dispatch_job(job: Dict[str, Any]) -> None:
@@ -312,13 +385,33 @@ async def dispatch_job(job: Dict[str, Any]) -> None:
         page_payloads = payload.get("page_payloads") or []
         if not doc_id:
             raise ValueError("chunk_index job missing doc_id")
-        run_chunk_index(doc_id, page_payloads)
+        if payload.get("sensitivity"):
+            run_chunk_index(doc_id, page_payloads, sensitivity=str(payload["sensitivity"]))
+        else:
+            run_chunk_index(doc_id, page_payloads)
+        return
+    if job_type == JOB_DOCUMENT_INGEST:
+        from ..services.ingest import run_document_ingest
+
+        doc_id = str(payload.get("doc_id") or "")
+        if not doc_id:
+            raise ValueError("document_ingest job missing doc_id")
+        version = payload.get("version")
+        await run_document_ingest(doc_id, version=int(version) if version is not None else None)
+        return
+    if job_type == JOB_BOARD_BRIEFING:
+        from ..services.briefing import run_board_briefing
+
+        briefing_id = payload.get("briefing_id")
+        if briefing_id is None:
+            raise ValueError("board_briefing job missing briefing_id")
+        await run_board_briefing(int(briefing_id))
         return
     if job_type == JOB_MEETING_TRANSCRIBE:
         meeting_id = payload.get("meeting_id")
         if meeting_id is None:
             raise ValueError("meeting_transcribe job missing meeting_id")
-        await run_meeting_transcribe(int(meeting_id))
+        await run_meeting_transcribe(int(meeting_id), source=payload.get("source"))
         return
     if job_type == JOB_MEETING_CHUNK_STT:
         meeting_id = payload.get("meeting_id")
@@ -338,6 +431,9 @@ async def dispatch_job(job: Dict[str, Any]) -> None:
             since_id=int(payload.get("since_id") or 0),
             limit=int(payload.get("limit") or 500),
         )
+        return
+    if job_type == JOB_SIEM_FORWARD:
+        await run_audit_maintenance(batch=int(payload.get("limit") or 1000))
         return
     if job_type == JOB_CONNECTOR_PULL:
         from ..services.connector_sync import pull_document_source

@@ -1,0 +1,69 @@
+{
+  "kind": "restore_drill",
+  "ok": true,
+  "operator": "Engineering (dev environment)",
+  "drill_started_at": "2026-10-12T13:16:55+00:00",
+  "target": "127.0.0.1:56543/archive_restore",
+  "backup": {
+    "stamp": "20261012T131301Z",
+    "key_id": "88d3ec96d1629b70",
+    "commit": "89b114e",
+    "source": "*.aws.neon.tech/neondb",
+    "server_version": "18.6 (c021049)",
+    "snapshot_time": "2026-10-12T13:13:03.939537+00:00",
+    "consistent_snapshot": true
+  },
+  "rpo_minutes": 3.9,
+  "rto_minutes": 0.95,
+  "rows_restored": 1746,
+  "tables": 21,
+  "steps": [
+    {
+      "step": "verify backup signature and encryption",
+      "ok": true,
+      "seconds": 0.03,
+      "files": 13
+    },
+    {
+      "step": "decrypt database dump",
+      "ok": true,
+      "seconds": 0.0,
+      "bytes": 124007
+    },
+    {
+      "step": "pg_restore into target",
+      "ok": true,
+      "seconds": 1.69,
+      "returncode": 0,
+      "errors": 0,
+      "first_errors": []
+    },
+    {
+      "step": "row counts match the backup snapshot",
+      "ok": true,
+      "seconds": 0.05,
+      "tables": 21,
+      "rows": 1746,
+      "differences": {}
+    },
+    {
+      "step": "audit hash chain verifies on the restored copy",
+      "ok": true,
+      "seconds": 0.38,
+      "sealed": 177,
+      "reason": null,
+      "tip_matches_backup": true
+    },
+    {
+      "step": "original files hash to the restored version rows (backup)",
+      "ok": true,
+      "seconds": 55.08,
+      "checked": 13,
+      "matched_recorded_hash": 0,
+      "matched_live_original": 13,
+      "mismatched": [],
+      "unavailable": [],
+      "versions_without_recorded_hash": 13
+    }
+  ]
+}

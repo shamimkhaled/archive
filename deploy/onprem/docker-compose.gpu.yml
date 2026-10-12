@@ -1,0 +1,129 @@
+# Bank-hosted AI services for the archive (docs/evidence/local-ai-cutover.md).
+#
+# Air-gapped by design: the "ai" network is internal (no route out), model weights are loaded
+# from /srv/models, prepared on a staging host and checked against models.sha256 before transfer, and
+# HF_HUB_OFFLINE stops any download attempt. Pin every image by digest in the bank's registry;
+# the tags below are what the cutover was tested with.
+#
+#   docker compose -f deploy/onprem/docker-compose.gpu.yml --env-file deploy/onprem/ai.env up -d
+#   PYTHONPATH=src python scripts/local_ai_check.py --env deploy/onprem/ai.env
+#
+# The archive services reach the models only through ai-gateway (bearer key checked there):
+#   LOCAL_LLM_BASE_URL=http://ai-gateway:8088/llm/v1      LOCAL_LLM_MODEL=${LLM_SERVED_NAME}
+#   LOCAL_EMBED_BASE_URL=http://ai-gateway:8088/embed/v1  LOCAL_EMBED_MODEL=bge-m3   AI_EMBED_DIM=1024
+#   LOCAL_RERANK_BASE_URL=http://ai-gateway:8088/rerank
+#   LOCAL_STT_BASE_URL=http://ai-gateway:8088/stt/v1      AI_STT_MODEL=${WHISPER_MODEL}
+#   LOCAL_LLM_API_KEY=<same key as below>
+
+name: sbl-archive-ai
+
+x-common: &common
+  restart: unless-stopped
+  networks: [ai]
+  environment: &offline
+    HF_HUB_OFFLINE: "1"
+    TRANSFORMERS_OFFLINE: "1"
+    HF_HOME: /models/hf
+  logging:
+    driver: json-file
+    options: { max-size: "50m", max-file: "5" }
+
+services:
+  vllm:
+    <<: *common
+    image: ${VLLM_IMAGE:-vllm/vllm-openai:v0.8.5}
+    ipc: host
+    volumes:
+      - ${MODEL_DIR:-/srv/models}:/models:ro
+    environment:
+      <<: *offline
+      VLLM_API_KEY: ${LOCAL_LLM_API_KEY:?set LOCAL_LLM_API_KEY}
+    command:
+      - --model=/models/${LLM_MODEL_DIR:-Qwen2.5-14B-Instruct}
+      - --served-model-name=${LLM_SERVED_NAME:-qwen2.5-14b-instruct}
+      - --tensor-parallel-size=${LLM_TP:-1}
+      - --max-model-len=${LLM_MAX_LEN:-32768}
+      - --gpu-memory-utilization=${LLM_GPU_UTIL:-0.90}
+      - --max-num-seqs=${LLM_MAX_SEQS:-32}
+      - --enable-prefix-caching
+      - --disable-log-requests
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["${LLM_GPUS:-0}"]
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 20
+      start_period: 300s
+
+  tei-embed:
+    <<: *common
+    image: ${TEI_IMAGE:-ghcr.io/huggingface/text-embeddings-inference:1.7}
+    volumes:
+      - ${MODEL_DIR:-/srv/models}:/models:ro
+    command: ["--model-id=/models/${EMBED_MODEL_DIR:-bge-m3}", "--max-batch-tokens=32768", "--max-client-batch-size=64", "--auto-truncate"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["${EMBED_GPUS:-1}"]
+              capabilities: [gpu]
+
+  tei-rerank:
+    <<: *common
+    image: ${TEI_IMAGE:-ghcr.io/huggingface/text-embeddings-inference:1.7}
+    volumes:
+      - ${MODEL_DIR:-/srv/models}:/models:ro
+    command: ["--model-id=/models/${RERANK_MODEL_DIR:-bge-reranker-v2-m3}", "--max-client-batch-size=64", "--auto-truncate"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["${EMBED_GPUS:-1}"]
+              capabilities: [gpu]
+
+  whisper:
+    <<: *common
+    image: ${WHISPER_IMAGE:-ghcr.io/speaches-ai/speaches:0.8.2-cuda}
+    volumes:
+      - ${MODEL_DIR:-/srv/models}:/models:ro
+    environment:
+      <<: *offline
+      WHISPER__COMPUTE_TYPE: ${WHISPER_COMPUTE_TYPE:-float16}
+      WHISPER__TTL: "-1"
+      PRELOAD_MODELS: '["${WHISPER_MODEL:-Systran/faster-whisper-large-v3}"]'
+      ALLOW_ORIGINS: '[]'
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["${WHISPER_GPUS:-1}"]
+              capabilities: [gpu]
+
+  # Only this proxy joins the archive's network; the model servers stay unreachable from elsewhere.
+  ai-gateway:
+    image: ${NGINX_IMAGE:-nginx:1.27-alpine}
+    restart: unless-stopped
+    networks: [ai, archive]
+    environment:
+      LOCAL_LLM_API_KEY: ${LOCAL_LLM_API_KEY:?set LOCAL_LLM_API_KEY}
+    volumes:
+      - ./ai-gateway.conf.template:/etc/nginx/templates/default.conf.template:ro
+    depends_on: [vllm, tei-embed, tei-rerank, whisper]
+    ports:
+      - "${AI_GATEWAY_BIND:-127.0.0.1}:8088:8088"
+
+networks:
+  ai:
+    internal: true
+  archive:
+    external: true
+    name: ${ARCHIVE_NETWORK:-sbl-archive}

@@ -12,24 +12,21 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..access_control import write_audit
 from ..brand import BRAND
 from ..deps import (
     MEETING_UPLOAD_DIR,
     UPLOAD_DIR,
-    _client_ip,
-    _load_stored_pdf_bytes,
     get_current_user,
     get_db,
     templates,
 )
-from ..models import BoardMeeting, MeetingAttendance, MeetingDocument, MeetingInvitation, User
-from ..pdf_watermark import stamp_pdf_bytes
+from ..models import BoardBriefing, BoardMeeting, MeetingAttendance, MeetingDocument, MeetingInvitation, User
+from ..services.briefing import STATE_APPROVED
 from .meeting_common import (
     _load_meeting_document_or_404,
     _meeting_workspace_extras,
     _require_invited_or_404,
-    _serve_meeting_document_file,
+    _stream_meeting_document,
 )
 
 logger = logging.getLogger("bcp_project.routers.board")
@@ -82,6 +79,18 @@ async def board_meeting_detail(
     attendance_result = await db.execute(attendance_statement)
     my_attendance = attendance_result.scalar_one_or_none()
     extras = await _meeting_workspace_extras(db, meeting)
+    archive_ids = [d.archive_doc_id for d in documents if d.archive_doc_id]
+    briefed = set()
+    if archive_ids:
+        briefed = set(
+            (
+                await db.execute(
+                    select(BoardBriefing.doc_id).where(
+                        BoardBriefing.doc_id.in_(archive_ids), BoardBriefing.state == STATE_APPROVED
+                    )
+                )
+            ).scalars()
+        )
 
     return templates.TemplateResponse(
         request,
@@ -90,6 +99,7 @@ async def board_meeting_detail(
             "user": current_user,
             "meeting": meeting,
             "documents": documents,
+            "briefed_doc_ids": briefed,
             "my_attendance": my_attendance,
             "status": status,
             **extras,
@@ -148,27 +158,7 @@ async def board_meeting_document_file(
 ) -> Response:
     await _require_invited_or_404(meeting_id, current_user, db)
     document = await _load_meeting_document_or_404(meeting_id, document_id, db)
-    pdf_bytes = await _load_stored_pdf_bytes(
-        document.file_location,
-        resource_id=f"meeting_document:{document.id}",
-    )
-    seal_text = BRAND.seal_meeting_doc(current_user.username)
-    try:
-        stamped = stamp_pdf_bytes(pdf_bytes, seal_text)
-    except Exception as exc:
-        logger.exception("Watermark stamping failed for board meeting document %s", document.id)
-        raise HTTPException(status_code=502, detail="Could not prepare secure meeting document stream") from exc
-    await write_audit(
-        db,
-        username=current_user.username,
-        action="view_file",
-        resource_type="meeting_document",
-        resource_id=str(document.id),
-        detail=f"meeting_id={meeting_id}",
-        ip_address=_client_ip(request),
-        commit=True,
-    )
-    return _serve_meeting_document_file(document, stamped)
+    return await _stream_meeting_document(request, db, document, meeting_id, current_user.username)
 
 
 @router.get("/board/meetings/{meeting_id}/documents/{document_id}/view", response_class=HTMLResponse)

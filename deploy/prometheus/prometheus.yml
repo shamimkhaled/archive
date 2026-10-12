@@ -1,0 +1,89 @@
+# Prometheus for the Sonali Bank Archive.
+#
+# Targets use docker-compose service names (deploy/observability.compose.yml).
+# On Railway use the private hostnames instead, e.g. web.railway.internal:8080.
+# In the bank data centre replace them with the VM addresses from
+# docs/evidence/network.md.
+#
+# The app's /metrics endpoints need a bearer token when METRICS_TOKEN is set
+# (always in production). Mount the token at /etc/prometheus/metrics_token.
+
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  evaluation_interval: 30s
+  external_labels:
+    system: sonali-archive
+    site: primary # "dr" on the standby site's Prometheus
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+scrape_configs:
+  # FastAPI web replicas. Each replica sums its uvicorn processes
+  # (METRICS_MULTIPROC_DIR) and refreshes the stream/outbox gauges on scrape.
+  - job_name: sonali-web
+    metrics_path: /metrics
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/metrics_token
+    static_configs:
+      - targets: ["web:8080"]
+        labels: { service: web }
+
+  # Workers and the outbox relay serve /metrics on METRICS_PORT (9108; 9100 is node-exporter).
+  - job_name: sonali-workers
+    metrics_path: /metrics
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/metrics_token
+    static_configs:
+      - targets: ["worker-ingest:9108"]
+        labels: { service: worker-ingest, queue: ingest }
+      - targets: ["worker-meeting:9108"]
+        labels: { service: worker-meeting, queue: meeting }
+      - targets: ["worker-notify:9108"]
+        labels: { service: worker-notify, queue: notify }
+      - targets: ["outbox-relay:9108"]
+        labels: { service: outbox-relay }
+
+  - job_name: qdrant
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["qdrant:6333"]
+        labels: { service: qdrant }
+
+  - job_name: postgres
+    static_configs:
+      - targets: ["postgres-exporter:9187"]
+        labels: { service: postgres }
+
+  - job_name: redis
+    static_configs:
+      - targets: ["redis-exporter:9121"]
+        labels: { service: redis }
+
+  - job_name: node
+    static_configs:
+      - targets: ["node-exporter:9100"]
+        labels: { service: host }
+
+  # TLS certificate expiry and external reachability of the public URL.
+  - job_name: blackbox-https
+    metrics_path: /probe
+    params:
+      module: [https_2xx]
+    static_configs:
+      - targets: ["https://archive.example.bank/healthz"]
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115

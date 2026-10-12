@@ -8,13 +8,18 @@ from typing import Any, Dict, List, Optional
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..access_control import write_audit
+from .. import ai
+from ..access_control import get_sensitivity_for_docs, write_audit
 from ..observability import Timer, incr
 from ..policy import Principal, Scope, require_scope
 from ..ports.adapters import get_llm_client
 from . import document_query
+from .search import citation_url, grounded_passages
 
 logger = logging.getLogger("bcp_project.services.ask_sonali")
+
+PASSAGES = 8
+PASSAGE_CHARS = 1200
 
 SYSTEM_PROMPT = """You are Ask Sonali Bank, a governed institutional-memory assistant.
 Rules (non-negotiable):
@@ -23,6 +28,7 @@ Rules (non-negotiable):
 3. If sources are insufficient, set refused=true and do not invent facts.
 4. Never claim to be the final authority; humans decide.
 5. Return ONLY valid JSON matching the schema.
+6. Write the answer in the language of the question (Bangla or English); keep quotes in the source's language.
 Schema:
 {
   "refused": false,
@@ -77,11 +83,20 @@ async def ask_sonali_for_principal(
             tool_name=tool_name or "ask_sonali",
         )
         evidence = _evidence_rows(search)
+        levels = await get_sensitivity_for_docs(db, {str(r.get("doc_id") or "") for r in evidence})
+        held_back = [r for r in evidence if not ai.chat_allowed("ask", levels.get(str(r.get("doc_id"))))]
+        if held_back:
+            incr("ask_sonali.evidence_withheld_egress")
+            evidence = [r for r in evidence if r not in held_back]
         if not evidence:
-            incr("ask_sonali.refused_no_source")
+            incr("ask_sonali_answers", labels={"outcome": "no_source"})
             payload = {
                 "refused": True,
-                "refusal_reason": "No Source, No Answer — no authorized archive evidence matched this question.",
+                "refusal_reason": (
+                    "No Source, No Answer — the matching documents are classified for on-premise AI only."
+                    if held_back
+                    else "No Source, No Answer — no authorized archive evidence matched this question."
+                ),
                 "answer": None,
                 "citations": [],
                 "sources_considered": 0,
@@ -100,11 +115,24 @@ async def ask_sonali_for_principal(
             )
             return payload
 
+        acl = await document_query.acl_scope_for_principal(db, principal)
+        passages = await grounded_passages(
+            acl, q, [str(r["doc_id"]) for r in evidence if r.get("doc_id")], k=PASSAGES, levels=levels
+        )
+        types = {str(r.get("doc_id")): r.get("doc_type") for r in evidence}
+        sources = (
+            [
+                {"doc_id": p["doc_id"], "page": p.get("page"), "doc_type": types.get(p["doc_id"]), "text": p["text"][:PASSAGE_CHARS]}
+                for p in passages
+                if p.get("text")
+            ]
+            or [{**r, "text": r.get("snippet") or ""} for r in evidence]
+        )
         sources_block = []
-        for idx, row in enumerate(evidence, start=1):
+        for idx, row in enumerate(sources, start=1):
             sources_block.append(
                 f"[{idx}] doc_id={row['doc_id']} page={row.get('page')} type={row.get('doc_type')}\n"
-                f"{row.get('snippet') or ''}"
+                f"{row.get('text') or ''}"
             )
         user_prompt = (
             f"Question:\n{q}\n\nSOURCE excerpts (authorized only):\n"
@@ -114,7 +142,14 @@ async def ask_sonali_for_principal(
 
         try:
             llm = get_llm_client()
-            model_out = llm.chat_json(system=SYSTEM_PROMPT, user=user_prompt, temperature=0.0)
+            model_out = llm.chat_json(
+                system=SYSTEM_PROMPT,
+                user=user_prompt,
+                temperature=0.0,
+                task="ask",
+                sensitivity=ai.max_sensitivity(levels.get(str(r.get("doc_id"))) for r in evidence),
+            )
+            call = ai.last_call() or {}
         except Exception as exc:
             logger.exception("Ask Sonali LLM failed")
             raise HTTPException(
@@ -124,7 +159,7 @@ async def ask_sonali_for_principal(
 
         refused = bool(model_out.get("refused"))
         citations_raw = model_out.get("citations") or []
-        allowed_ids = {str(r["doc_id"]) for r in evidence if r.get("doc_id")}
+        allowed_ids = {str(r["doc_id"]) for r in sources if r.get("doc_id")}
         citations: List[Dict[str, Any]] = []
         for cite in citations_raw:
             if not isinstance(cite, dict):
@@ -142,6 +177,7 @@ async def ask_sonali_for_principal(
                     "doc_id": doc_id,
                     "page": page_val,
                     "quote": str(cite.get("quote") or "")[:160],
+                    "url": citation_url(doc_id, page_val),
                 }
             )
 
@@ -160,8 +196,18 @@ async def ask_sonali_for_principal(
             "refusal_reason": refusal_reason,
             "answer": answer,
             "citations": citations,
-            "sources_considered": len(evidence),
-            "evidence": evidence,
+            "sources_considered": len(sources),
+            "evidence": [
+                {
+                    "doc_id": r["doc_id"],
+                    "page": r.get("page"),
+                    "doc_type": r.get("doc_type"),
+                    "excerpt": (r.get("text") or "")[:400],
+                    "url": citation_url(str(r["doc_id"]), r.get("page")),
+                }
+                for r in sources
+            ],
+            "answered_by": {"provider": call.get("provider"), "model": call.get("model"), "route": call.get("source")},
             "query": q,
             "human_in_the_loop": True,
             "disclaimer": "AI support only — humans retain final decision authority.",
@@ -171,11 +217,14 @@ async def ask_sonali_for_principal(
             username=principal.username_for_grants or principal.actor_id,
             action="ask_sonali",
             resource_type="ai",
-            detail=f"refused={refused} cites={len(citations)} sources={len(evidence)} q={q[:120]}",
+            detail=(
+                f"refused={refused} cites={len(citations)} sources={len(sources)} "
+                f"model={call.get('provider')}/{call.get('model')} q={q[:120]}"
+            ),
             ip_address=ip_address,
             actor_type=principal.actor_type,
             tool_name=tool_name or "ask_sonali",
             commit=True,
         )
-        incr("ask_sonali.ok" if not refused else "ask_sonali.refused")
+        incr("ask_sonali_answers", labels={"outcome": "refused" if refused else "answered"})
         return result

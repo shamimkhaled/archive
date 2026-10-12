@@ -14,7 +14,8 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .auth import ACCESS_TOKEN_EXPIRE_MINUTES, decode_access_token
+from .auth import ACCESS_TOKEN_EXPIRE_MINUTES, decode_session_token
+from .mfa import role_requires_mfa
 from .aws_utils import get_s3_client, storage_backend_name
 from .brand import BRAND
 from .config import cookie_secure, load_environment
@@ -103,10 +104,9 @@ def _set_auth_cookie(response: Response, token: str) -> None:
 
 
 def _client_ip(request: Request) -> Optional[str]:
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else None
+    from .security import client_ip
+
+    return client_ip(request)
 
 
 async def _load_stored_pdf_bytes(file_location: str, *, resource_id: str) -> bytes:
@@ -190,16 +190,26 @@ def _get_token_from_request(request: Request) -> Optional[str]:
     return request.cookies.get("access_token")
 
 
+def session_payload(token: Optional[str]) -> Optional[dict]:
+    """Decode a session token; privileged roles must carry the MFA claim when enforced."""
+    if not token:
+        return None
+    payload = decode_session_token(token)
+    if payload is None or not payload.get("sub"):
+        return None
+    if role_requires_mfa(str(payload.get("role") or "")) and not payload.get("mfa"):
+        return None
+    return payload
+
+
 async def get_current_user(request: Request, db: AsyncSession = Depends(get_db)) -> User:
     token = _get_token_from_request(request)
     if token is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
-    payload = decode_access_token(token)
+    payload = session_payload(token)
     if payload is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authentication credentials")
     username = payload.get("sub")
-    if username is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authentication credentials")
     statement = select(User).where(User.username == username)
     result = await db.execute(statement)
     user = result.scalar_one_or_none()
@@ -207,23 +217,21 @@ async def get_current_user(request: Request, db: AsyncSession = Depends(get_db))
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User account is inactive")
+    if role_requires_mfa(user.role) and not payload.get("mfa"):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="MFA required")
     return user
 
 
 async def get_optional_current_user(request: Request, db: AsyncSession = Depends(get_db)) -> Optional[User]:
-    token = _get_token_from_request(request)
-    if token is None:
-        return None
-    payload = decode_access_token(token)
+    payload = session_payload(_get_token_from_request(request))
     if payload is None:
         return None
-    username = payload.get("sub")
-    if username is None:
-        return None
-    statement = select(User).where(User.username == username)
+    statement = select(User).where(User.username == payload.get("sub"))
     result = await db.execute(statement)
     user = result.scalar_one_or_none()
     if user is None or not user.is_active:
+        return None
+    if role_requires_mfa(user.role) and not payload.get("mfa"):
         return None
     return user
 
@@ -263,15 +271,19 @@ def role_display_label(role: Union[Role, str]) -> str:
 
 templates.env.globals["role_display_label"] = role_display_label
 
-def _upsert_document_chunks(doc_id: str, page_payloads: List[Dict[str, Any]]) -> int:
+def _upsert_document_chunks(
+    doc_id: str, page_payloads: List[Dict[str, Any]], *, sensitivity: Optional[str] = None
+) -> int:
     """Embed OCR/extracted page text and upsert into Qdrant document_chunks."""
-    return run_chunk_index(doc_id, page_payloads)
+    return run_chunk_index(doc_id, page_payloads, sensitivity=sensitivity)
 
 
-def _index_document_chunks(doc_id: str, page_payloads: List[Dict[str, Any]]) -> None:
+def _index_document_chunks(
+    doc_id: str, page_payloads: List[Dict[str, Any]], sensitivity: Optional[str] = None
+) -> None:
     """Background: embed + upsert child chunks after the summary is already searchable."""
     try:
-        _upsert_document_chunks(doc_id, page_payloads)
+        _upsert_document_chunks(doc_id, page_payloads, sensitivity=sensitivity)
     except Exception:
         logger.exception("Background chunk indexing failed for %s", doc_id)
 
@@ -280,18 +292,20 @@ async def schedule_chunk_index(
     doc_id: str,
     page_payloads: List[Dict[str, Any]],
     background_tasks: BackgroundTasks,
+    *,
+    sensitivity: Optional[str] = None,
 ) -> None:
     """Prefer durable Redis queue when enabled; fall back to in-process BackgroundTasks."""
     if job_queue_enabled():
         job_id = await enqueue_job(
             JOB_CHUNK_INDEX,
-            {"doc_id": doc_id, "page_payloads": page_payloads},
+            {"doc_id": doc_id, "page_payloads": page_payloads, "sensitivity": sensitivity},
         )
         if job_id:
             logger.info("Queued chunk_index job %s for %s", job_id, doc_id)
             return
         logger.warning("Job enqueue failed for %s; falling back to BackgroundTasks", doc_id)
-    background_tasks.add_task(_index_document_chunks, doc_id, page_payloads)
+    background_tasks.add_task(_index_document_chunks, doc_id, page_payloads, sensitivity)
 
 
 def reindex_chunks_from_pdf_bytes(doc_id: str, pdf_bytes: bytes) -> int:

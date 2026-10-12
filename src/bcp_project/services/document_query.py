@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException, status
-from sqlalchemy import cast, or_, select, String
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..access_control import (
@@ -16,8 +15,7 @@ from ..access_control import (
     quality_search_results,
     write_audit,
 )
-from ..cache import get_cached_search, set_cached_search
-from ..models import BoardMeeting, DocumentRecord, MeetingInvitation, Role
+from ..models import BoardMeeting, DocumentRecord, MeetingInvitation, Role, Sensitivity
 from ..observability import Timer, incr
 from ..policy import (
     Principal,
@@ -27,35 +25,46 @@ from ..policy import (
     is_view_privileged_principal,
     require_scope,
 )
-from ..qdrant_store import embed_texts, make_qdrant_indexer
+from ..search_acl import SERVICE_ROLE, AclScope, SearchFilters, acl_scope_for_user
+from .search import hybrid_search
 
 logger = logging.getLogger("bcp_project.services.document_query")
 
-SEARCH_EMBED_TIMEOUT_SECONDS = 8.0
-SEARCH_SUMMARY_TIMEOUT_SECONDS = 6.0
-SEARCH_CHUNK_TIMEOUT_SECONDS = 6.0
-
-
-async def _capped(label: str, coro, timeout: float):
-    try:
-        return await asyncio.wait_for(coro, timeout=timeout)
-    except Exception as exc:
-        logger.warning("%s skipped (%s: %s)", label, type(exc).__name__, exc)
-        return None
-
-
 def _public_result_row(row: dict) -> dict:
-    """Strip internal scores; keep access-safe fields for API/MCP consumers."""
+    """Strip internal scores; excerpts only for rows the caller may view."""
+    can_view = bool(row.get("can_view"))
     return {
         "doc_id": row.get("doc_id"),
         "doc_type": row.get("doc_type"),
-        "snippet": row.get("snippet"),
+        "snippet": row.get("snippet") if can_view else None,
         "match_label": row.get("match_label") or row.get("relevance_label"),
         "relevance_label": row.get("relevance_label"),
-        "can_view": bool(row.get("can_view")),
+        "can_view": can_view,
         "access_status": row.get("access_status"),
-        "source": row.get("source"),
+        "source": row.get("source") if can_view else None,
+        "page": row.get("page") if can_view else None,
+        "view_url": row.get("view_url") if can_view else None,
+        "title": row.get("title") if can_view else None,
     }
+
+
+async def _hide_if_restricted(db: AsyncSession, principal: Principal, document: DocumentRecord) -> None:
+    """Restricted documents are 404 to anyone who cannot view them (no existence leak)."""
+    if document.sensitivity != Sensitivity.restricted.value or is_view_privileged_principal(principal):
+        return
+    if principal.user is not None:
+        grants = await get_active_grants_for_docs(db, principal.user.username, [document.doc_id])
+        if can_principal_view_document(principal, grants.get(document.doc_id)):
+            return
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+
+
+async def acl_scope_for_principal(db: AsyncSession, principal: Principal) -> AclScope:
+    if is_view_privileged_principal(principal):
+        return AclScope(unrestricted=True)
+    if principal.user is not None:
+        return await acl_scope_for_user(db, principal.user)
+    return AclScope(unrestricted=False, role=SERVICE_ROLE)
 
 
 async def search_documents_for_principal(
@@ -65,6 +74,7 @@ async def search_documents_for_principal(
     *,
     lang: Optional[str] = None,
     limit: int = 20,
+    filters: Optional[SearchFilters] = None,
     ip_address: Optional[str] = None,
     tool_name: Optional[str] = None,
 ) -> Dict[str, Any]:
@@ -78,108 +88,13 @@ async def search_documents_for_principal(
         return {"results": [], "count": 0, "query": q, "mode": "hybrid"}
 
     with Timer("api_v1.search"):
-        cached = await get_cached_search(q, lang=lang_hint)
-        if cached is not None and principal.user is not None:
-            enriched = await enrich_results_with_access(db, principal.user, cached.get("results") or [])
-            results = [_public_result_row(r) for r in enriched if r.get("can_view") or r.get("access_status")]
-            # Non-privileged callers only see rows they can view (metadata of denied stays for request UX)
-            if not is_view_privileged_principal(principal):
-                pass  # keep access_status for request flow
-            await _audit_search(db, principal, q, len(results), ip_address, tool_name)
-            return {
-                "results": results[:limit],
-                "count": min(len(results), limit),
-                "query": q,
-                "mode": cached.get("mode") or "hybrid",
-                "cached": True,
-            }
-
-        summary_rows: List[dict] = []
-        chunk_best: Dict[str, dict] = {}
-        try:
-            qdrant = make_qdrant_indexer()
-            query_vector = await asyncio.wait_for(
-                asyncio.to_thread(embed_texts, [q]),
-                timeout=SEARCH_EMBED_TIMEOUT_SECONDS,
-            )
-            query_vector = query_vector[0] if query_vector else None
-        except Exception as exc:
-            logger.warning("Search embedding unavailable (%s)", exc)
-            query_vector = None
-            qdrant = None
-
-        if qdrant is not None and query_vector is not None:
-            summary_result = await _capped(
-                "Summary",
-                asyncio.to_thread(lambda: qdrant.search_summary_hits(query_vector, q, limit=20)),
-                SEARCH_SUMMARY_TIMEOUT_SECONDS,
-            )
-            chunk_result = await _capped(
-                "Page-text",
-                asyncio.to_thread(lambda: qdrant.search_chunk_hits(query_vector, limit=20)),
-                SEARCH_CHUNK_TIMEOUT_SECONDS,
-            )
-            if isinstance(summary_result, list):
-                summary_rows = summary_result
-            if isinstance(chunk_result, dict):
-                chunk_best = chunk_result
-
-        results: List[dict] = []
-        if qdrant is not None and (summary_rows or chunk_best):
-            results = qdrant.fuse_hybrid_results(
-                summary_rows,
-                chunk_best,
-                q,
-                limit=20,
-                lang=lang_hint,
-                use_chunks=True,
-            )
-
-        needle = q.casefold()
-        like = f"%{q}%"
-        pg_filters = [
-            DocumentRecord.doc_id.ilike(like),
-            DocumentRecord.doc_type.ilike(like),
-            cast(DocumentRecord.keywords, String).ilike(like),
-        ]
-        if len(needle) >= 3:
-            pg_filters.append(cast(DocumentRecord.summary_json, String).ilike(like))
-        id_rows = (
-            await db.execute(
-                select(
-                    DocumentRecord.doc_id,
-                    DocumentRecord.doc_type,
-                    DocumentRecord.keywords,
-                    DocumentRecord.summary_json,
-                )
-                .where(or_(*pg_filters))
-                .order_by(DocumentRecord.created_at.desc())
-                .limit(30)
-            )
-        ).all()
-        seen = {r.get("doc_id") for r in results if r.get("doc_id")}
-        for row in id_rows:
-            if row.doc_id in seen:
-                continue
-            results.append(
-                {
-                    "doc_id": row.doc_id,
-                    "doc_type": row.doc_type,
-                    "keywords": row.keywords,
-                    "score": 0.4,
-                    "source": "keyword",
-                    "snippet": None,
-                }
-            )
-            seen.add(row.doc_id)
-
-        filtered = quality_search_results(results)
-        await set_cached_search(q, {"results": filtered, "mode": "hybrid"}, lang=lang_hint)
-
+        acl = await acl_scope_for_principal(db, principal)
+        outcome = await hybrid_search(db, acl=acl, q=q, lang=lang_hint, filters=filters, limit=max(limit, 20))
+        filtered = quality_search_results(outcome.results)
         if principal.user is not None:
             enriched = await enrich_results_with_access(db, principal.user, filtered)
         else:
-            # Privileged service without on-behalf-of: treat as privileged view.
+            # Service principal without on-behalf-of: the vector ACL already limited what it can find.
             enriched = [
                 {**row, "can_view": True, "can_download": False, "access_status": "privileged"}
                 for row in filtered
@@ -192,8 +107,9 @@ async def search_documents_for_principal(
             "results": public[:limit],
             "count": min(len(public), limit),
             "query": q,
-            "mode": "hybrid",
-            "cached": False,
+            "mode": outcome.mode,
+            "cached": outcome.cached,
+            "reranked": outcome.reranked,
         }
 
 
@@ -234,6 +150,7 @@ async def get_document_metadata_for_principal(
     document = result.scalar_one_or_none()
     if document is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+    await _hide_if_restricted(db, principal, document)
 
     grant = None
     if principal.user is not None and not is_view_privileged_principal(principal):
@@ -245,21 +162,23 @@ async def get_document_metadata_for_principal(
         "doc_id": document.doc_id,
         "doc_type": document.doc_type,
         "doc_date": document.doc_date.isoformat() if document.doc_date else None,
-        "uploaded_by": document.uploaded_by,
         "created_at": document.created_at.isoformat() if document.created_at else None,
-        "keywords": document.keywords or [],
+        "sensitivity": document.sensitivity,
         "can_view": can_view,
         "access_status": "privileged"
         if is_view_privileged_principal(principal)
         else ("approved_view" if can_view else "none"),
     }
     if can_view:
+        payload["uploaded_by"] = document.uploaded_by
+        payload["keywords"] = document.keywords or []
         summary = document.summary_json or {}
         payload["summary"] = {
             "core_info": summary.get("core_info") or {},
             "searchable_keywords": summary.get("searchable_keywords") or [],
             "major_projects": summary.get("major_projects") or [],
         }
+        payload["ai_provenance"] = summary.get("_ai")
     else:
         payload["summary"] = None
 
@@ -295,6 +214,7 @@ async def get_document_status_for_principal(
     document = result.scalar_one_or_none()
     if document is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+    await _hide_if_restricted(db, principal, document)
 
     grant = None
     if principal.user is not None and not is_view_privileged_principal(principal):

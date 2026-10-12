@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..deps import _client_ip, get_current_user, get_db
@@ -14,8 +14,10 @@ from ..mcp.tools import TOOL_DEFINITIONS, invoke_tool
 from ..models import User
 from ..observability import snapshot_metrics
 from ..policy import Principal, Scope, require_scope
+from ..rate_limit import hit
 from ..ports.loan_hr import get_hr_port, get_loan_port
 from ..ports.registry import get_registry
+from ..search_acl import SearchFilters
 from ..service_auth import authenticate_api_v1_principal
 from ..services import ask_sonali, customer_query, document_query, hitl
 from ..services.connector_sync import pull_document_source
@@ -33,15 +35,33 @@ async def v1_search_documents(
     q: str = Query(..., min_length=1),
     lang: Optional[str] = None,
     limit: int = Query(20, ge=1, le=50),
+    department: Optional[str] = None,
+    category: Optional[str] = None,
+    doc_type: Optional[str] = None,
+    reference_number: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
     principal: Principal = Depends(get_principal),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
+    try:
+        filters = SearchFilters.from_params(
+            department=department,
+            category=category,
+            doc_type=doc_type,
+            reference_number=reference_number,
+            date_from=date_from,
+            date_to=date_to,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return await document_query.search_documents_for_principal(
         db,
         principal,
         q,
         lang=lang,
         limit=limit,
+        filters=filters,
         ip_address=_client_ip(request),
     )
 
@@ -181,6 +201,7 @@ async def v1_ask_sonali(
     principal: Principal = Depends(get_principal),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
+    await hit("ask", f"{principal.actor_type}:{principal.actor_id}")
     body = {}
     try:
         body = await request.json()

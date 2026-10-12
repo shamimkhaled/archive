@@ -25,25 +25,90 @@ services:
   redis:
     image: redis:7-alpine
     container_name: bcp-redis
+    command: ["redis-server", "--appendonly", "yes"]
     ports:
       - "127.0.0.1:${REDIS_HOST_PORT:-6380}:6379"
+    volumes:
+      - redis_data:/data
     restart: unless-stopped
 
-  # Optional durable chunk-index worker (API must set ENABLE_JOB_QUEUE=1).
-  # Uncomment after building an app image, or run locally:
-  #   ENABLE_JOB_QUEUE=1 PYTHONPATH=src python -m bcp_project.jobs.worker
-  # worker:
-  #   build: .
-  #   command: ["python", "-m", "bcp_project.jobs.worker"]
-  #   environment:
-  #     ENABLE_JOB_QUEUE: "1"
-  #     REDIS_URL: redis://redis:6379/0
-  #     DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/bcpdb
-  #   depends_on:
-  #     - redis
-  #     - qdrant
-  #   restart: unless-stopped
+  # Full pipeline (profile "pipeline"):
+  #   docker compose --profile pipeline up -d --build
+  # Runs the same image layout as Railway: web, outbox relay, and one worker per queue.
+  web:
+    profiles: ["pipeline"]
+    build: { context: ., args: { SERVICE_ROLE: web } }
+    env_file: .env
+    environment: &pipeline_env
+      APP_ENV: development
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/bcpdb
+      REDIS_URL: redis://redis:6379/0
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: "6333"
+      QDRANT_URL: ""
+      QDRANT_API_KEY: ""
+      ENABLE_JOB_QUEUE: "1"
+      OUTBOX_RELAY_MODE: process
+      INGEST_MODE: async
+      STORAGE_BACKEND: local
+      MIGRATE_ON_START: "1"
+      AUTO_MIGRATE: "0"
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - uploads:/data/uploads
+    depends_on: [postgres, redis, qdrant]
+
+  outbox-relay:
+    profiles: ["pipeline"]
+    build: { context: ., args: { SERVICE_ROLE: pipeline } }
+    env_file: .env
+    environment:
+      <<: *pipeline_env
+      MIGRATE_ON_START: "0"
+      SERVICE_NAME: outbox-relay
+    command: ["python", "-m", "bcp_project.jobs.relay"]
+    depends_on: [web]
+
+  worker-ingest:
+    profiles: ["pipeline"]
+    build: { context: ., args: { SERVICE_ROLE: pipeline } }
+    env_file: .env
+    environment:
+      <<: *pipeline_env
+      MIGRATE_ON_START: "0"
+      JOB_WORKER_QUEUES: ingest
+    command: ["python", "-m", "bcp_project.jobs.worker"]
+    volumes:
+      - uploads:/data/uploads
+    depends_on: [web]
+
+  worker-meeting:
+    profiles: ["pipeline"]
+    build: { context: ., args: { SERVICE_ROLE: worker } }
+    env_file: .env
+    environment:
+      <<: *pipeline_env
+      MIGRATE_ON_START: "0"
+      JOB_WORKER_QUEUES: meeting
+    command: ["python", "-m", "bcp_project.jobs.worker"]
+    volumes:
+      - uploads:/data/uploads
+    depends_on: [web]
+
+  worker-notify:
+    profiles: ["pipeline"]
+    build: { context: ., args: { SERVICE_ROLE: pipeline } }
+    env_file: .env
+    environment:
+      <<: *pipeline_env
+      MIGRATE_ON_START: "0"
+      JOB_WORKER_QUEUES: notify
+    command: ["python", "-m", "bcp_project.jobs.worker"]
+    depends_on: [web]
 
 volumes:
   qdrant_data:
   postgres_data:
+  redis_data:
+  uploads:

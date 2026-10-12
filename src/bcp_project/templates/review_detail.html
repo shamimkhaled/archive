@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}Verify {{ document.doc_id }} | {{ brand.product_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div class="title-group">
+        <h1>Verify {{ document.doc_id }}{% if version.version > 1 %} — version {{ version.version }}{% endif %}</h1>
+        <p>
+            {{ document.doc_type }} · <span class="badge">{{ document.sensitivity }}</span>
+            · uploaded by {{ version.created_by }}
+            {% if document.ocr_confidence is not none %} · OCR confidence {{ '%.0f'|format(document.ocr_confidence) }}%{% endif %}
+        </p>
+    </div>
+    <div><a class="button button-secondary" href="/review">Back to queue</a></div>
+</div>
+
+{% if error %}
+<div class="alert alert-error" role="alert">{{ error }}</div>
+{% endif %}
+{% if four_eyes_problem %}
+<div class="alert alert-error" role="alert">{{ four_eyes_problem }}</div>
+{% endif %}
+{% if not can_act %}
+<div class="alert" role="status">This version is {{ version.status }}; it is shown read-only.</div>
+{% endif %}
+
+<form action="/review/{{ document.doc_id }}/v/{{ version.version }}/approve" method="post" id="approveForm">
+    <section class="panel">
+        <h2>Archive metadata</h2>
+        <p class="muted">
+            Prefilled from the uploader's entries, then
+            {% if suggested_source == 'ai' %}AI suggestions{% elif suggested_source == 'rules' %}pattern matching{% else %}suggestions{% endif %}
+            from the text. Correct anything wrong; these fields drive search filters.
+        </p>
+        <div class="form-grid">
+            {% for f in fields %}
+            <div class="form-group">
+                <label for="meta_{{ f }}">{{ f|replace('_', ' ')|capitalize }}</label>
+                <input id="meta_{{ f }}" type="text" name="{{ f }}" value="{{ metadata[f] }}" maxlength="500" {% if not can_act %}disabled{% endif %} />
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+
+    {% for page in pages %}
+    <section class="panel review-page">
+        <h2>
+            Page {{ page.page_number }}
+            {% if page.ocr_confidence is not none %}<span class="badge{% if page.ocr_confidence < 60 %} badge-warn{% endif %}">{{ '%.0f'|format(page.ocr_confidence) }}%</span>{% endif %}
+            <span class="badge">{{ page.source }}</span>
+        </h2>
+        <div class="review-grid">
+            <figure class="review-image">
+                <img src="/review/{{ document.doc_id }}/v/{{ version.version }}/page/{{ page.page_number }}.png"
+                     alt="Scan of page {{ page.page_number }}" loading="lazy" />
+            </figure>
+            <div class="form-group">
+                <label for="page_{{ page.page_number }}">Extracted text</label>
+                <textarea id="page_{{ page.page_number }}" name="page_{{ page.page_number }}" rows="22" spellcheck="false" {% if not can_act %}disabled{% endif %}>{{ page.text }}</textarea>
+            </div>
+        </div>
+    </section>
+    {% endfor %}
+
+    {% if can_act and not four_eyes_problem %}
+    <div class="form-actions-sticky">
+        <button type="submit" class="button">Approve and index</button>
+    </div>
+    {% endif %}
+</form>
+
+{% if can_act and not four_eyes_problem %}
+<section class="panel">
+    <h2>Reject</h2>
+    <form action="/review/{{ document.doc_id }}/v/{{ version.version }}/reject" method="post" class="form-grid">
+        <div class="form-group">
+            <label for="reason">Reason (recorded in the audit log)</label>
+            <input id="reason" type="text" name="reason" maxlength="500" required placeholder="e.g. Illegible scan, re-scan at 300 DPI" />
+        </div>
+        <div><button type="submit" class="button button-secondary">Reject version</button></div>
+    </form>
+</section>
+{% endif %}
+{% endblock %}

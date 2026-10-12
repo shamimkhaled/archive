@@ -1,21 +1,22 @@
 """FastAPI application factory: middleware, lifespan, and router wiring."""
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import text
 
-from .auth import create_access_token, decode_access_token, should_refresh_access_token
+from .auth import create_access_token, decode_session_token, should_refresh_access_token
 from .aws_utils import storage_backend_name, use_local_storage
 from .brand import BRAND
 from .config import is_production
 from .db import get_session, engine
+from .spa import spa_middleware
 from .deps import (
     STATIC_DIR,
     _load_stored_pdf_bytes,
@@ -25,10 +26,17 @@ from .deps import (
 )
 from .correlation import CorrelationIdMiddleware
 from .jobs.locks import redis_lock
-from .models import Base
+from .ai.routing import REFRESH_SECONDS as REGISTRY_REFRESH_SECONDS, refresh_registry
+from .jobs.outbox import relay_mode, run_relay_loop
+from .jobs.queue import job_queue_enabled
+from .logging_config import configure_logging
+from .migrate import auto_migrate_enabled, upgrade_head
+from .observability import MetricsMiddleware, setup_tracing
 from .reminders import send_due_reminders
 from .routers import include_routers
 from .security import CsrfMiddleware, SecurityHeadersMiddleware
+
+configure_logging()
 
 # Re-export for scripts (e.g. scripts/reindex_chunks.py)
 __all__ = [
@@ -38,6 +46,7 @@ __all__ = [
 ]
 
 logger = logging.getLogger("bcp_project.main_api")
+AUDIT_SEAL_INTERVAL_SECONDS = int(os.getenv("AUDIT_SEAL_INTERVAL_SECONDS") or 30)
 
 _docs_enabled = not is_production()
 app = FastAPI(
@@ -49,7 +58,10 @@ app = FastAPI(
 app.add_middleware(SecurityHeadersMiddleware, is_production=is_production())
 app.add_middleware(CsrfMiddleware)
 app.add_middleware(CorrelationIdMiddleware)
+app.add_middleware(MetricsMiddleware)
+setup_tracing(app)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+app.middleware("http")(spa_middleware)
 
 
 @app.middleware("http")
@@ -65,7 +77,7 @@ async def sliding_session_middleware(request: Request, call_next):
     token = request.cookies.get("access_token")
     if not token:
         return response
-    payload = decode_access_token(token)
+    payload = decode_session_token(token)
     if not payload or not should_refresh_access_token(payload):
         return response
     username = payload.get("sub")
@@ -73,7 +85,10 @@ async def sliding_session_middleware(request: Request, call_next):
     if not username or not role:
         return response
     try:
-        _set_auth_cookie(response, create_access_token(subject=username, role=str(role)))
+        _set_auth_cookie(
+            response,
+            create_access_token(subject=username, role=str(role), mfa=bool(payload.get("mfa"))),
+        )
     except Exception:
         logger.exception("Failed to refresh access token cookie")
     return response
@@ -92,23 +107,10 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 
 
 async def init_db() -> None:
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-        await conn.execute(
-            text("ALTER TABLE board_meetings ADD COLUMN IF NOT EXISTS transcription_status VARCHAR(16) NOT NULL DEFAULT 'off'")
-        )
-        await conn.execute(text("ALTER TABLE board_meetings ADD COLUMN IF NOT EXISTS transcription_started_at TIMESTAMP"))
-        await conn.execute(text("ALTER TABLE board_meetings ADD COLUMN IF NOT EXISTS transcription_stopped_at TIMESTAMP"))
-        await conn.execute(text("ALTER TABLE board_meetings ADD COLUMN IF NOT EXISTS transcription_started_by VARCHAR(64)"))
-        await conn.execute(text("ALTER TABLE board_meetings ADD COLUMN IF NOT EXISTS transcription_json JSON"))
-        await conn.execute(text("ALTER TABLE board_meetings ADD COLUMN IF NOT EXISTS minutes_status VARCHAR(16) NOT NULL DEFAULT 'off'"))
-        await conn.execute(text("ALTER TABLE board_meetings ADD COLUMN IF NOT EXISTS minutes_draft TEXT"))
-        await conn.execute(text("ALTER TABLE board_meetings ADD COLUMN IF NOT EXISTS minutes_source VARCHAR(16)"))
-        await conn.execute(text("ALTER TABLE board_meetings ADD COLUMN IF NOT EXISTS minutes_generated_at TIMESTAMP"))
-        await conn.execute(text("ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS correlation_id VARCHAR(64)"))
-        await conn.execute(text("ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS actor_type VARCHAR(16)"))
-        await conn.execute(text("ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS tool_name VARCHAR(64)"))
-        await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_audit_logs_correlation_id ON audit_logs (correlation_id)"))
+    if not auto_migrate_enabled():
+        logger.info("AUTO_MIGRATE=0; expecting the entrypoint or a release step to have run migrations")
+        return
+    await upgrade_head(engine)
 
 
 async def _run_reminder_sweep() -> None:
@@ -119,6 +121,36 @@ async def _run_reminder_sweep() -> None:
             return
         async with get_session() as session:
             await send_due_reminders(session)
+
+
+async def _run_audit_maintenance() -> None:
+    """Seal the audit hash chain and forward to the SIEM; one replica at a time."""
+    from .jobs.handlers import run_audit_maintenance
+
+    async with redis_lock("audit_maintenance", ttl_seconds=max(60, AUDIT_SEAL_INTERVAL_SECONDS * 4)) as acquired:
+        if not acquired:
+            return
+        try:
+            await run_audit_maintenance()
+        except Exception:
+            logger.exception("Audit maintenance failed; it will retry on the next tick")
+
+
+async def _run_retention_refresh() -> None:
+    """Daily: give new uploads their retention date from the rules; one replica at a time."""
+    from .services.retention import refresh_retention_dates
+
+    async with redis_lock("retention_refresh", ttl_seconds=3600) as acquired:
+        if not acquired:
+            return
+        try:
+            async with get_session() as session:
+                changed = await refresh_retention_dates(session)
+                await session.commit()
+            if changed:
+                logger.info("Retention dates updated for %d documents", changed)
+        except Exception:
+            logger.exception("Retention refresh failed; it will retry tomorrow")
 
 
 @app.on_event("startup")
@@ -143,9 +175,21 @@ async def startup_event() -> None:
         logger.info("PDF storage backend: %s", backend)
 
     scheduler = AsyncIOScheduler()
-    scheduler.add_job(_run_reminder_sweep, "interval", minutes=15, next_run_time=datetime.utcnow())
+    scheduler.add_job(_run_reminder_sweep, "interval", minutes=15, next_run_time=datetime.now(timezone.utc))
+    scheduler.add_job(
+        refresh_registry, "interval", seconds=REGISTRY_REFRESH_SECONDS, next_run_time=datetime.now(timezone.utc)
+    )
+    scheduler.add_job(_run_retention_refresh, "interval", hours=24, next_run_time=datetime.now(timezone.utc), coalesce=True)
+    if AUDIT_SEAL_INTERVAL_SECONDS > 0:
+        scheduler.add_job(
+            _run_audit_maintenance, "interval", seconds=AUDIT_SEAL_INTERVAL_SECONDS, max_instances=1, coalesce=True
+        )
     scheduler.start()
     app.state.scheduler = scheduler
+
+    if job_queue_enabled() and relay_mode() == "inline":
+        app.state.relay_stop = asyncio.Event()
+        app.state.relay_task = asyncio.create_task(run_relay_loop(get_session, app.state.relay_stop))
 
 
 @app.on_event("shutdown")
@@ -153,6 +197,15 @@ async def shutdown_event() -> None:
     scheduler = getattr(app.state, "scheduler", None)
     if scheduler is not None:
         scheduler.shutdown(wait=False)
+    relay_stop = getattr(app.state, "relay_stop", None)
+    if relay_stop is not None:
+        relay_stop.set()
+        task = getattr(app.state, "relay_task", None)
+        if task is not None:
+            try:
+                await asyncio.wait_for(task, timeout=5)
+            except Exception:
+                task.cancel()
 
 
 include_routers(app)

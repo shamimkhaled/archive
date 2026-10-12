@@ -1,0 +1,25 @@
+# Single entry point from the archive network to the model servers. The nginx image renders
+# ${LOCAL_LLM_API_KEY} from the environment at start-up; every request must carry it.
+
+map $http_authorization $ai_authorized {
+    default                         0;
+    "Bearer ${LOCAL_LLM_API_KEY}"   1;
+}
+
+server {
+    listen 8088;
+    client_max_body_size 512m;          # meeting recordings
+    proxy_read_timeout 900s;            # long summaries and transcriptions
+    proxy_send_timeout 900s;
+    proxy_http_version 1.1;
+    proxy_buffering off;                # streamed chat responses
+    access_log /dev/stdout;
+
+    if ($ai_authorized = 0) { return 401; }
+
+    location /llm/    { proxy_pass http://vllm:8000/; }
+    location /embed/  { proxy_pass http://tei-embed:80/; }
+    location /rerank/ { proxy_pass http://tei-rerank:80/; }
+    location /stt/    { proxy_pass http://whisper:8000/; }
+    location = /healthz { return 200 "ok\n"; }
+}

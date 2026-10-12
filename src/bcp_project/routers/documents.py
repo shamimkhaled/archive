@@ -4,9 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import uuid
 from datetime import date, datetime
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile, status
@@ -15,26 +13,26 @@ from sqlalchemy import and_, cast, func, or_, select, String
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..access_control import (
+    UNSEARCHABLE_VERIFICATION,
     assert_can_download,
     assert_can_view,
     enrich_results_with_access,
+    hidden_restricted_doc_ids,
     is_archive_download_allowed,
+    is_archive_view_privileged,
+    viewable_doc_ids,
     write_audit,
 )
-from ..aws_utils import store_pdf
 from ..brand import BRAND
 from ..cache import (
-    bump_search_cache_version,
     get_cached_graph,
     get_cached_metadata_search,
-    get_cached_search,
     set_cached_graph,
     set_cached_metadata_search,
-    set_cached_search,
 )
-from ..ports.events import publish_event
+from ..pdf_delivery import is_initial_request, pdf_response, stamped_pdf
+from ..rate_limit import rate_limit
 from ..deps import (
-    UPLOAD_DIR,
     _client_ip,
     _load_document_or_404,
     _load_pdf_bytes,
@@ -43,7 +41,6 @@ from ..deps import (
     get_current_user,
     get_db,
     require_role,
-    schedule_chunk_index,
     templates,
 )
 from ..document_types import merge_document_types, normalize_document_type
@@ -55,17 +52,16 @@ from ..graph_builder import (
     related_documents_payload,
     summary_entities,
 )
-from ..models import DocumentRecord, Role, User
-from ..pdf_parser import parse_pdf
+from ..models import DocumentRecord, Role, User, parse_sensitivity
+from .ingest import dispatch_after_commit, ingest_mode, read_validated
 from ..pdf_watermark import stamp_pdf_bytes
-from ..qdrant_store import (
-    build_summary_embedding_text,
-    embed_texts,
-    make_qdrant_indexer,
-    summary_haystack,
-    summary_search_snippet,
-)
-from ..summary_extractor import extract_document_summary
+from ..qdrant_store import make_qdrant_indexer
+from ..intake import IntakeRejected, validate_upload
+from ..services.document_versions import intake_new_document
+from ..search_acl import SearchFilters, acl_scope_for_user, norm
+from ..services.ingest import ai_provenance_label, run_document_ingest
+from ..services.retention import doc_id_conflict
+from ..services.search import hybrid_search
 
 logger = logging.getLogger("bcp_project.routers.documents")
 router = APIRouter()
@@ -90,6 +86,7 @@ async def upload_page(
             "suggested_doc_id": suggested_doc_id,
             "default_doc_date": today.isoformat(),
             "document_types": document_types,
+            "ingest_mode": ingest_mode(),
         },
     )
 
@@ -160,222 +157,109 @@ async def search_page(
     )
 
 
-SEARCH_SUMMARY_TIMEOUT_SECONDS = 5.0
-SEARCH_CHUNK_TIMEOUT_SECONDS = 5.0
-SEARCH_EMBED_TIMEOUT_SECONDS = 8.0
+async def _audit_staff_search(
+    db: AsyncSession,
+    request: Request,
+    user: User,
+    *,
+    action: str,
+    query: str,
+    results: List[dict],
+) -> None:
+    viewable = sum(1 for row in results if row.get("can_view"))
+    await write_audit(
+        db,
+        username=user.username,
+        action=action,
+        resource_type="document",
+        detail=f"q={query[:120]} count={len(results)} viewable={viewable}",
+        ip_address=_client_ip(request),
+        actor_type="user",
+        commit=True,
+    )
 
 
-async def _capped_search(label: str, coro, timeout: float):
-    try:
-        return await asyncio.wait_for(coro, timeout=timeout)
-    except Exception as exc:
-        logger.warning("%s search skipped (%s: %s)", label, type(exc).__name__, exc)
-        return None
-
-
-@router.get("/api/search")
+@router.get("/api/search", dependencies=[Depends(rate_limit("search"))])
 async def search_documents(
+    request: Request,
     q: str,
     lang: Optional[str] = None,
+    department: Optional[str] = None,
+    category: Optional[str] = None,
+    doc_type: Optional[str] = None,
+    reference_number: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
-    """Hybrid intelligent search: summary vectors + page chunks + keyword/project boosts."""
+    """Hybrid search (summary vectors + page chunks + keywords) under the caller's ACL and filters."""
     require_role(current_user, [Role.admin, Role.board_secretary, Role.board_member])
     q = q.strip()
     lang_hint = (lang or "").strip().lower() or None
     if lang_hint not in (None, "en", "bn", "any"):
         lang_hint = None
+    try:
+        filters = SearchFilters.from_params(
+            department=department,
+            category=category,
+            doc_type=doc_type,
+            reference_number=reference_number,
+            date_from=date_from,
+            date_to=date_to,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not q:
         return {"results": [], "count": 0, "query": q, "mode": "hybrid"}
 
-    cached = await get_cached_search(q, lang=lang_hint)
-    if cached is not None:
-        cached_results = await enrich_results_with_access(db, current_user, cached.get("results") or [])
-        return {
-            **cached,
-            "results": cached_results,
-            "count": len(cached_results),
-            "cached": True,
-            "mode": cached.get("mode") or "hybrid",
-        }
-
-    needle = q.casefold()
-    summary_rows: List[dict] = []
-    chunk_best: Dict[str, dict] = {}
-    summary_ok = False
-    chunk_ok = False
-
-    try:
-        qdrant = make_qdrant_indexer()
-        query_vector = await asyncio.wait_for(
-            asyncio.to_thread(embed_texts, [q]),
-            timeout=SEARCH_EMBED_TIMEOUT_SECONDS,
-        )
-        query_vector = query_vector[0] if query_vector else None
-    except Exception as exc:
-        logger.warning("Search embedding unavailable (%s: %s)", type(exc).__name__, exc)
-        query_vector = None
-        qdrant = None
-
-    if qdrant is not None and query_vector is not None:
-        summary_task = _capped_search(
-            "Summary",
-            asyncio.to_thread(lambda: qdrant.search_summary_hits(query_vector, q, limit=20)),
-            SEARCH_SUMMARY_TIMEOUT_SECONDS,
-        )
-        chunk_task = _capped_search(
-            "Page-text",
-            asyncio.to_thread(lambda: qdrant.search_chunk_hits(query_vector, limit=20)),
-            SEARCH_CHUNK_TIMEOUT_SECONDS,
-        )
-        summary_result, chunk_result = await asyncio.gather(summary_task, chunk_task)
-        if isinstance(summary_result, list):
-            summary_rows = summary_result
-            summary_ok = True
-        if isinstance(chunk_result, dict):
-            chunk_best = chunk_result
-            chunk_ok = True
-
-    results: List[dict] = []
-    if qdrant is not None and (summary_rows or chunk_best):
-        results = qdrant.fuse_hybrid_results(
-            summary_rows,
-            chunk_best,
-            q,
-            limit=20,
-            lang=lang_hint,
-            use_chunks=True,
-        )
-    vector_ok = bool(summary_ok or chunk_ok)
-
-    # Postgres: document ID / type / keywords, plus LLM summary fields (option B).
-    like = f"%{q}%"
-    pg_filters = [
-        DocumentRecord.doc_id.ilike(like),
-        DocumentRecord.doc_type.ilike(like),
-        cast(DocumentRecord.keywords, String).ilike(like),
-    ]
-    if len(needle) >= 3:
-        pg_filters.append(cast(DocumentRecord.summary_json, String).ilike(like))
-    id_rows = (
-        await db.execute(
-            select(
-                DocumentRecord.doc_id,
-                DocumentRecord.doc_type,
-                DocumentRecord.keywords,
-                DocumentRecord.summary_json,
-            )
-            .where(or_(*pg_filters))
-            .order_by(DocumentRecord.created_at.desc())
-            .limit(40)
-        )
-    ).all()
-    by_id = {row.get("doc_id"): row for row in results if row.get("doc_id")}
-    for doc_id, doc_type, keywords, summary_json in id_rows:
-        id_hit = needle in (doc_id or "").casefold()
-        type_hit = needle in (doc_type or "").casefold()
-        keyword_hit = any(needle in str(kw).casefold() for kw in (keywords or []))
-        hay = summary_haystack(summary_json)
-        summary_hit = len(needle) >= 3 and needle in hay.casefold()
-        if doc_id in by_id:
-            entry = by_id[doc_id]
-            reasons = list(entry.get("match_reasons") or [])
-            if id_hit and "doc_id" not in reasons:
-                reasons.append("doc_id")
-                entry["score"] = float(entry.get("score") or 0) + 0.35
-            if (keyword_hit or type_hit) and "keyword" not in reasons:
-                reasons.append("keyword")
-                entry["score"] = float(entry.get("score") or 0) + 0.16
-            if summary_hit and "summary" not in reasons:
-                reasons.append("summary")
-                entry["score"] = float(entry.get("score") or 0) + 0.2
-            if not entry.get("snippet") and (summary_hit or keyword_hit):
-                entry["snippet"] = summary_search_snippet(summary_json, q)
-            entry["match_reasons"] = reasons
-        else:
-            reasons = []
-            if id_hit:
-                reasons.append("doc_id")
-            if keyword_hit or type_hit:
-                reasons.append("keyword")
-            if summary_hit:
-                reasons.append("summary")
-            if not reasons:
-                reasons = ["keyword"]
-            source = "doc_id" if id_hit else ("summary" if summary_hit else "keyword")
-            by_id[doc_id] = {
-                "doc_id": doc_id,
-                "doc_type": doc_type,
-                "searchable_keywords": keywords or [],
-                "score": 1.2 if id_hit else (0.95 if summary_hit else 0.85),
-                "source": source,
-                "match_reasons": reasons,
-                "snippet": summary_search_snippet(summary_json, q) if (summary_hit or keyword_hit) else "",
-            }
-    results = sorted(by_id.values(), key=lambda row: (-(row.get("score") or 0), str(row.get("doc_id") or "")))[:20]
-
-    document_ids = [row["doc_id"] for row in results if row.get("doc_id")]
-    if document_ids:
-        statement = select(
-            DocumentRecord.doc_id,
-            DocumentRecord.doc_type,
-            DocumentRecord.keywords,
-            DocumentRecord.doc_date,
-        ).where(DocumentRecord.doc_id.in_(document_ids))
-        stored_docs = await db.execute(statement)
-        stored_map = {
-            doc_id: (doc_type, keywords, doc_date)
-            for doc_id, doc_type, keywords, doc_date in stored_docs.all()
-        }
-        filtered_results = []
-        for row in results:
-            doc_id = row.get("doc_id")
-            if doc_id not in stored_map:
-                continue
-            doc_type, keywords, doc_date = stored_map[doc_id]
-            filtered_results.append(
-                {
-                    **row,
-                    "doc_type": doc_type or row.get("doc_type", "Document"),
-                    "doc_date": doc_date.isoformat() if doc_date else row.get("doc_date"),
-                    "searchable_keywords": row.get("searchable_keywords") or keywords or [],
-                }
-            )
-    else:
-        filtered_results = []
-
-    payload = {
-        "results": filtered_results,
-        "count": len(filtered_results),
-        "query": q,
-        "mode": "hybrid" if vector_ok else "keyword",
-        "lang": lang_hint or "any",
-        "degraded": not vector_ok,
-    }
-    if vector_ok:
-        await set_cached_search(q, payload, lang=lang_hint)
-
-    enriched = await enrich_results_with_access(db, current_user, filtered_results)
+    acl = await acl_scope_for_user(db, current_user)
+    outcome = await hybrid_search(db, acl=acl, q=q, lang=lang_hint, filters=filters, limit=20)
+    enriched = await enrich_results_with_access(db, current_user, outcome.results)
+    await _audit_staff_search(db, request, current_user, action="search", query=q, results=enriched)
     return {
         "results": enriched,
         "count": len(enriched),
         "query": q,
-        "cached": False,
-        "mode": payload["mode"],
+        "cached": outcome.cached,
+        "mode": outcome.mode,
         "lang": lang_hint or "any",
-        "degraded": not vector_ok,
+        "degraded": outcome.degraded,
+        "reranked": outcome.reranked,
+        "filters": {k: v for k, v in filters.as_dict().items() if v},
     }
 
+
+@router.get("/api/search/facets")
+async def search_facets(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Dict[str, Any]:
+    """Distinct confirmed metadata values for the search filter dropdowns."""
+    require_role(current_user, [Role.admin, Role.board_secretary, Role.board_member])
+
+    async def distinct(column) -> List[str]:
+        rows = await db.execute(select(column).where(column.isnot(None), column != "").distinct().order_by(column).limit(200))
+        return [r[0] for r in rows.all()]
+
+    return {
+        "departments": await distinct(DocumentRecord.department),
+        "categories": await distinct(DocumentRecord.category),
+        "doc_types": await list_document_types(db),
+    }
 
 
 @router.get("/api/search/metadata")
 async def search_documents_by_metadata(
+    request: Request,
     doc_id: Optional[str] = None,
     doc_type: Optional[str] = None,
     uploaded_by: Optional[str] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
+    department: Optional[str] = None,
+    category: Optional[str] = None,
+    reference_number: Optional[str] = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
@@ -387,14 +271,31 @@ async def search_documents_by_metadata(
         "uploaded_by": (uploaded_by or "").strip(),
         "date_from": date_from or "",
         "date_to": date_to or "",
+        "department": norm(department),
+        "category": norm(category),
+        "reference_number": (reference_number or "").strip(),
     }
 
+    audit_query = " ".join(f"{key}={value}" for key, value in filters.items() if value)
     cached = await get_cached_metadata_search(filters)
     if cached is not None:
         enriched = await enrich_results_with_access(db, current_user, cached.get("results") or [])
+        await _audit_staff_search(
+            db, request, current_user, action="search_metadata", query=audit_query, results=enriched
+        )
         return {**cached, "results": enriched, "count": len(enriched), "cached": True}
 
-    conditions = []
+    conditions = [
+        or_(
+            DocumentRecord.verification_status.is_(None),
+            DocumentRecord.verification_status.notin_(UNSEARCHABLE_VERIFICATION),
+        ),
+        *SearchFilters(
+            department=filters["department"],
+            category=filters["category"],
+            reference_number=filters["reference_number"],
+        ).sql_conditions(),
+    ]
     if filters["doc_id"]:
         conditions.append(DocumentRecord.doc_id.ilike(f"%{filters['doc_id']}%"))
     if filters["doc_type"]:
@@ -426,6 +327,10 @@ async def search_documents_by_metadata(
             "doc_date": doc.doc_date.isoformat(),
             "uploaded_by": doc.uploaded_by,
             "searchable_keywords": doc.keywords,
+            "title": doc.title,
+            "department": doc.department,
+            "category": doc.category,
+            "reference_number": doc.reference_number,
         }
         for doc in documents
     ]
@@ -433,6 +338,9 @@ async def search_documents_by_metadata(
     await set_cached_metadata_search(filters, cache_payload)
 
     enriched = await enrich_results_with_access(db, current_user, base_results)
+    await _audit_staff_search(
+        db, request, current_user, action="search_metadata", query=audit_query, results=enriched
+    )
     return {"results": enriched, "count": len(enriched), "cached": False}
 
 
@@ -575,6 +483,21 @@ async def _semantic_neighbors_safe(
         return []
 
 
+async def _filter_graph_for_user(db: AsyncSession, user: User, payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Drop nodes (and their edges) the user may not view; graph labels come from summaries."""
+    if is_archive_view_privileged(user):
+        return payload
+    node_ids = [node.get("id") for node in payload.get("nodes") or [] if node.get("id")]
+    allowed = await viewable_doc_ids(db, user, node_ids)
+    nodes = [node for node in payload.get("nodes") or [] if node.get("id") in allowed]
+    edges = [
+        edge
+        for edge in payload.get("edges") or []
+        if edge.get("source") in allowed and edge.get("target") in allowed
+    ]
+    return {**payload, "nodes": nodes, "edges": edges, "count": len(nodes), "edge_count": len(edges)}
+
+
 def _graph_response(
     graph: Any,
     *,
@@ -664,7 +587,26 @@ async def archive_documents(
         )
         for row in rows
     ]
-    items = [document_summary_card(doc) for doc in docs]
+    page_ids = [doc.doc_id for doc in docs]
+    allowed = await viewable_doc_ids(db, current_user, page_ids)
+    hidden = await hidden_restricted_doc_ids(db, current_user, page_ids)
+    items = []
+    for doc in docs:
+        if doc.doc_id in hidden:
+            continue
+        if doc.doc_id in allowed:
+            items.append({**document_summary_card(doc), "can_view": True})
+        else:
+            items.append(
+                {
+                    "doc_id": doc.doc_id,
+                    "title": doc.doc_type,
+                    "doc_type": doc.doc_type,
+                    "doc_date": doc.doc_date,
+                    "organization": "",
+                    "can_view": False,
+                }
+            )
 
     cached_types = await get_cached_metadata_search({"facet": "archive_doc_types"})
     if cached_types and isinstance(cached_types.get("types"), list):
@@ -727,11 +669,12 @@ async def archive_graph(
         )
     except Exception:
         cached = None
+    document = await _load_document_or_404(focus, db)
+    await assert_can_view(current_user, focus, db)
     if cached:
         cached["cached"] = True
-        return cached
+        return await _filter_graph_for_user(db, current_user, cached)
 
-    document = await _load_document_or_404(focus, db)
     center = GraphDoc(
         doc_id=document.doc_id,
         doc_type=document.doc_type,
@@ -828,7 +771,7 @@ async def archive_graph(
         )
     except Exception:
         pass
-    return payload
+    return await _filter_graph_for_user(db, current_user, payload)
 
 
 @router.get("/api/documents/{doc_id}/related")
@@ -864,6 +807,9 @@ async def document_related(
     )
     related_ids.update(entity_ids)
     capped_ids = list(related_ids)[: limit + 8]
+    allowed = await viewable_doc_ids(db, current_user, capped_ids)
+    capped_ids = [other for other in capped_ids if other in allowed]
+    semantic_hits = [row for row in semantic_hits if str(row.get("doc_id")) in allowed]
     neighbors = await _load_graph_documents(db, doc_ids=capped_ids) if capped_ids else []
     docs = [center] + [d for d in neighbors if d.doc_id != doc_id]
 
@@ -935,9 +881,17 @@ async def view_document(
         {
             "user": current_user,
             "page_title": "Document Viewer",
-            "page_subtitle": f"Viewing {doc_id} · {document.doc_type}",
+            "page_subtitle": " · ".join(
+                part
+                for part in (f"Viewing {doc_id}", document.doc_type, ai_provenance_label(document.summary_json))
+                if part
+            ),
             "file_url": f"/view/{doc_id}/file",
             "download_url": f"/download/{doc_id}" if can_download else None,
+            "versions_url": f"/documents/{doc_id}/versions"
+            if current_user.role in {Role.admin, Role.board_secretary}
+            else None,
+            "current_version": document.current_version,
             "back_url": back_url,
             "back_label": back_label,
             "seal_text": seal_text,
@@ -959,35 +913,27 @@ async def view_document_file(
     document = await _load_document_or_404(doc_id, db)
     await assert_can_view(current_user, doc_id, db)
 
-    pdf_bytes = await _load_pdf_bytes(document)
-    seal_text = BRAND.seal_stream(current_user.username)
+    key = ("view", doc_id, document.file_location, document.sha256, current_user.username)
     try:
-        stamped = stamp_pdf_bytes(pdf_bytes, seal_text)
+        stamped = await stamped_pdf(key, lambda: _load_pdf_bytes(document), BRAND.seal_stream(current_user.username))
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.exception("Watermark stamping failed for %s", doc_id)
         raise HTTPException(status_code=502, detail="Could not prepare secure document stream") from exc
 
-    await write_audit(
-        db,
-        username=current_user.username,
-        action="view_file",
-        resource_type="document",
-        resource_id=doc_id,
-        detail="watermarked_stream",
-        ip_address=_client_ip(request),
-        commit=True,
-    )
-
-    return Response(
-        content=stamped,
-        media_type="application/pdf",
-        headers={
-            "Content-Disposition": f'inline; filename="{doc_id}-view.pdf"',
-            "Cache-Control": "no-store",
-            "X-Content-Type-Options": "nosniff",
-            "X-Robots-Tag": "noindex, nofollow",
-        },
-    )
+    if is_initial_request(request):
+        await write_audit(
+            db,
+            username=current_user.username,
+            action="view_file",
+            resource_type="document",
+            resource_id=doc_id,
+            detail="watermarked_stream",
+            ip_address=_client_ip(request),
+            commit=True,
+        )
+    return pdf_response(request, stamped, filename=f"{doc_id}-view.pdf")
 
 
 @router.get("/download/{doc_id}")
@@ -1004,7 +950,7 @@ async def download_document(
     pdf_bytes = await _load_pdf_bytes(document)
     seal_text = BRAND.seal_download(current_user.username)
     try:
-        stamped = stamp_pdf_bytes(pdf_bytes, seal_text)
+        stamped = await asyncio.to_thread(stamp_pdf_bytes, pdf_bytes, seal_text)
     except Exception as exc:
         logger.exception("Watermark stamping failed for download %s", doc_id)
         raise HTTPException(status_code=502, detail="Could not prepare watermarked download") from exc
@@ -1019,17 +965,9 @@ async def download_document(
         ip_address=_client_ip(request),
         commit=True,
     )
-    return Response(
-        content=stamped,
-        media_type="application/pdf",
-        headers={
-            "Content-Disposition": f'attachment; filename="{doc_id}-watermarked.pdf"',
-            "Cache-Control": "no-store",
-            "X-Content-Type-Options": "nosniff",
-        },
-    )
+    return pdf_response(request, stamped, filename=f"{doc_id}-watermarked.pdf", disposition="attachment")
 
-@router.post("/api/upload/stream")
+@router.post("/api/upload/stream", dependencies=[Depends(rate_limit("upload"))])
 async def upload_document_stream(
     request: Request,
     background_tasks: BackgroundTasks,
@@ -1037,155 +975,133 @@ async def upload_document_stream(
     doc_id: str = Form(...),
     doc_type: str = Form(...),
     keywords: str = Form(""),
+    sensitivity: str = Form("internal"),
+    title: str = Form(""),
+    reference_number: str = Form(""),
+    department: str = Form(""),
+    subject: str = Form(""),
+    category: str = Form(""),
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> StreamingResponse:
-    """NDJSON progress stream: real % as upload → parse → summarize → index complete."""
+    """NDJSON progress stream for the in-request pipeline (used when no job worker runs)."""
     require_role(current_user, [Role.admin, Role.uploader])
+    sensitivity = parse_sensitivity(sensitivity)
     doc_type = normalize_document_type(doc_type)
-    if not doc_type:
-        async def _bad_type():
-            yield json.dumps(
-                {"pct": 0, "step": "upload", "title": "Upload failed", "error": "Document type is required"}
-            ) + "\n"
-
-        return StreamingResponse(_bad_type(), media_type="application/x-ndjson")
-
-    import asyncio
+    doc_id = (doc_id or "").strip()
 
     def _event(pct: int, step: str, title: str, hint: str = "", **extra: Any) -> str:
         payload = {"pct": pct, "step": step, "title": title, "hint": hint, **extra}
         return json.dumps(payload, ensure_ascii=False) + "\n"
 
     async def generate():
-        destination = None
+        if not doc_type or not doc_id:
+            yield _event(0, "upload", "Upload failed", error="Document ID and type are required")
+            return
+        yield _event(5, "upload", "Starting upload…", "Checking the file and saving it.")
         try:
-            yield _event(5, "upload", "Starting upload…", "Checking the file and saving it.")
-
-            content_type = (file.content_type or "").lower()
-            name = (file.filename or "").lower()
-            if content_type not in ("application/pdf", "application/x-pdf", "") and not name.endswith(".pdf"):
-                yield _event(0, "upload", "Upload failed", error="Only PDF files are accepted")
-                return
-
-            statement = select(DocumentRecord).where(DocumentRecord.doc_id == doc_id)
-            result = await db.execute(statement)
-            if result.scalar_one_or_none() is not None:
-                yield _event(0, "upload", "Upload failed", error="A document with this Document ID already exists")
-                return
-
-            yield _event(12, "upload", "Receiving PDF…", "Transferring file to the server.")
-            file_bytes = await file.read()
-            if len(file_bytes) > 50 * 1024 * 1024:
-                yield _event(0, "upload", "Upload failed", error="PDF exceeds 50MB upload limit")
-                return
-
-            safe_name = Path(file.filename or "document.pdf").name.replace("..", "")
-            filename = f"{uuid.uuid4().hex}_{safe_name}"
-            destination = UPLOAD_DIR / filename
-            destination.write_bytes(file_bytes)
-            pdf_path = str(destination.resolve())
-            yield _event(22, "upload", "File saved", "PDF stored. Starting text extraction.")
-
-            yield _event(28, "parse", "Parsing PDF…", "Extracting text from each page.")
-            pages = await asyncio.to_thread(parse_pdf, pdf_path)
-            if not pages:
-                yield _event(0, "parse", "Parsing failed", error="Could not extract text from PDF")
-                return
-            yield _event(48, "parse", "Parsing complete", f"Read {len(pages)} page(s).")
-
-            yield _event(55, "summarize", "Summarizing…", "Building bilingual keywords and an executive summary.")
-            document_text = "\n\n".join(page.text for page in pages)
-            if len(document_text) > 60000:
-                document_text = document_text[:60000] + "\n\n[Truncated for summarization]"
-            summary = await asyncio.to_thread(extract_document_summary, document_text)
-            stored_keywords = _parse_upload_keywords(keywords, summary.searchable_keywords)
-            yield _event(72, "summarize", "Summary ready", "Keywords and structure extracted.")
-
-            yield _event(78, "index", "Indexing summary…", "Saving searchable summary to the archive.")
-            remote_location = await asyncio.to_thread(store_pdf, pdf_path, filename)
-            qdrant = make_qdrant_indexer()
-            await asyncio.to_thread(qdrant.create_collections)
-
-            summary_payload = {
-                "doc_id": doc_id,
-                "doc_type": doc_type,
-                "doc_date": doc_date,
-                "searchable_keywords": summary.searchable_keywords,
-                "major_projects": [
-                    project if isinstance(project, dict) else project.dict() for project in summary.major_projects
-                ],
-                "core_info": summary.core_info or {},
-                "key_personnel": [p if isinstance(p, dict) else p.dict() for p in summary.key_personnel],
-                "finance_and_admin": list(summary.finance_and_admin or []),
-            }
-            summary_text = build_summary_embedding_text(summary_payload)
-            summary_vector = (await asyncio.to_thread(embed_texts, [summary_text]))[0]
-            await asyncio.to_thread(
-                qdrant.upload_summary,
-                doc_id,
-                summary_payload,
-                summary_vector,
-            )
-            yield _event(92, "index", "Summary indexed", "Document is searchable. Finishing save…")
-
-            page_payloads = [{"text": page.text, "metadata": dict(page.metadata or {})} for page in pages]
-            await schedule_chunk_index(doc_id, page_payloads, background_tasks)
-
-            document = DocumentRecord(
+            parsed_date = datetime.fromisoformat(doc_date).date()
+        except ValueError:
+            yield _event(0, "upload", "Upload failed", error="Invalid document date")
+            return
+        conflict = await doc_id_conflict(db, doc_id)
+        if conflict:
+            yield _event(0, "upload", "Upload failed", error=conflict)
+            return
+        yield _event(12, "upload", "Receiving file…", "Transferring file to the server.")
+        try:
+            upload = validate_upload(await file.read())
+        except IntakeRejected as exc:
+            yield _event(0, "upload", "Upload failed", error=str(exc))
+            return
+        try:
+            result = await intake_new_document(
+                db,
+                upload=upload,
                 doc_id=doc_id,
-                doc_date=datetime.fromisoformat(doc_date).date(),
+                doc_date=parsed_date,
                 doc_type=doc_type,
-                keywords=stored_keywords,
-                summary_json=summary_payload,
-                file_location=remote_location,
+                keywords=_parse_upload_keywords(keywords, []),
+                sensitivity=sensitivity,
                 uploaded_by=current_user.username,
+                metadata={
+                    "title": title.strip(),
+                    "reference_number": reference_number.strip(),
+                    "department": department.strip(),
+                    "subject": subject.strip(),
+                    "category": category.strip(),
+                },
+                stage=False,
             )
-            db.add(document)
             await write_audit(
                 db,
                 username=current_user.username,
                 action="upload",
                 resource_type="document",
                 resource_id=doc_id,
-                detail=doc_type,
+                detail=f"{doc_type} sensitivity={sensitivity} type={upload.content_type} sha256={upload.sha256}",
                 ip_address=_client_ip(request),
                 commit=False,
             )
             await db.commit()
-            await bump_search_cache_version()
-            publish_event(
-                "document.indexed",
-                {
-                    "doc_id": doc_id,
-                    "doc_type": doc_type,
-                    "uploaded_by": current_user.username,
-                    "source": "upload_stream",
-                },
-            )
+        except Exception as exc:
+            logger.exception("Storing upload failed for %s", doc_id)
+            yield _event(0, "upload", "Upload failed", error=str(exc)[:240] or "Could not store the file")
+            return
+        yield _event(22, "upload", "File saved", f"Original stored write-once (SHA-256 {upload.sha256[:12]}…).")
 
+        task = asyncio.create_task(run_document_ingest(doc_id, version=result.version.version))
+        shown = None
+        while not task.done():
+            await asyncio.sleep(0.7)
+            current = await _ingest_state(doc_id)
+            if current and current != shown and current in _STREAM_STEPS:
+                shown = current
+                yield _event(*_STREAM_STEPS[current])
+        try:
+            outcome = task.result()
+        except Exception as exc:
+            logger.exception("Streaming ingest failed for %s", doc_id)
+            yield _event(0, "parse", "Processing failed", error=str(exc)[:240] or "Document processing failed")
+            return
+        if outcome == "needs_review":
             yield _event(
                 100,
-                "index",
-                "Ingestion complete",
-                "Summary is searchable now. Deeper text indexing continues briefly in the background.",
+                "parse",
+                "Sent for verification",
+                "OCR confidence is low. A reviewer must confirm the text before it becomes searchable.",
                 done=True,
-                redirect="/upload?status=success",
+                redirect="/upload?status=review",
             )
-        except Exception as exc:
-            logger.exception("Streaming upload failed for %s", doc_id)
-            if destination is not None:
-                try:
-                    Path(destination).unlink(missing_ok=True)
-                except Exception:
-                    pass
-            yield _event(0, "upload", "Processing failed", error=str(exc)[:240] or "Document processing failed")
+            return
+        yield _event(
+            100,
+            "index",
+            "Ingestion complete",
+            "The document is searchable now.",
+            done=True,
+            redirect="/upload?status=success",
+        )
 
     return StreamingResponse(generate(), media_type="application/x-ndjson")
 
 
-@router.post("/upload")
+_STREAM_STEPS = {
+    "parsing": (35, "parse", "Reading pages…", "Extracting text (OCR for scanned pages)."),
+    "summarizing": (60, "summarize", "Summarizing…", "Building bilingual keywords and an executive summary."),
+    "indexing": (82, "index", "Indexing…", "Making the document searchable."),
+}
+
+
+async def _ingest_state(doc_id: str) -> Optional[str]:
+    from ..db import get_session
+
+    async with get_session() as session:
+        return await session.scalar(select(DocumentRecord.ingest_status).where(DocumentRecord.doc_id == doc_id))
+
+
+@router.post("/upload", dependencies=[Depends(rate_limit("upload"))])
 async def upload_document(
     request: Request,
     background_tasks: BackgroundTasks,
@@ -1193,103 +1109,58 @@ async def upload_document(
     doc_id: str = Form(...),
     doc_type: str = Form(...),
     keywords: str = Form(""),
+    sensitivity: str = Form("internal"),
+    title: str = Form(""),
+    reference_number: str = Form(""),
+    department: str = Form(""),
+    subject: str = Form(""),
+    category: str = Form(""),
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> RedirectResponse:
-    """Fallback non-stream upload (no-JS). Prefer /api/upload/stream from the UI."""
+    """No-JS fallback: same intake as the API, then redirect while the ingest runs."""
     require_role(current_user, [Role.admin, Role.uploader])
+    sensitivity = parse_sensitivity(sensitivity)
     doc_type = normalize_document_type(doc_type)
-    if not doc_type:
-        raise HTTPException(status_code=400, detail="Document type is required")
-
-    content_type = (file.content_type or "").lower()
-    if content_type not in ("application/pdf", "application/x-pdf", ""):
-        name = (file.filename or "").lower()
-        if not name.endswith(".pdf"):
-            raise HTTPException(status_code=400, detail="Only PDF files are accepted")
-
-    statement = select(DocumentRecord).where(DocumentRecord.doc_id == doc_id)
-    result = await db.execute(statement)
-    if result.scalar_one_or_none() is not None:
-        raise HTTPException(status_code=400, detail="A document with this DocId already exists")
-
-    safe_name = Path(file.filename or "document.pdf").name.replace("..", "")
-    filename = f"{uuid.uuid4().hex}_{safe_name}"
-    destination = UPLOAD_DIR / filename
-    file_bytes = await file.read()
-    if len(file_bytes) > 50 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="PDF exceeds 50MB upload limit")
-    destination.write_bytes(file_bytes)
-
-    pdf_path = str(destination.resolve())
+    doc_id = (doc_id or "").strip()
+    if not doc_type or not doc_id:
+        raise HTTPException(status_code=400, detail="Document ID and type are required")
     try:
-        pages = parse_pdf(pdf_path)
-        if not pages:
-            raise HTTPException(status_code=400, detail="Could not extract text from PDF")
-
-        document_text = "\n\n".join(page.text for page in pages)
-        if len(document_text) > 60000:
-            document_text = document_text[:60000] + "\n\n[Truncated for summarization]"
-
-        summary = extract_document_summary(document_text)
-        stored_keywords = _parse_upload_keywords(keywords, summary.searchable_keywords)
-        remote_location = store_pdf(pdf_path, filename)
-
-        qdrant = make_qdrant_indexer()
-        qdrant.create_collections()
-
-        summary_payload = {
-            "doc_id": doc_id,
-            "doc_type": doc_type,
-            "doc_date": doc_date,
-            "searchable_keywords": summary.searchable_keywords,
-            "major_projects": [project if isinstance(project, dict) else project.dict() for project in summary.major_projects],
-            "core_info": summary.core_info or {},
-            "key_personnel": [p if isinstance(p, dict) else p.dict() for p in summary.key_personnel],
-            "finance_and_admin": list(summary.finance_and_admin or []),
-        }
-        summary_text = build_summary_embedding_text(summary_payload)
-        summary_vector = embed_texts([summary_text])[0]
-        qdrant.upload_summary(summary_id=doc_id, payload=summary_payload, vector=summary_vector)
-
-        page_payloads = [{"text": page.text, "metadata": dict(page.metadata or {})} for page in pages]
-        await schedule_chunk_index(doc_id, page_payloads, background_tasks)
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.exception("Document processing failed for %s", doc_id)
-        raise HTTPException(status_code=502, detail="Document processing failed") from exc
-
-    document = DocumentRecord(
+        parsed_date = datetime.fromisoformat(doc_date).date()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid document date") from exc
+    conflict = await doc_id_conflict(db, doc_id)
+    if conflict:
+        raise HTTPException(status_code=400, detail=conflict)
+    upload = await read_validated(file)
+    result = await intake_new_document(
+        db,
+        upload=upload,
         doc_id=doc_id,
-        doc_date=datetime.fromisoformat(doc_date).date(),
+        doc_date=parsed_date,
         doc_type=doc_type,
-        keywords=stored_keywords,
-        summary_json=summary_payload,
-        file_location=remote_location,
+        keywords=_parse_upload_keywords(keywords, []),
+        sensitivity=sensitivity,
         uploaded_by=current_user.username,
+        metadata={
+            "title": title.strip(),
+            "reference_number": reference_number.strip(),
+            "department": department.strip(),
+            "subject": subject.strip(),
+            "category": category.strip(),
+        },
     )
-    db.add(document)
     await write_audit(
         db,
         username=current_user.username,
         action="upload",
         resource_type="document",
         resource_id=doc_id,
-        detail=doc_type,
+        detail=f"{doc_type} sensitivity={sensitivity} type={upload.content_type} sha256={upload.sha256}",
         ip_address=_client_ip(request),
         commit=False,
     )
     await db.commit()
-    await bump_search_cache_version()
-    publish_event(
-        "document.indexed",
-        {
-            "doc_id": doc_id,
-            "doc_type": doc_type,
-            "uploaded_by": current_user.username,
-            "source": "upload",
-        },
-    )
-    return RedirectResponse(url="/upload?status=success", status_code=status.HTTP_303_SEE_OTHER)
+    dispatch_after_commit(result, background_tasks)
+    return RedirectResponse(url="/upload?status=queued", status_code=status.HTTP_303_SEE_OTHER)

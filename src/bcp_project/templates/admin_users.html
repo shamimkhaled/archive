@@ -21,6 +21,8 @@
     <div class="alert alert-success" role="status">User updated successfully.</div>
     {% elif status == 'deleted' %}
     <div class="alert alert-success" role="status">User deleted.</div>
+    {% elif status == 'mfa_reset' %}
+    <div class="alert alert-success" role="status">Authenticator reset. The user will enrol again at next sign-in.</div>
     {% endif %}
     {% if error %}
     <div class="alert alert-error" role="alert">{{ error | replace('+', ' ') }}</div>
@@ -105,6 +107,12 @@
                         <form action="/admin/users/{{ u.id }}/delete" method="post" class="inline-form"
                               onsubmit="return confirm('Delete user {{ u.username }}? This cannot be undone.');">
                             <button type="submit" class="button button-secondary danger-action">Delete</button>
+                        </form>
+                        {% endif %}
+                        {% if u.role.value in ('admin', 'board_secretary') %}
+                        <form action="/admin/users/{{ u.id }}/mfa/reset" method="post" class="inline-form"
+                              onsubmit="return confirm('Reset authenticator for {{ u.username }}?');">
+                            <button type="submit" class="button button-secondary">Reset MFA</button>
                         </form>
                         {% endif %}
                     </td>

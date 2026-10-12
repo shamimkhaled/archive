@@ -1,5 +1,10 @@
 # Architecture
 
+> **Current architecture:** [`docs/evidence/architecture.md`](evidence/architecture.md) describes the
+> system as built (Redis Streams with a Postgres outbox, the AI provider port, the React PWA, SSO).
+> Where this older document disagrees, for example on the Redis list queue or 1536-d-only vectors,
+> the evidence pack is correct.
+
 **Requirements (normative):** [REQUIREMENTS.md](./REQUIREMENTS.md) — especially **R9** (layers) and **R10** (security/sovereignty)  
 **Application entry:** `src/bcp_project/main_api.py`  
 **Package layout:** `src/bcp_project/{routers,ports,jobs,...}`

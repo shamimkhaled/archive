@@ -49,6 +49,12 @@
             <div class="alert alert-error" role="alert">This account is inactive. Contact an administrator.</div>
             {% elif request.query_params.get('error') == 'locked' %}
             <div class="alert alert-error" role="alert">Too many failed attempts. Try again in a few minutes.</div>
+            {% elif request.query_params.get('error') == 'mfa_expired' %}
+            <div class="alert alert-error" role="alert">The verification step expired. Sign in again.</div>
+            {% elif request.query_params.get('error') == 'ldap_unavailable' %}
+            <div class="alert alert-error" role="alert">The bank directory is unreachable. Try again shortly or contact IT.</div>
+            {% elif request.query_params.get('error') in ('ldap_role', 'ldap_user') %}
+            <div class="alert alert-error" role="alert">Your directory account has no archive access. Contact an administrator.</div>
             {% endif %}
 
             <form action="/login" method="post" class="form-grid" id="loginForm">
@@ -75,7 +81,9 @@
                 <a class="button-block" href="/auth/oidc/start">Sign in with bank SSO (OIDC)</a>
             </p>
             {% endif %}
-            {% if request.query_params.get('error') == 'oidc_state' or request.query_params.get('error') == 'oidc_token' or request.query_params.get('error') == 'oidc_map' or request.query_params.get('error') == 'oidc_user' %}
+            {% if request.query_params.get('error') == 'oidc_role' %}
+            <div class="alert alert-error" role="alert">Your SSO account has no archive access. Contact an administrator.</div>
+            {% elif (request.query_params.get('error') or '').startswith('oidc_') %}
             <div class="alert alert-error" role="alert">SSO sign-in failed. Contact an administrator.</div>
             {% endif %}
             <p class="auth-credit">

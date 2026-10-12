@@ -8,7 +8,7 @@ import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from .config import load_environment, openai_chat_model, resolve_openai_credentials
+from .config import load_environment
 
 load_environment()
 
@@ -20,10 +20,14 @@ MINUTES_GENERATING = "generating"
 MINUTES_READY = "ready"
 MINUTES_FAILED = "failed"
 
-try:
-    from openai import OpenAI
-except ImportError:
-    OpenAI = None  # type: ignore
+
+def meeting_sensitivity() -> str:
+    """Board transcripts are confidential unless MEETING_SENSITIVITY says otherwise."""
+    import os
+
+    from .models import parse_sensitivity
+
+    return parse_sensitivity(os.getenv("MEETING_SENSITIVITY") or "confidential")
 
 
 def _strip_code_fence(text: str) -> str:
@@ -74,16 +78,9 @@ def _llm_minutes(
     location: Optional[str],
     agenda: str,
     transcript: str,
+    sensitivity: Optional[str] = None,
 ) -> Optional[str]:
-    if OpenAI is None:
-        return None
-    try:
-        api_key, base_url = resolve_openai_credentials()
-    except Exception:
-        logger.exception("Minutes LLM credentials unavailable")
-        return None
-    if not api_key:
-        return None
+    from . import ai
 
     when = scheduled_at.strftime("%Y-%m-%d %H:%M UTC") if scheduled_at else "unknown"
     prompt = (
@@ -101,15 +98,17 @@ def _llm_minutes(
         f"Transcript:\n{transcript or '(empty)'}\n"
     )
     try:
-        client = OpenAI(api_key=api_key, base_url=base_url) if base_url else OpenAI(api_key=api_key)
-        response = client.chat.completions.create(
-            model=openai_chat_model(),
-            messages=[{"role": "user", "content": prompt}],
+        raw = ai.chat(
+            "minutes",
+            [{"role": "user", "content": prompt}],
+            sensitivity=sensitivity if sensitivity is not None else meeting_sensitivity(),
             temperature=0.2,
             max_tokens=2500,
-        )
-        raw = (response.choices[0].message.content or "").strip()
+        ).strip()
         return _strip_code_fence(raw) or None
+    except ai.EgressBlocked as exc:
+        logger.warning("Minutes LLM skipped by egress policy: %s", exc)
+        return None
     except Exception:
         logger.exception("Minutes LLM call failed")
         return None

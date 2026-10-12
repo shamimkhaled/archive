@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import secrets
 import time
@@ -17,7 +18,9 @@ CSRF_HEADER = "x-csrf-token"
 CSRF_FORM_FIELD = "csrf_token"
 
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "TRACE"})
-CSRF_EXEMPT_PATHS = frozenset({"/login", "/token", "/healthz", "/readyz", "/sw.js"})
+CSRF_EXEMPT_PATHS = frozenset(
+    {"/login", "/login/mfa", "/login/mfa/setup", "/token", "/healthz", "/readyz", "/sw.js"}
+)
 
 
 def new_csrf_token() -> str:
@@ -137,6 +140,26 @@ class CsrfMiddleware(BaseHTTPMiddleware):
         return response
 
 
+def client_ip(request: Request) -> Optional[str]:
+    """Client address as seen by the outermost trusted proxy.
+
+    Each proxy appends the address it received the connection from to
+    X-Forwarded-For, so with TRUSTED_PROXY_HOPS proxies in front of the app the
+    real client is that many entries from the right. Entries further left are
+    supplied by the client and are never trusted. Set 0 when nothing proxies
+    the app.
+    """
+    hops = max(0, int(os.getenv("TRUSTED_PROXY_HOPS", "1") or 0))
+    headers = getattr(request, "headers", None) or {}
+    forwarded = headers.get("x-forwarded-for")
+    if hops and forwarded:
+        parts = [p.strip() for p in forwarded.split(",") if p.strip()]
+        if parts:
+            return parts[-hops] if len(parts) >= hops else parts[0]
+    client = getattr(request, "client", None)
+    return client.host if client else None
+
+
 class LoginRateLimiter:
     """In-process sliding-window limiter. Never grants access on failure — only blocks."""
 
@@ -146,7 +169,7 @@ class LoginRateLimiter:
         self._failures: Dict[str, Deque[float]] = defaultdict(deque)
 
     def _key(self, request: Request, username: str) -> str:
-        ip = request.client.host if request.client else "unknown"
+        ip = client_ip(request) or "unknown"
         return f"{ip}:{username.strip().lower()}"
 
     def is_blocked(self, request: Request, username: str) -> bool:
@@ -155,11 +178,19 @@ class LoginRateLimiter:
         q = self._failures[key]
         while q and now - q[0] > self.window_seconds:
             q.popleft()
-        return len(q) >= self.max_attempts
+        blocked = len(q) >= self.max_attempts
+        if blocked:
+            from .observability import incr
+
+            incr("auth_login_locked")
+        return blocked
 
     def record_failure(self, request: Request, username: str) -> None:
+        from .observability import incr
+
         key = self._key(request, username)
         self._failures[key].append(time.time())
+        incr("auth_login_failures")
 
     def clear(self, request: Request, username: str) -> None:
         self._failures.pop(self._key(request, username), None)
