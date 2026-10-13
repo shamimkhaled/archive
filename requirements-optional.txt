@@ -2,4 +2,4 @@
 # LDAP / Active Directory sign-in (LDAP_ENABLED=1)
 ldap3>=2.9
 # Load testing (loadtest/locustfile.py); run from a separate machine, not the app image
-locust>=2.20
+locust>=2.46.0
