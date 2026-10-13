@@ -12,14 +12,6 @@
 #   docker build --build-arg SERVICE_ROLE=worker -t sonali-archive-worker .
 #   docker build --build-arg SERVICE_ROLE=worker --build-arg WITH_DIARIZATION=1 -t sonali-archive-worker-dz .
 
-# React PWA served by FastAPI under /app (see src/bcp_project/spa.py and docs/FRONTEND.md).
-FROM node:22-bookworm-slim AS frontend
-WORKDIR /frontend
-COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci --no-audit --no-fund
-COPY frontend/ ./
-RUN npm run build
-
 FROM python:3.12-slim-bookworm AS deps
 
 ARG SERVICE_ROLE=web
@@ -71,7 +63,6 @@ COPY pyproject.toml alembic.ini ./
 COPY migrations ./migrations
 COPY scripts ./scripts
 COPY src ./src
-COPY --from=frontend /frontend/dist ./frontend/dist
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 
 RUN mkdir -p /data/uploads/meetings \

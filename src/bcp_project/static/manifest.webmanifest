@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "Sonali Bank Archive System",
+  "name": "Sonali Bank Archive",
   "short_name": "Sonali Archive",
-  "description": "Secure board governance, documents, mind map and archive for Sonali Bank PLC",
+  "description": "Find Board papers, meetings and decisions for Sonali Bank PLC.",
   "lang": "en",
   "dir": "ltr",
   "start_url": "/?source=pwa",
@@ -14,71 +14,39 @@
   "theme_color": "#1A1A54",
   "categories": ["business", "productivity"],
   "prefer_related_applications": false,
+  "launch_handler": { "client_mode": "focus-existing" },
   "icons": [
-    {
-      "src": "/static/icons/icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/static/icons/icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/static/icons/icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "maskable"
-    },
-    {
-      "src": "/static/icons/icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "maskable"
-    }
+    { "src": "/static/icons/icon-any-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/static/icons/icon-any-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/static/icons/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/static/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/static/icons/icon-monochrome-512.png", "sizes": "512x512", "type": "image/png", "purpose": "monochrome" }
+  ],
+  "screenshots": [
+    { "src": "/static/img/screenshots/home-narrow.png", "sizes": "390x844", "type": "image/png", "form_factor": "narrow", "label": "Home: your next Board meeting and what needs your attention" },
+    { "src": "/static/img/screenshots/home-wide.png", "sizes": "1280x800", "type": "image/png", "form_factor": "wide", "label": "Home on a computer" }
   ],
   "shortcuts": [
     {
-      "name": "Mind Map",
-      "short_name": "Mind Map",
-      "description": "Explore document connections",
-      "url": "/archive/map?source=pwa",
-      "icons": [
-        {
-          "src": "/static/icons/icon-192.png",
-          "sizes": "192x192",
-          "type": "image/png"
-        }
-      ]
-    },
-    {
-      "name": "Archive search",
-      "short_name": "Archive",
-      "description": "Search the document archive",
+      "name": "Search the archive",
+      "short_name": "Search",
+      "description": "Find a document by its words, number or date",
       "url": "/search?source=pwa",
-      "icons": [
-        {
-          "src": "/static/icons/icon-192.png",
-          "sizes": "192x192",
-          "type": "image/png"
-        }
-      ]
+      "icons": [{ "src": "/static/icons/icon-any-192.png", "sizes": "192x192", "type": "image/png" }]
     },
     {
       "name": "Meetings",
       "short_name": "Meetings",
-      "description": "Open board meetings",
+      "description": "Your Board meetings",
       "url": "/meetings?source=pwa",
-      "icons": [
-        {
-          "src": "/static/icons/icon-192.png",
-          "sizes": "192x192",
-          "type": "image/png"
-        }
-      ]
+      "icons": [{ "src": "/static/icons/icon-any-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Upload a document",
+      "short_name": "Upload",
+      "description": "Add a document to the archive",
+      "url": "/upload?source=pwa",
+      "icons": [{ "src": "/static/icons/icon-any-192.png", "sizes": "192x192", "type": "image/png" }]
     }
   ]
 }

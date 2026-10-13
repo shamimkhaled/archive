@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Verify sign-in | {{ brand.product_name }}{% endblock %}
+{% block title %}{% if mode == 'setup' %}Set up phone check{% elif mode == 'recovery' %}Save your backup codes{% else %}Check it's you{% endif %} | {{ brand.product_name }}{% endblock %}
 {% block body_class %}auth-page{% endblock %}
 
 {% block content %}
@@ -17,52 +17,129 @@
             </div>
 
             {% if mode == 'verify' %}
-            <h1>Two-step verification</h1>
-            <p class="auth-lead">Enter the 6-digit code from your authenticator app for <strong>{{ username }}</strong>. A recovery code also works.</p>
+            <h1>Check it's you</h1>
+            <p class="auth-lead">Open the authenticator app on your phone and type the 6-digit code it shows for <strong>{{ username }}</strong>.</p>
             {% if request.query_params.get('error') == 'invalid' %}
-            <div class="alert alert-error" role="alert">That code was not accepted. Try the next code.</div>
+            <div class="alert alert-error" role="alert">That code didn't work. Codes change every 30 seconds, so please type the newest one.</div>
             {% endif %}
-            <form action="/login/mfa" method="post" class="form-grid">
+            <form action="/login/mfa" method="post" class="form-grid" id="mfaForm">
                 <div class="form-group">
-                    <label for="code">Verification code</label>
-                    <input id="code" name="code" required autocomplete="one-time-code" inputmode="numeric" maxlength="16" autofocus />
+                    <label for="code">6-digit code</label>
+                    <input id="code" name="code" required autocomplete="one-time-code" inputmode="numeric" maxlength="16"
+                           autocapitalize="none" autocorrect="off" spellcheck="false" autofocus aria-describedby="codeHint" />
+                    <p class="field-hint" id="codeHint">Lost your phone? Type one of your backup codes instead, like <code>a1b2c3-d4e5f6</code>.</p>
+                    <button type="button" class="link" id="useBackup">Use a backup code</button>
                 </div>
-                <button type="submit" class="button-block">Verify</button>
+                <button type="submit" class="button-block">Continue</button>
             </form>
 
             {% elif mode == 'setup' %}
-            <h1>Set up two-step verification</h1>
-            <p class="auth-lead">Your role requires an authenticator app (Microsoft Authenticator, Google Authenticator, or any TOTP app).</p>
+            <h1>Set up a phone check</h1>
+            <p class="auth-lead">For your role, signing in needs a code from your phone as well as your password. This takes about two minutes.</p>
             <ol class="mfa-steps">
-                <li>In the app, choose <em>Add account → Enter a setup key</em>.</li>
-                <li>Account: <strong>{{ username }}</strong>. Key (time-based):
-                    <code class="mfa-secret" aria-label="Setup key">{{ secret }}</code>
+                <li>Install an authenticator app on your phone, for example <strong>Microsoft Authenticator</strong> or <strong>Google Authenticator</strong>.</li>
+                <li>
+                    In the app, choose <em>Add account</em>, then scan this code with the phone camera.
+                    {% if qr_data_uri %}
+                    <figure class="mfa-qr">
+                        <img src="{{ qr_data_uri }}" alt="QR code to add {{ username }} to your authenticator app" width="220" height="220" />
+                    </figure>
+                    {% endif %}
+                    <details class="soft-details"{% if not qr_data_uri %} open{% endif %}>
+                        <summary>Can't scan? Type a setup key instead</summary>
+                        <p>Choose <em>Enter a setup key</em>. Account name: <strong>{{ username }}</strong>. Key type: time-based.</p>
+                        <p><code class="mfa-secret" id="mfaSecret" aria-label="Setup key">{{ secret }}</code></p>
+                        <p class="mfa-actions">
+                            <button type="button" class="button button-secondary" data-copy-target="mfaSecret">Copy key</button>
+                            <a class="button button-secondary" href="{{ otpauth_uri }}">Open in the app on this phone</a>
+                        </p>
+                    </details>
                 </li>
-                <li>Or open this link on the phone that has the app: <a href="{{ otpauth_uri }}">add to authenticator</a>.</li>
-                <li>Enter the 6-digit code the app shows.</li>
+                <li>Type the 6-digit code the app now shows.</li>
             </ol>
             {% if error == 'invalid' %}
-            <div class="alert alert-error" role="alert">That code did not match. Check the phone clock and try again.</div>
+            <div class="alert alert-error" role="alert">That code didn't match. Please type the newest code. If it still fails, check that the phone's date and time are set automatically.</div>
             {% endif %}
             <form action="/login/mfa/setup" method="post" class="form-grid">
                 <div class="form-group">
-                    <label for="code">Code from the app</label>
-                    <input id="code" name="code" required autocomplete="one-time-code" inputmode="numeric" maxlength="6" autofocus />
+                    <label for="code">6-digit code from the app</label>
+                    <input id="code" name="code" required autocomplete="one-time-code" inputmode="numeric" pattern="[0-9 ]{6,7}" maxlength="7" autofocus />
                 </div>
-                <button type="submit" class="button-block">Turn on verification</button>
+                <button type="submit" class="button-block">Turn on the phone check</button>
             </form>
 
             {% elif mode == 'recovery' %}
-            <h1>Save your recovery codes</h1>
-            <p class="auth-lead">Each code signs you in once if you lose the phone. They are shown only now; store them somewhere safe.</p>
-            <ul class="mfa-recovery">
+            <h1>Save your backup codes</h1>
+            <p class="auth-lead">If you lose your phone, each code lets you sign in once. <strong>This is the only time they are shown.</strong> Print them or keep them somewhere safe, away from your phone.</p>
+            <ul class="mfa-recovery" id="recoveryCodes">
                 {% for code in recovery_codes %}<li><code>{{ code }}</code></li>{% endfor %}
             </ul>
-            <a class="button-block" href="/">Continue to the archive</a>
+            <p class="mfa-actions no-print">
+                <button type="button" class="button button-secondary" data-copy-target="recoveryCodes">Copy codes</button>
+                <button type="button" class="button button-secondary" id="printCodes">Print</button>
+            </p>
+            <label class="checkbox-item no-print">
+                <input type="checkbox" id="savedCodes" />
+                I have saved my backup codes
+            </label>
+            <a class="button button-block no-print is-disabled" href="/" id="continueBtn" aria-disabled="true">Continue</a>
             {% endif %}
 
-            <p class="auth-credit"><a href="/logout">Cancel and sign out</a></p>
+            <p class="auth-credit no-print"><a href="/logout">Cancel and sign out</a></p>
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  Array.prototype.forEach.call(document.querySelectorAll("[data-copy-target]"), function (btn) {
+    btn.addEventListener("click", function () {
+      var target = document.getElementById(btn.getAttribute("data-copy-target"));
+      if (!target) return;
+      var codes = target.querySelectorAll("code");
+      var text = codes.length ? Array.prototype.map.call(codes, function (c) { return c.textContent.trim(); }).join("\n") : target.textContent.trim();
+      var label = btn.textContent;
+      var done = function () { btn.textContent = "Copied"; setTimeout(function () { btn.textContent = label; }, 2000); };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, function () { btn.textContent = "Select and copy by hand"; });
+      } else {
+        btn.textContent = "Select and copy by hand";
+      }
+    });
+  });
+
+  var print = document.getElementById("printCodes");
+  if (print) print.addEventListener("click", function () { window.print(); });
+
+  var saved = document.getElementById("savedCodes");
+  var cont = document.getElementById("continueBtn");
+  if (saved && cont) {
+    var sync = function () {
+      cont.classList.toggle("is-disabled", !saved.checked);
+      cont.setAttribute("aria-disabled", saved.checked ? "false" : "true");
+    };
+    saved.addEventListener("change", sync);
+    cont.addEventListener("click", function (e) {
+      if (!saved.checked) { e.preventDefault(); saved.focus(); }
+    });
+    sync();
+  }
+
+  var backup = document.getElementById("useBackup");
+  var code = document.getElementById("code");
+  if (backup && code) {
+    backup.addEventListener("click", function () {
+      code.setAttribute("inputmode", "text");
+      code.setAttribute("autocomplete", "off");
+      var label = document.querySelector('label[for="code"]');
+      if (label) label.textContent = "Backup code";
+      backup.hidden = true;
+      code.value = "";
+      code.focus();
+    });
+  }
+})();
+</script>
 {% endblock %}

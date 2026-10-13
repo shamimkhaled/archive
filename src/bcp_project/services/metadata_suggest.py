@@ -14,6 +14,7 @@ from datetime import date
 from typing import Any, Dict, List, Optional
 
 from ..document_types import DEFAULT_DOCUMENT_TYPES, normalize_document_type
+from ..ui import reason_label
 
 logger = logging.getLogger("bcp_project.services.metadata_suggest")
 
@@ -138,11 +139,12 @@ def apply_suggestions(document: Any, suggested: Optional[Dict[str, Any]]) -> Lis
     return applied
 
 
-REASON_LABELS = {
-    "low_ocr_confidence": "Low OCR confidence",
-    "bangla_ocr_suspect": "Bangla words misread as Latin characters",
-    "ai_unavailable": "AI metadata extraction unavailable",
-    "missing_title": "No title found",
-    "doc_type_mismatch": "AI classification differs from the uploader's type",
-    "doc_date_mismatch": "Date in the text differs from the entered date",
-}
+REASON_CODES = (
+    "low_ocr_confidence",
+    "bangla_ocr_suspect",
+    "ai_unavailable",
+    "missing_title",
+    "doc_type_mismatch",
+    "doc_date_mismatch",
+)
+REASON_LABELS = {code: reason_label(code) for code in REASON_CODES}

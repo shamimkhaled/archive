@@ -16,7 +16,6 @@ from .aws_utils import storage_backend_name, use_local_storage
 from .brand import BRAND
 from .config import is_production
 from .db import get_session, engine
-from .spa import spa_middleware
 from .deps import (
     STATIC_DIR,
     _load_stored_pdf_bytes,
@@ -61,7 +60,6 @@ app.add_middleware(CorrelationIdMiddleware)
 app.add_middleware(MetricsMiddleware)
 setup_tracing(app)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
-app.middleware("http")(spa_middleware)
 
 
 @app.middleware("http")

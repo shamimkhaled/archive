@@ -1,120 +1,96 @@
 {% extends "base.html" %}
-{% from "macros/ui.html" import empty_state, status_chip %}
+{% from "macros/ui.html" import empty_state, breadcrumbs %}
 
 {% block title %}My access requests | Sonali Bank Archive System{% endblock %}
 
 {% block content %}
+{{ breadcrumbs([{'href': '/', 'label': 'Home'}, {'label': 'My access requests'}]) }}
 <div class="page-header">
     <div class="title-group">
-        <h1>Access</h1>
-        <p>Request archive access when your role does not already include direct viewing.</p>
+        <h1>My access requests</h1>
+        <p>Ask to read a document you can't open yet. An approver decides, and you get a notification with the answer.</p>
     </div>
     {% if is_reviewer %}
-    <a class="button button-secondary" href="/admin/access-requests">Review queue</a>
+    <a class="button button-secondary" href="/admin/access-requests" data-nav>Answer requests</a>
     {% endif %}
 </div>
 
 {% if status == 'submitted' %}
-<div class="alert alert-success" role="status">Request submitted for review.</div>
+<div class="alert alert-success" role="status">Request sent. You'll get a notification when it is answered.</div>
 {% endif %}
 {% if error %}
-<div class="alert alert-error" role="alert">{{ error | replace('+', ' ') }}</div>
+{% set err = error | lower %}
+<div class="alert alert-error" role="alert">
+    {% if 'required' in err %}Please give the document ID and say why you need it.
+    {% elif 'already has archive' in err %}You can already read archive documents, so you don't need to ask.
+    {% elif 'pending request' in err %}You have already asked for this document. Please wait for the answer.
+    {% elif 'download' in err %}Download requests aren't available. You can ask to read the document instead.
+    {% else %}Your request couldn't be sent. Please check the document ID and try again.{% endif %}
+</div>
 {% endif %}
 
 {% if can_create_requests %}
 <section class="panel">
-    <h2>Why you need this paper</h2>
+    <h2>Ask to read a document</h2>
     <form method="post" action="/access-requests" class="form-grid">
         <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token', '') }}" />
+        <input type="hidden" name="requested_mode" value="{{ modes[0].value }}" />
         <div class="form-group">
-            <label for="doc_id">Document ID</label>
-            <input id="doc_id" name="doc_id" type="text" required placeholder="e.g. SB-2026-001" />
-        </div>
-        <div class="form-group">
-            <label for="requested_mode">Access type</label>
-            <select id="requested_mode" name="requested_mode">
-                {% for mode in modes %}
-                <option value="{{ mode.value }}">{{ mode.value | replace('_', ' ') | title }}</option>
-                {% endfor %}
-            </select>
+            <label for="doc_id">Document ID <span class="req">required</span></label>
+            <input id="doc_id" name="doc_id" type="text" required autocapitalize="characters" spellcheck="false"
+                   value="{{ request.query_params.get('doc', '') }}" placeholder="For example: SB-2026-001" aria-describedby="docIdHint" />
+            <p class="field-hint" id="docIdHint">You'll find the ID on search results and in meeting papers.</p>
         </div>
         <div class="form-group" style="grid-column: 1 / -1;">
-            <label for="purpose">Purpose</label>
-            <textarea id="purpose" name="purpose" rows="3" required placeholder="Board sitting, follow-up, or review purpose"></textarea>
+            <label for="purpose">Why do you need it? <span class="req">required</span></label>
+            <textarea id="purpose" name="purpose" rows="3" required placeholder="For example: to prepare for the April Board meeting"></textarea>
         </div>
-        <button type="submit" class="button">Submit request</button>
+        <p class="field-hint" style="grid-column: 1 / -1; margin:0;">If approved, you can read it in the archive for a limited time. Every copy is marked with your name. Downloads aren't allowed.</p>
+        <div><button type="submit" class="button">Send request</button></div>
     </form>
 </section>
 {% else %}
 <section class="panel">
-    <h2>Archive access</h2>
-    <p class="muted">Your role already has watermarked archive viewing. Archive downloads remain admin-only.</p>
+    <h2>You already have access</h2>
+    <p class="muted">Your role can already read archive documents, marked with your name. You don't need to ask.</p>
 </section>
 {% endif %}
 
 <section class="panel">
     <h2>Your requests</h2>
     {% if not requests %}
-    {{ empty_state("No requests yet", "Submit a document ID and purpose when you need a paper outside your current access.") }}
+    {{ empty_state("No requests yet", "When you ask to read a document, it appears here with the answer.") }}
     {% else %}
-    <div class="table-wrap table-desktop">
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>Document</th>
-                    <th>Mode</th>
-                    <th>Status</th>
-                    <th>Expires</th>
-                    <th>Submitted</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for row in requests %}
-                <tr>
-                    <td>
-                        {% if row.status.value == 'approved' %}
-                        <a class="doc-link" href="/view/{{ row.doc_id }}?from=/access-requests">{{ row.doc_id }}</a>
-                        {% else %}
-                        {{ row.doc_id }}
-                        {% endif %}
-                    </td>
-                    <td>{{ row.requested_mode.value | replace('_', ' ') | title }}</td>
-                    <td>
-                        {% if row.status.value == 'approved' %}{{ status_chip('Approved', 'approved') }}
-                        {% elif row.status.value == 'denied' %}{{ status_chip('Denied', 'danger') }}
-                        {% elif row.status.value == 'revoked' %}{{ status_chip('Revoked', 'closed') }}
-                        {% else %}{{ status_chip('Pending', 'pending') }}
-                        {% endif %}
-                    </td>
-                    <td>{{ row.expires_at.strftime('%d %b %Y') if row.expires_at else '—' }}</td>
-                    <td>{{ row.created_at.strftime('%d %b %Y, %H:%M') }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    <div class="mobile-card-list">
+    <ul class="card-list">
         {% for row in requests %}
-        <article class="access-card">
-            <div class="access-card-top">
+        {% set expired = row.status.value == 'approved' and row.expires_at and row.expires_at < now %}
+        {% set state = 'expired' if expired else row.status.value %}
+        <li class="list-card">
+            <div class="list-card-top">
                 <h3>
-                    {% if row.status.value == 'approved' %}
-                    <a class="doc-link" href="/view/{{ row.doc_id }}?from=/access-requests">{{ row.doc_id }}</a>
+                    {% if state == 'approved' %}
+                    <a class="doc-link" href="/view/{{ row.doc_id }}?from=/access-requests">{{ titles.get(row.doc_id) or row.doc_id }}</a>
                     {% else %}
-                    {{ row.doc_id }}
+                    {{ titles.get(row.doc_id) or row.doc_id }}
                     {% endif %}
                 </h3>
-                {% if row.status.value == 'approved' %}{{ status_chip('Approved', 'approved') }}
-                {% elif row.status.value == 'denied' %}{{ status_chip('Denied', 'danger') }}
-                {% elif row.status.value == 'revoked' %}{{ status_chip('Revoked', 'closed') }}
-                {% else %}{{ status_chip('Pending', 'pending') }}
-                {% endif %}
+                <span class="status-chip status-chip-{{ status_tone(state, 'access') }}">{{ status_label(state, 'access') }}</span>
             </div>
-            <p class="muted">{{ row.requested_mode.value | replace('_', ' ') | title }} · {{ row.created_at.strftime('%d %b %Y, %H:%M') }}</p>
-            <p class="muted">Expires {{ row.expires_at.strftime('%d %b %Y') if row.expires_at else '—' }}</p>
-        </article>
+            <p class="list-card-meta">
+                {{ row.doc_id }} · asked {{ row.created_at | local_dt }}
+                {% if state == 'approved' and row.expires_at %} · you can read it until {{ row.expires_at | local_date }}{% endif %}
+                {% if expired %} · ended {{ row.expires_at | local_date }}{% endif %}
+            </p>
+            <p class="muted">Your reason: {{ row.purpose }}</p>
+            {% if row.review_note %}<p>Note from {{ row.reviewed_by or 'the approver' }}: {{ row.review_note }}</p>{% endif %}
+            {% if state == 'approved' %}
+            <div class="list-card-actions"><a class="button" href="/view/{{ row.doc_id }}?from=/access-requests">Read it now</a></div>
+            {% elif expired and can_create_requests %}
+            <div class="list-card-actions"><a class="button button-secondary" href="/access-requests?doc={{ row.doc_id | urlencode }}#doc_id" data-nav>Ask again</a></div>
+            {% endif %}
+        </li>
         {% endfor %}
-    </div>
+    </ul>
     {% endif %}
 </section>
 {% endblock %}

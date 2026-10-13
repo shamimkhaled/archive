@@ -220,7 +220,7 @@ async def briefing_api(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> JSONResponse:
-    """`refs=1` is the full page payload (the React briefing screen); it is audited like the HTML page."""
+    """`refs=1` returns the full page payload; it is audited like the HTML page."""
     require_role(current_user, READER_ROLES)
     document = await _document_or_404(db, doc_id)
     paper_link = await _authorize_reader(db, current_user, doc_id)
@@ -236,7 +236,7 @@ async def briefing_api(
             approval_blocker=approval_blocker(briefing, current_user.username) if (briefing and organizer) else None,
             four_eyes=four_eyes_required(),
         )
-        await _audit(db, request, current_user, "briefing_view", doc_id, f"state={briefing.state if briefing else 'none'} spa")
+        await _audit(db, request, current_user, "briefing_view", doc_id, f"state={briefing.state if briefing else 'none'} api")
         await db.commit()
     else:
         context = {"briefing": briefing_view(briefing), "current_version": await current_version_number(db, document)}
@@ -247,15 +247,34 @@ async def briefing_api(
 async def decisions_page(
     request: Request,
     q: str = "",
+    year: str = "",
+    tasks: str = "",
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
     require_role(current_user, READER_ROLES)
     entries = await decision_register(db, current_user, q=q)
+    years = sorted({(e["meeting_date"] or "")[:4] for e in entries if e["meeting_date"]}, reverse=True)
+    if year:
+        entries = [e for e in entries if (e["meeting_date"] or "").startswith(year)]
+    if tasks == "open":
+        entries = [e for e in entries if any(a["status"] in ("open", "in_progress") for a in e["actions"])]
+    elif tasks == "done":
+        entries = [e for e in entries if e["actions"] and all(a["status"] in ("done", "cancelled") for a in e["actions"])]
+    elif tasks == "none":
+        entries = [e for e in entries if not e["actions"]]
     return templates.TemplateResponse(
         request,
         "decision_register.html",
-        {"user": current_user, "entries": entries, "q": q, "page_title": "Decision register"},
+        {
+            "user": current_user,
+            "entries": entries,
+            "q": q,
+            "year": year,
+            "tasks": tasks,
+            "years": years,
+            "page_title": "Decision register",
+        },
     )
 
 

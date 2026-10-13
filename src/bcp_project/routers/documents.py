@@ -91,6 +91,67 @@ async def upload_page(
     )
 
 
+@router.get("/uploads/mine", response_class=HTMLResponse)
+async def my_uploads_page(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """Read-only list of what this person uploaded and where each document is now."""
+    require_role(current_user, [Role.admin, Role.uploader])
+    rows = (
+        await db.execute(
+            select(DocumentRecord)
+            .where(DocumentRecord.uploaded_by == current_user.username)
+            .order_by(DocumentRecord.created_at.desc())
+            .limit(200)
+        )
+    ).scalars().all()
+    filter_status = request.query_params.get("show") or ""
+    groups = {
+        "working": {"received", "queued", "parsing", "summarizing", "indexing"},
+        "check": {"needs_review"},
+        "done": {"indexed"},
+        "problem": {"failed", "rejected"},
+    }
+    items = []
+    counts = {key: 0 for key in groups}
+    for doc in rows:
+        status_value = doc.ingest_status or "indexed"
+        group = next((key for key, values in groups.items() if status_value in values), "working")
+        counts[group] += 1
+        if filter_status in groups and group != filter_status:
+            continue
+        items.append(
+            {
+                "doc_id": doc.doc_id,
+                "title": doc.title or (doc.suggested_metadata or {}).get("title"),
+                "doc_type": doc.doc_type,
+                "doc_date": doc.doc_date,
+                "uploaded_at": doc.created_at,
+                "updated_at": doc.ingest_updated_at,
+                "status": status_value,
+                "group": group,
+                "reasons": list((doc.suggested_metadata or {}).get("_review_reasons") or []) if status_value == "needs_review" else [],
+                "error": doc.ingest_error if status_value in {"failed", "rejected"} else None,
+                "current_version": doc.current_version,
+                "sensitivity": doc.sensitivity,
+            }
+        )
+    return templates.TemplateResponse(
+        request,
+        "my_uploads.html",
+        {
+            "user": current_user,
+            "items": items,
+            "counts": counts,
+            "total": len(rows),
+            "show": filter_status if filter_status in groups else "",
+            "can_view": current_user.role == Role.admin,
+        },
+    )
+
+
 @router.get("/api/document-types")
 async def api_document_types(
     current_user: User = Depends(get_current_user),
@@ -637,12 +698,15 @@ async def archive_documents(
 async def archive_map_page(
     request: Request,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> Any:
     require_role(current_user, [Role.admin, Role.board_secretary, Role.board_member])
+    first, last = (await db.execute(select(func.min(DocumentRecord.doc_date), func.max(DocumentRecord.doc_date)))).one()
+    years = list(range(last.year, first.year - 1, -1)) if first and last else []
     return templates.TemplateResponse(
         request,
         "archive_map.html",
-        {"user": current_user},
+        {"user": current_user, "years": years, "page_title": "Map of connected documents"},
     )
 
 
@@ -880,11 +944,9 @@ async def view_document(
         "viewer.html",
         {
             "user": current_user,
-            "page_title": "Document Viewer",
+            "page_title": document.title or doc_id,
             "page_subtitle": " · ".join(
-                part
-                for part in (f"Viewing {doc_id}", document.doc_type, ai_provenance_label(document.summary_json))
-                if part
+                part for part in (doc_id, document.doc_type, ai_provenance_label(document.summary_json)) if part
             ),
             "file_url": f"/view/{doc_id}/file",
             "download_url": f"/download/{doc_id}" if can_download else None,

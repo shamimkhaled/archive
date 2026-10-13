@@ -2,12 +2,12 @@
   "use strict";
 
   var BRANCH_META = {
-    semantic: { label: "Semantic similarity", short: "Semantic", color: "#dc2626" },
-    project: { label: "Shared project", short: "Project", color: "#16a34a" },
-    person: { label: "Shared people", short: "Person", color: "#2563eb" },
-    organization: { label: "Organization", short: "Org", color: "#9333ea" },
-    keyword: { label: "Shared keywords", short: "Keyword", color: "#d97706" },
-    type: { label: "Document type", short: "Type", color: "#64748b" },
+    semantic: { label: "Similar subject", short: "Similar subject", color: "#dc2626" },
+    project: { label: "Same project", short: "Same project", color: "#16a34a" },
+    person: { label: "Same people", short: "Same people", color: "#2563eb" },
+    organization: { label: "Same organisation", short: "Same organisation", color: "#9333ea" },
+    keyword: { label: "Same words", short: "Same words", color: "#d97706" },
+    type: { label: "Same kind of document", short: "Same kind", color: "#64748b" },
   };
 
   var BRANCH_ORDER = ["semantic", "project", "person", "organization", "keyword", "type"];
@@ -147,6 +147,16 @@
         count: branch.docs.length,
       };
     });
+  }
+
+  function matchWords(weight) {
+    if (weight >= 0.82) return "Very close";
+    if (weight >= 0.72) return "Close";
+    return "Related";
+  }
+
+  function countWords(n) {
+    return n === 1 ? "1 document" : n + " documents";
   }
 
   function splitTitleLines(title, maxLen) {
@@ -461,14 +471,14 @@
         card.innerHTML =
           '<span class="neural-node-eyebrow">Connection</span>' +
           "<strong>" + escapeHtml(item.branch.meta.label) + "</strong>" +
-          '<span class="neural-node-sub">' + (item.branch.docs ? item.branch.docs.length : 0) + " linked</span>";
+          '<span class="neural-node-sub">' + countWords(item.branch.docs ? item.branch.docs.length : 0) + "</span>";
       } else {
         var leafLines = splitTitleLines(item.node.title || item.node.doc_type || "", 30);
         card.innerHTML =
           '<div class="nlm-doc-top">' +
             '<span class="neural-node-eyebrow">' + escapeHtml(item.node.doc_type || "Related") + "</span>" +
             (item.weight
-              ? '<span class="neural-node-score">' + Math.round(item.weight * 100) + "% match</span>"
+              ? '<span class="neural-node-score">' + matchWords(item.weight) + "</span>"
               : "") +
           "</div>" +
           "<strong>" + escapeHtml(item.node.label) + "</strong>" +
@@ -480,10 +490,14 @@
         if (item.node && item.node.id) {
           card.tabIndex = 0;
           card.setAttribute("role", "button");
-          card.setAttribute("aria-label", (item.node.label || item.node.id) + " — click details, double-click to focus");
+          card.setAttribute("aria-label", (item.node.label || item.node.id) + ". Select for details; select again to centre the map on it.");
           card.addEventListener("click", function (event) {
             event.preventDefault();
             event.stopPropagation();
+            if (item.kind !== "center" && self.selectedId === item.node.id && typeof self.options.onFocus === "function") {
+              self.options.onFocus(item.node.id);
+              return;
+            }
             self.selectNode(item.node.id);
           });
           card.addEventListener("dblclick", function (event) {
@@ -566,7 +580,7 @@
   function redirectIfUnauthorized(res) {
     if (res && res.status === 401) {
       window.location.href = "/login";
-      throw new Error("Session expired — please sign in again");
+      throw new Error("You have been signed out. Sign in again to continue.");
     }
     return res;
   }
@@ -586,12 +600,12 @@
       .then(function (res) {
         if (!res.ok) {
           if (res.status === 502 || res.status === 504) {
-            throw new Error("The map took too long. Try another document or a tighter similarity.");
+            throw new Error("The map took too long. Try another document, or choose a closer match in Options.");
           }
           if (res.status === 403) {
-            throw new Error("You need approved access to this document before mapping it. Request access from Search.");
+            throw new Error("You don't have access to this document yet. You can ask for access from Search.");
           }
-          throw new Error("Could not load mind map (" + res.status + ")");
+          throw new Error("We couldn't load the map. Please try again.");
         }
         return res.json();
       });
@@ -609,7 +623,7 @@
       credentials: "same-origin",
       headers: csrfHeaders(),
     }).then(redirectIfUnauthorized).then(function (res) {
-      if (!res.ok) throw new Error("Could not load documents (" + res.status + ")");
+      if (!res.ok) throw new Error("We couldn't load the list of documents. Please try again.");
       return res.json();
     });
   }
@@ -622,7 +636,7 @@
       credentials: "same-origin",
       headers: csrfHeaders(),
     }).then(redirectIfUnauthorized).then(function (res) {
-      if (!res.ok) throw new Error("Could not load related documents (" + res.status + ")");
+      if (!res.ok) throw new Error("We couldn't load related documents. Please try again.");
       return res.json();
     });
   }
@@ -727,24 +741,24 @@
       var actionEl = document.getElementById("neuralTreeEmptyAction");
       var copy = {
         loading: {
-          title: "Mapping connections",
-          lead: "Finding related records by meaning, project, people, and keywords.",
+          title: "Finding connections…",
+          lead: "Looking for documents with the same subject, project, people or words.",
         },
         vacant: {
-          title: "No archive records yet",
-          lead: "Upload documents to start mapping how records connect.",
+          title: "No documents yet",
+          lead: "Once documents are added, you can see how they connect here.",
         },
         idle: {
-          title: "Choose a document",
-          lead: "Search or pick a record — the map shows links by summary meaning, projects, people, org, and keywords.",
+          title: "Pick a document",
+          lead: "Find or pick a document. The map shows which other documents connect to it, and why.",
         },
         disconnected: {
-          title: "No connections found",
-          lead: "Try a lower similarity threshold or raise Max related.",
+          title: "Nothing connected yet",
+          lead: "Open Options and choose a looser match, or show more documents.",
         },
         failed: {
-          title: "Could not load this map",
-          lead: "The archive is still available. Search again or pick another document.",
+          title: "We couldn't load this map",
+          lead: "Your documents are safe. Try again, or pick another document.",
         },
       };
       if (!kind) {
@@ -768,7 +782,7 @@
     function updateFocusLabel() {
       if (!focusLabel) return;
       if (!focusedDocId) {
-        focusLabel.textContent = "None selected";
+        focusLabel.textContent = "No document picked yet";
         return;
       }
       var match = allDocuments.find(function (doc) { return doc.doc_id === focusedDocId; });
@@ -820,21 +834,21 @@
     function renderWorkflowPanel(model) {
       if (!workflowGroups) return;
       if (!model || !model.center) {
-        if (workflowTitle) workflowTitle.textContent = "How relations work";
+        if (workflowTitle) workflowTitle.textContent = "How documents connect";
         if (workflowLead) {
-          workflowLead.textContent = "Pick a document to map links across the full archive.";
+          workflowLead.textContent = "Pick a document to see what connects to it.";
         }
         workflowGroups.innerHTML =
           '<div class="mind-map-workflow-placeholder mind-map-relation-guide">' +
-          "<p>Documents connect when they share:</p>" +
+          "<p>Two documents are connected when they have:</p>" +
           "<ul>" +
-          "<li><strong>Semantic</strong> — similar summary meaning (AI embeddings)</li>" +
-          "<li><strong>Project</strong> — same major project in the summary</li>" +
-          "<li><strong>Person</strong> — same key person named</li>" +
-          "<li><strong>Organization</strong> — same organization</li>" +
-          "<li><strong>Keyword</strong> — shared searchable keywords</li>" +
+          "<li><strong>Similar subject</strong> — they are about the same thing</li>" +
+          "<li><strong>Same project</strong> — they mention the same project</li>" +
+          "<li><strong>Same people</strong> — they name the same person</li>" +
+          "<li><strong>Same organisation</strong> — they name the same organisation</li>" +
+          "<li><strong>Same words</strong> — they share key words</li>" +
           "</ul>" +
-          '<p class="mind-map-relation-tip">Click a related node for details · Double-click to make it the focus</p>' +
+          '<p class="mind-map-relation-tip">Select a document for details. Select it again to centre the map on it.</p>' +
           "</div>";
         updateWorkflowSteps(null);
         renderConnectionStats(null);
@@ -849,13 +863,13 @@
       }
 
       if (!model.branches.length) {
-        workflowGroups.innerHTML = '<p class="mind-map-workflow-empty">No related documents found for the current Max related / similarity settings.</p>';
+        workflowGroups.innerHTML = '<p class="mind-map-workflow-empty">Nothing connected with these options. Open Options and choose a looser match.</p>';
       } else {
         workflowGroups.innerHTML = model.branches.map(function (branch) {
           var docsHtml = branch.docs.map(function (docRef) {
             var node = model.nodeById[docRef.id] || {};
             return (
-              '<button type="button" class="mind-map-workflow-doc" data-doc-id="' + escapeHtml(docRef.id) + '" title="Click to inspect · Double-click to focus">' +
+              '<button type="button" class="mind-map-workflow-doc" data-doc-id="' + escapeHtml(docRef.id) + '" title="Select for details">' +
               '<span class="mind-map-workflow-doc-id">' + escapeHtml(docRef.id) + "</span>" +
               '<span class="mind-map-workflow-doc-title">' + escapeHtml(node.title || node.doc_type || "Document") + "</span>" +
               '<span class="mind-map-workflow-doc-reason">' + escapeHtml(docRef.label || branch.meta.label) +
@@ -1084,7 +1098,7 @@
       if (focusBtn) {
         var isAlreadyFocused = node.id === focusedDocId;
         focusBtn.hidden = isAlreadyFocused;
-        focusBtn.textContent = "Set as workflow focus";
+        focusBtn.textContent = "Centre the map on this";
         focusBtn.onclick = function () {
           setFocus(node.id);
         };
@@ -1129,8 +1143,8 @@
       }
 
       if (docCount) {
-        docCount.textContent = filteredDocuments.length + " shown · " + archiveTotal + " in archive" +
-          (searchQuery || activeDocTypeFilter ? " (filtered)" : "");
+        docCount.textContent = "Showing " + filteredDocuments.length + " of " + archiveTotal +
+          (searchQuery || activeDocTypeFilter ? " matching documents" : " documents");
       }
       if (docEmpty) {
         docEmpty.hidden = filteredDocuments.length > 0 || listLoading;
@@ -1214,17 +1228,17 @@
           if (!focusedDocId) {
             setEmptyState(archiveTotal ? "idle" : "vacant");
             renderWorkflowPanel(null);
-            setStatus(archiveTotal + " documents in archive · search or select one to map");
+            setStatus(countWords(archiveTotal) + " you can open. Pick one to see its connections.");
             if (activeView !== "overview") setActiveView("overview");
           }
         })
         .catch(function (err) {
-          if (docCount) docCount.textContent = err.message || "Could not load documents";
+          if (docCount) docCount.textContent = err.message || "We couldn't load the list of documents.";
           if (!append) {
             if (docList) docList.innerHTML = "";
             if (docEmpty) {
               docEmpty.hidden = false;
-              docEmpty.textContent = err.message || "Could not load documents";
+              docEmpty.textContent = err.message || "We couldn't load the list of documents.";
             }
             setEmptyState("vacant");
           }
@@ -1249,7 +1263,7 @@
         if (container) container.classList.remove("is-updating");
         setEmptyState(archiveTotal ? "idle" : "vacant");
         renderWorkflowPanel(null);
-        setStatus(archiveTotal + " documents in archive · search or select one to map");
+        setStatus(countWords(archiveTotal) + " you can open. Pick one to see its connections.");
         setActiveView("overview");
         return;
       }
@@ -1258,7 +1272,7 @@
       mapAbort = window.AbortController ? new AbortController() : null;
       setActiveView("workflow");
       paintPreviewFocus(requestedFocus);
-      setStatus("Mapping " + requestedFocus + "…");
+      setStatus("Finding connections…");
       if (!renderer) setEmptyState("loading");
       else setEmptyState(null);
       fetchGraph({
@@ -1277,7 +1291,7 @@
             }
             setEmptyState("disconnected");
             renderWorkflowPanel(null);
-            setStatus("No connections found for " + requestedFocus);
+            setStatus("Nothing connected to this document yet.");
             return;
           }
           setEmptyState(null);
@@ -1299,19 +1313,15 @@
               });
             }
           });
-          var statusBits = [
-            graph.count + " on map",
-            graph.edge_count + " links",
-            "focused on " + requestedFocus,
-          ];
-          if (graph.degraded) statusBits.push("keyword links (similarity delayed)");
-          if (lastModel && !lastModel.branches.length) statusBits.push("no connections in current settings");
+          var statusBits = [countWords(Math.max(0, graph.count - 1)) + " connected"];
+          if (graph.degraded) statusBits.push("only shared words are shown right now");
+          if (lastModel && !lastModel.branches.length) statusBits.push("try a looser match in Options");
           setStatus(statusBits.join(" · "));
         })
         .catch(function (err) {
           if (err && (err.name === "AbortError" || err.message === "The user aborted a request.")) return;
           if (seq !== mapSeq) return;
-          setStatus(err.message || "Failed to load mind map");
+          setStatus(err.message || "We couldn't load the map. Please try again.");
           setEmptyState("failed");
           renderWorkflowPanel(null);
         })
@@ -1512,10 +1522,10 @@
             }).join("");
           }
         }
-        setStatus((payload.related || []).length + " related documents");
+        setStatus(countWords((payload.related || []).length) + " related");
       })
       .catch(function (err) {
-        setStatus(err.message || "Could not load mind map");
+        setStatus(err.message || "We couldn't load the map. Please try again.");
       });
   }
 

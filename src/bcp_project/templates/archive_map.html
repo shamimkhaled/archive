@@ -2,79 +2,78 @@
 
 {% from "macros/ui.html" import breadcrumbs %}
 
-{% block title %}Mind Map | {{ brand.product_name }}{% endblock %}
+{% block title %}Map of connected documents | {{ brand.product_name }}{% endblock %}
 
 {% block content %}
 {% set can_upload = user.role.value in ['admin', 'uploader'] %}
-{% set crumbs = [{'href': '/search', 'label': 'Archive'}, {'label': 'Mind Map'}] %}
+{% set crumbs = [{'href': '/search', 'label': 'Search'}, {'label': 'Map'}] %}
 <div class="mind-map-page" data-page="archive-map" data-mobile-stage="docs">
     {{ breadcrumbs(crumbs) }}
     <div class="page-header">
         <div class="title-group">
-            <h1>Archive intelligence</h1>
-            <p>Search a paper, then see why others connect — similar meaning, shared projects, people, or keywords.</p>
+            <h1>Map of connected documents</h1>
+            <p>Pick a document to see others about the same subject, project, people or words.</p>
         </div>
-        <span class="badge">{{ user.username }} · {{ 'Board Member' if user.role.value == 'board_member' else user.role.value | replace('_', ' ') | title }}</span>
     </div>
 
-    <nav class="mind-map-mobile-nav" id="mapMobileNav" role="tablist" aria-label="Mind map sections">
-        <button type="button" class="mind-map-mobile-tab is-active" role="tab" data-stage="docs" aria-selected="true">Docs</button>
+    <nav class="mind-map-mobile-nav" id="mapMobileNav" role="tablist" aria-label="Map sections">
+        <button type="button" class="mind-map-mobile-tab is-active" role="tab" data-stage="docs" aria-selected="true">Documents</button>
         <button type="button" class="mind-map-mobile-tab" role="tab" data-stage="map" aria-selected="false">Map</button>
-        <button type="button" class="mind-map-mobile-tab" role="tab" data-stage="links" aria-selected="false">Links</button>
+        <button type="button" class="mind-map-mobile-tab" role="tab" data-stage="links" aria-selected="false">Connections</button>
     </nav>
 
     <section class="panel mind-map-workspace">
         <div class="mind-map-toolbar">
             <div class="mind-map-toolbar-meta">
-                <p class="mind-map-focus-label">Focused document</p>
-                <p class="mind-map-focus-value" id="mapFocusLabel">None selected</p>
+                <p class="mind-map-focus-label">Map centred on</p>
+                <p class="mind-map-focus-value" id="mapFocusLabel">No document picked yet</p>
             </div>
-            <button type="button" class="mind-map-filters-toggle" id="mapFiltersToggle" aria-expanded="false" aria-controls="mapToolbarControls">Filters</button>
+            <button type="button" class="mind-map-filters-toggle" id="mapFiltersToggle" aria-expanded="false" aria-controls="mapToolbarControls">Options</button>
             <div class="mind-map-toolbar-controls" id="mapToolbarControls">
             <div class="neural-toolbar-group">
-                <label for="mapLimit">Max related</label>
+                <label for="mapLimit">Show up to</label>
                 <select id="mapLimit">
-                    <option value="12">12</option>
-                    <option value="16" selected>16</option>
-                    <option value="24">24</option>
+                    <option value="12">12 documents</option>
+                    <option value="16" selected>16 documents</option>
+                    <option value="24">24 documents</option>
                 </select>
             </div>
             <div class="neural-toolbar-group">
                 <label for="mapYear">Year</label>
                 <select id="mapYear">
                     <option value="" selected>All years</option>
-                    <option value="2026">2026</option>
-                    <option value="2025">2025</option>
-                    <option value="2024">2024</option>
+                    {% for y in years %}
+                    <option value="{{ y }}">{{ y }}</option>
+                    {% endfor %}
                 </select>
             </div>
             <div class="neural-toolbar-group">
-                <label for="mapMinSimilarity">Similarity</label>
+                <label for="mapMinSimilarity">How close a match</label>
                 <select id="mapMinSimilarity">
-                    <option value="0.6">60%+</option>
-                    <option value="0.68" selected>68%+</option>
-                    <option value="0.75">75%+</option>
-                    <option value="0.82">82%+</option>
+                    <option value="0.6">Loose (show more)</option>
+                    <option value="0.68" selected>Normal</option>
+                    <option value="0.75">Close</option>
+                    <option value="0.82">Very close (show fewer)</option>
                 </select>
             </div>
             <div class="mind-map-toolbar-actions">
-                <button type="button" class="button button-secondary neural-toolbar-btn" id="mapClearFocusBtn">Clear focus</button>
+                <button type="button" class="button button-secondary neural-toolbar-btn" id="mapClearFocusBtn">Start over</button>
                 <button type="button" class="button neural-toolbar-btn" id="mapReloadBtn">Refresh</button>
             </div>
             </div>
         </div>
 
-        <ol class="mind-map-workflow-steps" id="mapWorkflowSteps" aria-label="Mind map workflow">
-            <li class="mind-map-step is-active" data-step="select"><span>1</span> Select document</li>
-            <li class="mind-map-step" data-step="connect"><span>2</span> Connection types</li>
-            <li class="mind-map-step" data-step="related"><span>3</span> Related documents</li>
+        <ol class="mind-map-workflow-steps" id="mapWorkflowSteps" aria-label="Steps">
+            <li class="mind-map-step is-active" data-step="select"><span>1</span> Pick a document</li>
+            <li class="mind-map-step" data-step="connect"><span>2</span> See how they connect</li>
+            <li class="mind-map-step" data-step="related"><span>3</span> Open a related document</li>
         </ol>
 
         <div class="mind-map-layout" id="mindMapLayout">
             <aside class="mind-map-doc-panel" aria-label="Document list">
                 <div class="mind-map-doc-panel-head">
-                    <label for="mapDocSearch">Documents</label>
-                    <input id="mapDocSearch" type="search" placeholder="Search ID, type, or keyword…" autocomplete="off" />
+                    <label for="mapDocSearch">Find a document</label>
+                    <input id="mapDocSearch" type="search" placeholder="Type a title, number or word…" autocomplete="off" />
                     <div class="mind-map-doc-filters" id="mapDocTypeFilters" aria-label="Filter by document type"></div>
                     <p class="mind-map-doc-count" id="mapDocCount">Loading documents…</p>
                 </div>
@@ -95,13 +94,13 @@
                 <div class="mind-map-visual-panel is-active" data-panel="workflow">
                     <div class="neural-tree-shell mind-map-canvas nlm-canvas is-empty is-loading" id="archiveMapGraph">
                         <div class="nlm-canvas-header">
-                            <div class="mind-map-view-tabs nlm-pills" role="tablist" aria-label="Mind map view">
-                                <button type="button" class="mind-map-view-tab pill-btn is-active" data-view="workflow" role="tab" aria-selected="true">Workflow map</button>
-                                <button type="button" class="mind-map-view-tab pill-btn" data-view="overview" role="tab" aria-selected="false">Archive overview</button>
+                            <div class="mind-map-view-tabs nlm-pills" role="tablist" aria-label="Map view">
+                                <button type="button" class="mind-map-view-tab pill-btn is-active" data-view="workflow" role="tab" aria-selected="true">Connections</button>
+                                <button type="button" class="mind-map-view-tab pill-btn" data-view="overview" role="tab" aria-selected="false">All by type</button>
                             </div>
                         </div>
                         <div class="nlm-keyword-tags" id="mapConnectionStats" hidden></div>
-                        <p class="nlm-canvas-hint">Drag empty space to pan · Scroll to zoom · Click node for details · Double-click to focus</p>
+                        <p class="nlm-canvas-hint">Drag to move around · Pinch or scroll to zoom · Tap a document for details</p>
 
                         <div class="neural-tree-empty is-loading" id="neuralTreeEmpty">
                             <div class="neural-tree-empty-icon" aria-hidden="true">
@@ -114,25 +113,25 @@
                                 </svg>
                             </div>
                             <h2 id="neuralTreeEmptyTitle">Pick a document</h2>
-                            <p id="neuralTreeEmptyLead">Search or choose a record — the map shows how it connects across the archive.</p>
-                            <button type="button" class="button button-secondary" id="mapBrowseDocsBtn">Browse documents</button>
+                            <p id="neuralTreeEmptyLead">Find or pick a document. The map shows which other documents connect to it, and why.</p>
+                            <button type="button" class="button button-secondary" id="mapBrowseDocsBtn">Show the list of documents</button>
                             {% if can_upload %}
                             <a class="button" id="neuralTreeEmptyAction" href="/upload" hidden>Upload a document</a>
                             {% endif %}
                         </div>
 
                         <div class="nlm-zoom-toolbar neural-tree-controls" aria-label="Map zoom controls">
-                            <button type="button" class="zoom-btn" id="neuralZoomIn" title="Zoom in" aria-label="Zoom in">+</button>
-                            <button type="button" class="zoom-btn" id="neuralZoomOut" title="Zoom out" aria-label="Zoom out">−</button>
-                            <button type="button" class="zoom-btn" id="neuralZoomFit" title="Fit to view">Fit</button>
+                            <button type="button" class="zoom-btn" id="neuralZoomIn" title="Bigger" aria-label="Zoom in">+</button>
+                            <button type="button" class="zoom-btn" id="neuralZoomOut" title="Smaller" aria-label="Zoom out">−</button>
+                            <button type="button" class="zoom-btn" id="neuralZoomFit" title="Fit everything on screen" aria-label="Fit everything on screen">Fit</button>
                         </div>
 
                         <div class="nlm-legend-bar neural-tree-legend">
-                            <span class="legend-item"><i class="edge-dot edge-semantic"></i> Semantic</span>
-                            <span class="legend-item"><i class="edge-dot edge-project"></i> Project</span>
-                            <span class="legend-item"><i class="edge-dot edge-person"></i> Person</span>
-                            <span class="legend-item"><i class="edge-dot edge-organization"></i> Org</span>
-                            <span class="legend-item"><i class="edge-dot edge-keyword"></i> Keyword</span>
+                            <span class="legend-item"><i class="edge-dot edge-semantic"></i> Similar subject</span>
+                            <span class="legend-item"><i class="edge-dot edge-project"></i> Same project</span>
+                            <span class="legend-item"><i class="edge-dot edge-person"></i> Same people</span>
+                            <span class="legend-item"><i class="edge-dot edge-organization"></i> Same organisation</span>
+                            <span class="legend-item"><i class="edge-dot edge-keyword"></i> Same words</span>
                         </div>
                     </div>
                 </div>
@@ -140,9 +139,9 @@
                 <div class="mind-map-visual-panel" data-panel="overview" hidden>
                     <div class="nlm-overview-shell">
                         <div class="nlm-canvas-header">
-                            <div class="mind-map-view-tabs nlm-pills" role="tablist" aria-label="Mind map view">
-                                <button type="button" class="mind-map-view-tab pill-btn" data-view="workflow" role="tab" aria-selected="false">Workflow map</button>
-                                <button type="button" class="mind-map-view-tab pill-btn is-active" data-view="overview" role="tab" aria-selected="true">Archive overview</button>
+                            <div class="mind-map-view-tabs nlm-pills" role="tablist" aria-label="Map view">
+                                <button type="button" class="mind-map-view-tab pill-btn" data-view="workflow" role="tab" aria-selected="false">Connections</button>
+                                <button type="button" class="mind-map-view-tab pill-btn is-active" data-view="overview" role="tab" aria-selected="true">All by type</button>
                             </div>
                         </div>
                         <div class="mind-map-overview-grid" id="mapOverviewGrid" aria-label="Documents by type"></div>
@@ -150,11 +149,11 @@
                 </div>
             </div>
 
-            <aside class="mind-map-workflow-panel" id="mapWorkflowPanel" aria-label="Organized connections">
+            <aside class="mind-map-workflow-panel" id="mapWorkflowPanel" aria-label="Connections">
                 <div class="mind-map-workflow-panel-head">
-                    <p class="neural-detail-kicker">Connection path</p>
-                    <h2 id="mapWorkflowTitle">How relations work</h2>
-                    <p class="mind-map-workflow-lead" id="mapWorkflowLead">Pick a document to map links across the full archive.</p>
+                    <p class="neural-detail-kicker">Connections</p>
+                    <h2 id="mapWorkflowTitle">How documents connect</h2>
+                    <p class="mind-map-workflow-lead" id="mapWorkflowLead">Pick a document to see what connects to it.</p>
                 </div>
                 <div class="mind-map-workflow-groups" id="mapWorkflowGroups">
                     <div class="mind-map-skeleton" aria-hidden="true">
@@ -166,22 +165,22 @@
 
             <aside class="neural-detail-drawer" id="archiveMapSidebar" hidden>
                 <button type="button" class="neural-detail-close" id="mapSidebarClose" aria-label="Close details">×</button>
-                <p class="neural-detail-kicker">Document details</p>
+                <p class="neural-detail-kicker">About this document</p>
                 <h2 id="mapSidebarTitle">Document</h2>
                 <p class="neural-detail-meta" id="mapSidebarMeta"></p>
                 <div class="neural-detail-tags" id="mapSidebarTags"></div>
                 <h3>Projects</h3>
                 <ul id="mapSidebarProjects" class="neural-detail-list"></ul>
-                <h3>All connections</h3>
+                <h3>How it connects</h3>
                 <ul id="mapSidebarConnections" class="neural-detail-list"></ul>
                 <div class="neural-detail-actions">
                     <a class="button button-block" id="mapSidebarView" href="#">Open document</a>
-                    <button type="button" class="button button-secondary button-block" id="mapSidebarFocus">Set as workflow focus</button>
+                    <button type="button" class="button button-secondary button-block" id="mapSidebarFocus">Centre the map on this</button>
                 </div>
             </aside>
         </div>
 
-        <footer class="neural-map-status" id="archiveMapStatus">Loading mind map…</footer>
+        <footer class="neural-map-status" id="archiveMapStatus" role="status">Loading the map…</footer>
     </section>
     <div class="mind-map-sheet-backdrop" id="mapSheetBackdrop" hidden></div>
 </div>

@@ -109,6 +109,9 @@ def ingest_status_payload(document: DocumentRecord, job: Optional[Any] = None) -
         "ocr_confidence": document.ocr_confidence,
         "verification_status": document.verification_status,
         "review_url": f"/review/{document.doc_id}" if status == INGEST_NEEDS_REVIEW else None,
+        "review_reasons": list((document.suggested_metadata or {}).get("_review_reasons") or [])
+        if status == INGEST_NEEDS_REVIEW
+        else [],
         "updated_at": document.ingest_updated_at.isoformat() if document.ingest_updated_at else None,
     }
     if job is not None:

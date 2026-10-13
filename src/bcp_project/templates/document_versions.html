@@ -5,63 +5,70 @@
 {% block content %}
 <div class="page-header">
     <div class="title-group">
-        <h1>Versions of {{ document.doc_id }}</h1>
-        <p>Every upload is kept unchanged with its SHA-256 fingerprint. Search shows the current approved version.</p>
+        <h1>Versions of {{ document.title or document.doc_id }}</h1>
+        <p>Every file uploaded for {{ document.doc_id }} is kept exactly as it was received. Search shows the current version.</p>
     </div>
-    <div><a class="button button-secondary" href="/view/{{ document.doc_id }}">Open document</a></div>
+    {% if user.role.value != 'uploader' %}
+    <a class="button button-secondary" href="/view/{{ document.doc_id }}" data-nav>Open the document</a>
+    {% else %}
+    <a class="button button-secondary" href="/uploads/mine" data-nav>{{ t('nav.my_uploads') }}</a>
+    {% endif %}
 </div>
 
-<section class="panel">
-    <div class="table-wrap">
-        <table class="data-table">
-            <thead>
-                <tr><th>Version</th><th>Status</th><th>Uploaded</th><th>Type / size</th><th>SHA-256</th><th></th></tr>
-            </thead>
-            <tbody>
-                {% for v in versions %}
-                <tr>
-                    <td>v{{ v.version }}{% if v.is_current %} <span class="badge">current</span>{% endif %}</td>
-                    <td>{{ v.status|replace('_', ' ') }}{% if v.note %}<br><span class="muted">{{ v.note }}</span>{% endif %}</td>
-                    <td>{{ v.created_by }}<br><span class="muted">{{ (v.created_at or '')[:16]|replace('T', ' ') }}</span></td>
-                    <td>{{ v.content_type or '—' }}{% if v.size_bytes %}<br><span class="muted">{{ (v.size_bytes / 1024)|round(1) }} KB</span>{% endif %}</td>
-                    <td><code title="{{ v.sha256 or '' }}">{{ (v.sha256 or 'not recorded')[:16] }}{% if v.sha256 %}…{% endif %}</code></td>
-                    <td class="actions">
-                        <a class="button button-secondary" href="{{ v.view_url }}" target="_blank" rel="noopener">View</a>
-                        {% if can_verify and v.sha256 %}
-                        <button type="button" class="button button-secondary" data-verify="/api/documents/{{ document.doc_id }}/versions/{{ v.version }}/verify">Check integrity</button>
-                        {% endif %}
-                        {% if v.status == 'pending_review' %}
-                        <a class="button" href="/review/{{ document.doc_id }}?v={{ v.version }}">Verify OCR</a>
-                        {% endif %}
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    <p class="muted" id="verifyResult" role="status"></p>
-</section>
+<ul class="card-list" role="list">
+    {% for v in versions %}
+    <li class="list-card">
+        <div class="list-card-top">
+            <h3>Version {{ v.version }}{% if v.is_current %} <span class="badge badge-ok">Current</span>{% endif %}</h3>
+            <span class="status-chip status-chip-{{ v.status|status_tone('version') }}">{{ v.status|status_label('version') }}</span>
+        </div>
+        <p class="list-card-meta">
+            Uploaded by {{ v.created_by or 'unknown' }}{% if v.created_at %} on {{ v.created_at|local_dt }}{% endif %}
+            {% if v.size_bytes %} · {{ v.size_bytes|file_size }}{% endif %}
+        </p>
+        {% if v.note %}<p>{{ 'Reviewer note' if v.status == 'rejected' else 'Note' }}: “{{ v.note }}”</p>{% endif %}
+        <details class="tech-details">
+            <summary>Technical details</summary>
+            <p class="small">File type: {{ v.content_type or 'not recorded' }}</p>
+            <p class="small">Fingerprint (SHA-256): <span class="mono">{{ v.sha256 or 'not recorded' }}</span></p>
+        </details>
+        <div class="list-card-actions">
+            <a class="button button-secondary" href="{{ v.view_url }}" target="_blank" rel="noopener">View this version</a>
+            {% if can_verify and v.sha256 %}
+            <button type="button" class="button button-secondary" data-verify="/api/documents/{{ document.doc_id }}/versions/{{ v.version }}/verify">Check the file is unchanged</button>
+            {% endif %}
+            {% if v.status == 'pending_review' and user.role.value != 'board_member' %}
+            <a class="button" href="/review/{{ document.doc_id }}?v={{ v.version }}" data-nav>Check this version</a>
+            {% endif %}
+        </div>
+        <p class="verify-result" role="status" hidden></p>
+    </li>
+    {% endfor %}
+</ul>
 
 {% if can_upload %}
 <section class="panel">
     <h2>Upload a new version</h2>
+    <p class="muted">Use this when the document has been corrected or re-scanned. The earlier versions are kept.</p>
     <form id="versionForm" class="form-grid" enctype="multipart/form-data">
         <div class="form-group">
-            <label for="version_file">File (PDF, PNG, JPEG, TIFF)</label>
+            <label for="version_file">File (PDF or scanned image)</label>
             <input id="version_file" type="file" name="file" required accept="application/pdf,image/png,image/jpeg,image/tiff,.pdf,.png,.jpg,.jpeg,.tif,.tiff" />
         </div>
         <div class="form-group">
-            <label for="version_note">What changed</label>
-            <input id="version_note" type="text" name="note" maxlength="300" />
+            <label for="version_note">What changed?</label>
+            <input id="version_note" type="text" name="note" maxlength="300" placeholder="For example: clearer scan of pages 2–4" />
         </div>
-        <div><button type="submit" class="button">Upload version</button></div>
+        <div><button type="submit" class="button" id="versionSubmit">Upload new version</button></div>
     </form>
-    <p class="muted" id="versionResult" role="status"></p>
+    <div id="versionResult" role="status" aria-live="polite"></div>
 </section>
 {% endif %}
 
 <script>
 (function () {
+    const ui = window.BCPUI || {};
+    const friendly = ui.friendlyError || function (raw) { return raw || 'Something went wrong. Please try again.'; };
     function headers() {
         const h = (window.BCPCsrf && window.BCPCsrf.headers) ? window.BCPCsrf.headers() : {};
         h['Accept'] = 'application/json';
@@ -69,29 +76,62 @@
     }
     document.querySelectorAll('[data-verify]').forEach(function (btn) {
         btn.addEventListener('click', async function () {
-            const out = document.getElementById('verifyResult');
+            const out = btn.closest('.list-card').querySelector('.verify-result');
+            out.hidden = false;
+            out.className = 'verify-result muted';
             out.textContent = 'Checking…';
-            const res = await fetch(btn.dataset.verify, { credentials: 'same-origin', headers: headers() });
-            const data = await res.json().catch(function () { return {}; });
-            if (!res.ok) { out.textContent = data.detail || 'Check failed.'; return; }
-            out.textContent = data.match
-                ? 'v' + data.version + ': stored file matches its recorded SHA-256.'
-                : 'v' + data.version + ': MISMATCH. Stored file hash ' + data.actual_sha256 + ' differs from the recorded ' + data.recorded_sha256 + '.';
+            btn.disabled = true;
+            try {
+                const res = await fetch(btn.dataset.verify, { credentials: 'same-origin', headers: headers() });
+                const data = await res.json().catch(function () { return {}; });
+                if (!res.ok) {
+                    out.className = 'verify-result banner error';
+                    out.textContent = res.status === 403 ? 'You don\u2019t have permission to run this check.' : 'The check could not be completed. Please try again.';
+                    return;
+                }
+                out.className = 'verify-result banner ' + (data.match ? 'success' : 'error');
+                out.textContent = data.match
+                    ? 'The stored file is unchanged since it was uploaded.'
+                    : 'Warning: the stored file does not match what was uploaded. Tell the archive administrator.';
+            } catch (err) {
+                out.className = 'verify-result banner error';
+                out.textContent = friendly('', 'network');
+            } finally {
+                btn.disabled = false;
+            }
         });
     });
     const form = document.getElementById('versionForm');
     if (form) {
+        const submit = document.getElementById('versionSubmit');
         form.addEventListener('submit', async function (event) {
             event.preventDefault();
+            if (submit.disabled) return;
             const out = document.getElementById('versionResult');
+            submit.disabled = true;
+            submit.setAttribute('aria-busy', 'true');
+            out.className = 'muted';
             out.textContent = 'Uploading…';
-            const res = await fetch('/api/documents/{{ document.doc_id|urlencode }}/versions', {
-                method: 'POST', body: new FormData(form), credentials: 'same-origin', headers: headers(),
-            });
-            const data = await res.json().catch(function () { return {}; });
-            if (res.status !== 202) { out.textContent = data.detail || ('Upload failed (' + res.status + ').'); return; }
-            out.textContent = 'Version ' + data.version + ' received and queued for processing.';
-            setTimeout(function () { window.location.reload(); }, 1500);
+            try {
+                const res = await fetch('/api/documents/{{ document.doc_id|urlencode }}/versions', {
+                    method: 'POST', body: new FormData(form), credentials: 'same-origin', headers: headers(),
+                });
+                const data = await res.json().catch(function () { return {}; });
+                if (res.status !== 202) {
+                    out.className = 'banner error';
+                    out.textContent = friendly(data.detail, res.status === 413 ? 'too_large' : 'generic');
+                    return;
+                }
+                out.className = 'banner success';
+                out.textContent = 'Version ' + data.version + ' received. It is being prepared and will show here shortly.';
+                setTimeout(function () { window.location.reload(); }, 1800);
+            } catch (err) {
+                out.className = 'banner error';
+                out.textContent = friendly('', 'network');
+            } finally {
+                submit.disabled = false;
+                submit.removeAttribute('aria-busy');
+            }
         });
     }
 })();

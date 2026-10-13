@@ -1,97 +1,105 @@
 {% extends "base.html" %}
 {% from "macros/ui.html" import breadcrumbs %}
 
-{% block title %}Schedule Meeting | Sonali Bank Archive System{% endblock %}
+{% block title %}Set up a meeting | Sonali Bank Archive System{% endblock %}
 
 {% block content %}
-{% set crumbs = [{'href': '/meetings', 'label': 'Meetings'}, {'label': 'Schedule'}] %}
+{% set crumbs = [{'href': '/meetings', 'label': 'Manage meetings'}, {'label': 'Set up a meeting'}] %}
 {{ breadcrumbs(crumbs) }}
 
 <div class="page-header">
     <div class="title-group">
-        <h1>Create board meeting</h1>
-        <p>Four short steps. Required fields are marked. Invites send when you create.</p>
+        <h1>Set up a meeting</h1>
+        <p>Four short steps. You can change the agenda and add papers later.</p>
     </div>
 </div>
 
 <section class="panel">
-    <ol class="wizard-progress" id="wizardProgress" aria-label="Create meeting steps">
-        <li class="is-active" data-step="1">1. Meeting</li>
+    <ol class="wizard-progress" id="wizardProgress" aria-label="Steps">
+        <li class="is-active" data-step="1" aria-current="step">1. When and where</li>
         <li data-step="2">2. Agenda</li>
-        <li data-step="3">3. People</li>
-        <li data-step="4">4. Review</li>
+        <li data-step="3">3. Who is invited</li>
+        <li data-step="4">4. Check and send</li>
     </ol>
 
-    <form action="/meetings" method="post" class="form-grid" id="createMeetingForm">
+    <form action="/meetings" method="post" class="form-grid" id="createMeetingForm" data-no-busy>
         <div class="wizard-pane is-active" data-pane="1">
-            <div class="form-section-label">What is this sitting?</div>
+            <h2 class="form-section-label">When and where is the meeting?</h2>
             <div class="form-grid">
                 <div class="form-group">
-                    <label for="title">Meeting title <span class="req">required</span></label>
-                    <input id="title" type="text" name="title" required minlength="3" maxlength="200" placeholder="e.g. 412th Board Meeting" />
-                    <p class="field-hint">Use the name members will recognise on the invite.</p>
+                    <label for="title">Meeting name <span class="req">required</span></label>
+                    <input id="title" type="text" name="title" required minlength="3" maxlength="200" placeholder="For example: 412th Board Meeting" />
+                    <p class="field-hint">Use the name members will recognise in the invitation.</p>
                 </div>
                 <div class="form-group">
-                    <label for="scheduled_at">Date &amp; time <span class="req">required</span></label>
+                    <label for="scheduled_at">Date and time (Dhaka time) <span class="req">required</span></label>
                     <input id="scheduled_at" type="datetime-local" name="scheduled_at" required />
                 </div>
                 <div class="form-group">
-                    <label for="location">Location or video link</label>
-                    <input id="location" type="text" name="location" placeholder="Board Room, Sonali Bank HQ" />
+                    <label for="location">Room or video link</label>
+                    <input id="location" type="text" name="location" placeholder="For example: Board Room, Sonali Bank head office" />
+                    <p class="field-hint">For an online meeting, paste the full link starting with https://</p>
                 </div>
             </div>
         </div>
 
         <div class="wizard-pane" data-pane="2" hidden>
-            <div class="form-section-label">What will the board discuss?</div>
+            <h2 class="form-section-label">What will the Board discuss?</h2>
             <div class="form-group">
                 <label for="agenda">Agenda</label>
-                <textarea id="agenda" name="agenda" rows="8" placeholder="1. Confirm previous minutes&#10;2. Financial performance&#10;3. Any other business"></textarea>
-                <p class="field-hint">One item per line. You can edit this after creating the meeting. Papers are added on the meeting page.</p>
+                <textarea id="agenda" name="agenda" rows="8" placeholder="1. Confirm the last minutes&#10;2. Financial results&#10;3. Any other business"></textarea>
+                <p class="field-hint">Put each item on its own line. You add papers on the meeting page after this.</p>
             </div>
         </div>
 
         <div class="wizard-pane" data-pane="3" hidden>
-            <div class="form-section-label">Who should attend?</div>
+            <h2 class="form-section-label">Who should come?</h2>
             <label class="checkbox-item">
                 <input type="checkbox" name="notifications_enabled" value="1" checked />
-                Send email invitations and 48h / 24h reminders
+                Send email invitations, and reminders 2 days and 1 day before
             </label>
-            <p class="form-hint-inline">People with an email also get an in-app notification.</p>
-            <p class="muted" style="margin: 0.75rem 0 0.5rem;">Tick everyone who should receive the invite.</p>
+            <p class="form-hint-inline">Everyone invited also sees the meeting in the app.</p>
             {% if invitees_by_role %}
             {% for group in invitees_by_role %}
-            <div class="form-group" style="margin-bottom: 1rem;">
-                <label>{{ group.label }}</label>
+            <fieldset class="form-group invitee-group" data-invitee-group>
+                <legend class="invitee-group-head">
+                    <span>{{ group.label }}</span>
+                    <span class="muted invitee-count" data-group-count aria-live="polite"></span>
+                </legend>
+                <label class="checkbox-item invitee-all">
+                    <input type="checkbox" data-select-all />
+                    <strong>Select all {{ group.label | lower }}</strong>
+                </label>
                 <div class="checkbox-list people-list">
                     {% for member in group.users %}
                     <label class="checkbox-item">
-                        <input type="checkbox" name="invitees" value="{{ member.username }}"{% if member.username == user.username %} checked{% endif %} />
+                        <input type="checkbox" name="invitees" value="{{ member.username }}" {% if member.username == user.username %} checked{% endif %} />
                         {{ member.username }}{% if member.email %} <span class="muted">({{ member.email }})</span>{% endif %}
                     </label>
                     {% endfor %}
                 </div>
-            </div>
+            </fieldset>
             {% endfor %}
             {% else %}
-            <p class="muted">No active user accounts yet. Create users from <a class="doc-link" href="/admin/users">Manage users</a>.</p>
+            <p class="muted">There are no active people to invite yet. Add them on the <a class="doc-link" href="/admin/users">People</a> page.</p>
             {% endif %}
         </div>
 
         <div class="wizard-pane" data-pane="4" hidden>
-            <div class="form-section-label">Check before you create</div>
+            <h2 class="form-section-label">Check before you send</h2>
             <dl class="review-list" id="meetingReview">
-                <div><dt>Title</dt><dd data-review="title">—</dd></div>
+                <div><dt>Name</dt><dd data-review="title">—</dd></div>
                 <div><dt>When</dt><dd data-review="when">—</dd></div>
                 <div><dt>Where</dt><dd data-review="where">—</dd></div>
-                <div><dt>Invitees</dt><dd data-review="invitees">—</dd></div>
+                <div><dt>Invited</dt><dd data-review="invitees">—</dd></div>
+                <div><dt>Invitations</dt><dd data-review="notify">—</dd></div>
             </dl>
-            <p class="form-hint-inline">Creating the meeting sends invites if notifications are on.</p>
+            <p class="form-hint-inline" id="noInviteeHint" hidden>Nobody is invited yet. You can still create the meeting and invite people later.</p>
         </div>
 
         <div class="wizard-nav">
             <button type="button" class="button button-secondary" id="wizardBack" hidden>Back</button>
-            <button type="button" class="button" id="wizardNext">Continue</button>
+            <button type="button" class="button" id="wizardNext">Next</button>
             <button type="submit" class="button button-block" id="wizardSubmit" hidden>Create meeting</button>
         </div>
     </form>
@@ -109,6 +117,7 @@
   var next = document.getElementById("wizardNext");
   var submit = document.getElementById("wizardSubmit");
   var index = 0;
+  var sending = false;
 
   function show(i) {
     index = Math.max(0, Math.min(i, panes.length - 1));
@@ -120,35 +129,102 @@
     steps.forEach(function (step, n) {
       step.classList.toggle("is-active", n === index);
       step.classList.toggle("is-done", n < index);
+      if (n === index) step.setAttribute("aria-current", "step"); else step.removeAttribute("aria-current");
     });
     back.hidden = index === 0;
     next.hidden = index === panes.length - 1;
     submit.hidden = index !== panes.length - 1;
     if (index === panes.length - 1) fillReview();
+    var heading = panes[index].querySelector(".form-section-label");
+    if (heading && i !== 0) {
+      heading.setAttribute("tabindex", "-1");
+      heading.focus({ preventScroll: false });
+    }
+  }
+
+  function formatWhen(value) {
+    if (!value) return "—";
+    var d = new Date(value);
+    if (isNaN(d.getTime())) return value.replace("T", " ");
+    return d.toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
   }
 
   function fillReview() {
     var title = (document.getElementById("title") || {}).value || "—";
-    var when = (document.getElementById("scheduled_at") || {}).value || "—";
+    var when = (document.getElementById("scheduled_at") || {}).value;
     var where = (document.getElementById("location") || {}).value || "Not set";
-    var boxes = form.querySelectorAll('input[name="invitees"]:checked');
+    var boxes = Array.prototype.slice.call(form.querySelectorAll('input[name="invitees"]:checked'));
+    var notify = form.querySelector('input[name="notifications_enabled"]');
     var el = function (key) { return document.querySelector('[data-review="' + key + '"]'); };
-    if (el("title")) el("title").textContent = title;
-    if (el("when")) el("when").textContent = when.replace("T", " ");
-    if (el("where")) el("where").textContent = where;
-    if (el("invitees")) el("invitees").textContent = boxes.length + " selected";
+    el("title").textContent = title;
+    el("when").textContent = formatWhen(when);
+    el("where").textContent = where;
+    var names = boxes.map(function (b) { return b.value; });
+    el("invitees").textContent = names.length
+      ? names.length + (names.length === 1 ? " person: " : " people: ") + names.slice(0, 6).join(", ") + (names.length > 6 ? " and " + (names.length - 6) + " more" : "")
+      : "Nobody yet";
+    el("notify").textContent = notify && notify.checked ? "Email invitations will be sent now" : "No emails will be sent";
+    document.getElementById("noInviteeHint").hidden = names.length > 0;
+  }
+
+  function validStep() {
+    if (index !== 0) return true;
+    var title = document.getElementById("title");
+    var when = document.getElementById("scheduled_at");
+    if (title && !title.checkValidity()) { title.reportValidity(); return false; }
+    if (when && !when.checkValidity()) { when.reportValidity(); return false; }
+    return true;
   }
 
   next.addEventListener("click", function () {
-    if (index === 0) {
-      var title = document.getElementById("title");
-      var when = document.getElementById("scheduled_at");
-      if (title && !title.checkValidity()) { title.reportValidity(); return; }
-      if (when && !when.checkValidity()) { when.reportValidity(); return; }
-    }
-    show(index + 1);
+    if (validStep()) show(index + 1);
   });
   back.addEventListener("click", function () { show(index - 1); });
+
+  form.addEventListener("keydown", function (event) {
+    if (event.key !== "Enter" || event.target.tagName === "TEXTAREA" || event.target.tagName === "BUTTON") return;
+    if (index < panes.length - 1) {
+      event.preventDefault();
+      if (validStep()) show(index + 1);
+    }
+  });
+
+  Array.prototype.forEach.call(form.querySelectorAll("[data-invitee-group]"), function (group) {
+    var all = group.querySelector("[data-select-all]");
+    var boxes = Array.prototype.slice.call(group.querySelectorAll('input[name="invitees"]'));
+    var count = group.querySelector("[data-group-count]");
+    function sync() {
+      var ticked = boxes.filter(function (b) { return b.checked; }).length;
+      all.checked = ticked === boxes.length;
+      all.indeterminate = ticked > 0 && ticked < boxes.length;
+      if (count) count.textContent = ticked + " of " + boxes.length + " selected";
+    }
+    all.addEventListener("change", function () {
+      boxes.forEach(function (b) { b.checked = all.checked; });
+      sync();
+    });
+    boxes.forEach(function (b) { b.addEventListener("change", sync); });
+    sync();
+  });
+
+  form.addEventListener("submit", function (event) {
+    if (index !== panes.length - 1 || sending) {
+      event.preventDefault();
+      return;
+    }
+    sending = true;
+    submit.disabled = true;
+    back.disabled = true;
+    submit.textContent = "Creating meeting…";
+  });
+
+  window.addEventListener("pageshow", function () {
+    sending = false;
+    submit.disabled = false;
+    back.disabled = false;
+    submit.textContent = "Create meeting";
+  });
+
   show(0);
 })();
 </script>

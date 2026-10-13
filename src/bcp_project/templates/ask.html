@@ -3,40 +3,52 @@
 {% block title %}Ask Sonali | {{ brand.product_name }}{% endblock %}
 
 {% block content %}
-<section class="panel ask-panel">
-  <header class="panel-header">
-    <div>
-      <p class="eyebrow">Governed AI · R7</p>
-      <h1>Ask Sonali Bank</h1>
-      <p class="lede">Answers only from archive sources you are authorized to view. No Source, No Answer. Humans remain the decision authority.</p>
-    </div>
-  </header>
+<div class="page-header">
+  <div class="title-group">
+    <h1>Ask Sonali</h1>
+    <p>Ask a question in plain English or বাংলা. The answer only uses documents you are allowed to see, and every answer shows where it came from. If the archive doesn't say, Sonali will tell you.</p>
+  </div>
+</div>
 
+<section class="panel ask-panel" data-show-provider="{{ 'true' if user.role.value == 'admin' else 'false' }}">
   <form id="askForm" class="form-grid ask-form">
     <div class="form-group">
       <label for="question">Your question</label>
-      <textarea id="question" name="question" rows="4" required placeholder="e.g. What is the latest board position on ICT procurement?"></textarea>
+      <textarea id="question" name="question" rows="3" required maxlength="1000" placeholder="For example: What did the board decide about ICT procurement in 2025?"></textarea>
     </div>
-    <div class="form-row">
+    <div class="ask-examples" aria-label="Example questions">
+      <span class="muted small">Try:</span>
+      <button type="button" class="chip-button" data-ask-example>What was decided at the last board meeting?</button>
+      <button type="button" class="chip-button" data-ask-example>Which circulars mention loan rescheduling?</button>
+      <button type="button" class="chip-button" data-ask-example lang="bn">সর্বশেষ বোর্ড সভায় কী সিদ্ধান্ত হয়েছে?</button>
+    </div>
+    <div class="form-row ask-row">
       <div class="form-group">
-        <label for="lang">Language hint</label>
+        <label for="lang">Look in documents written in</label>
         <select id="lang" name="lang">
-          <option value="any">Any</option>
+          <option value="any">Any language</option>
           <option value="en">English</option>
-          <option value="bn">Bangla</option>
+          <option value="bn">বাংলা</option>
         </select>
       </div>
-      <button type="submit" class="button-primary" id="askSubmit">Ask</button>
+      <div class="list-card-actions">
+        <button type="submit" class="button" id="askSubmit">Ask</button>
+        <button type="button" class="button button-secondary" id="askCancel" hidden>Stop</button>
+      </div>
     </div>
   </form>
 
-  <div id="askStatus" class="ask-status" hidden></div>
-  <article id="askAnswer" class="ask-answer" hidden></article>
-  <p id="askProvenance" class="muted ask-provenance" hidden></p>
+  <div id="askStatus" class="ask-status" role="status" aria-live="polite" hidden></div>
+  <article id="askAnswer" class="ask-answer" hidden>
+    <h2>Answer</h2>
+    <p id="askAnswerText" class="answer-text"></p>
+    <p class="muted small">This is a summary to help you. Always check the source documents before relying on it.</p>
+  </article>
   <section id="askCitations" class="ask-citations" hidden>
-    <h2>Citations</h2>
-    <ul id="askCitationList"></ul>
+    <h2>Where this comes from</h2>
+    <ul id="askCitationList" class="card-list" role="list"></ul>
   </section>
+  <p id="askProvenance" class="muted small ask-provenance" hidden></p>
 </section>
 {% endblock %}
 
@@ -44,12 +56,20 @@
 <script>
 (function () {
   var form = document.getElementById("askForm");
+  if (!form) return;
+  var panel = document.querySelector(".ask-panel");
   var statusEl = document.getElementById("askStatus");
   var answerEl = document.getElementById("askAnswer");
+  var answerText = document.getElementById("askAnswerText");
   var citesEl = document.getElementById("askCitations");
   var listEl = document.getElementById("askCitationList");
   var btn = document.getElementById("askSubmit");
+  var cancelBtn = document.getElementById("askCancel");
   var provenanceEl = document.getElementById("askProvenance");
+  var question = document.getElementById("question");
+  var ui = window.BCPUI || {};
+  var friendly = ui.friendlyError || function () { return "Something went wrong. Please try again."; };
+  var controller = null;
 
   function citationHref(c) {
     if (c.url && c.url.indexOf("/view/") === 0) return c.url;
@@ -57,67 +77,111 @@
     return "/view/" + encodeURIComponent(c.doc_id) + (page > 0 ? "?page=" + page : "");
   }
 
-  function csrfToken() {
-    var m = document.cookie.match(/(?:^|; )csrf_token=([^;]*)/);
-    return m ? decodeURIComponent(m[1]) : "";
+  function setStatus(text, tone) {
+    statusEl.hidden = !text;
+    statusEl.className = "ask-status" + (tone ? " banner " + tone : " muted");
+    statusEl.textContent = text || "";
   }
 
-  form.addEventListener("submit", async function (e) {
-    e.preventDefault();
-    btn.disabled = true;
-    statusEl.hidden = false;
-    statusEl.textContent = "Searching authorized sources…";
+  function reset() {
     answerEl.hidden = true;
     citesEl.hidden = true;
     provenanceEl.hidden = true;
     listEl.innerHTML = "";
+  }
+
+  document.querySelectorAll("[data-ask-example]").forEach(function (chip) {
+    chip.addEventListener("click", function () {
+      question.value = chip.textContent.trim();
+      question.focus();
+    });
+  });
+
+  question.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      if (typeof form.requestSubmit === "function") form.requestSubmit();
+    }
+  });
+
+  cancelBtn.addEventListener("click", function () {
+    if (controller) controller.abort();
+  });
+
+  form.addEventListener("submit", async function (e) {
+    e.preventDefault();
+    if (btn.disabled || !question.value.trim()) return;
+    btn.disabled = true;
+    btn.setAttribute("aria-busy", "true");
+    cancelBtn.hidden = false;
+    reset();
+    setStatus("Looking through the documents you can see… this can take up to a minute.");
+    controller = typeof AbortController === "function" ? new AbortController() : null;
     try {
+      var headers = (window.BCPCsrf && window.BCPCsrf.headers) ? window.BCPCsrf.headers() : {};
+      headers["Content-Type"] = "application/json";
+      headers["Accept"] = "application/json";
       var res = await fetch("/api/v1/ask", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRF-Token": csrfToken(),
-          "X-Requested-With": "BCPNav",
-        },
+        headers: headers,
         credentials: "same-origin",
-        body: JSON.stringify({
-          question: document.getElementById("question").value,
-          lang: document.getElementById("lang").value,
-        }),
+        signal: controller ? controller.signal : undefined,
+        body: JSON.stringify({ question: question.value, lang: document.getElementById("lang").value }),
       });
-      var data = await res.json();
-      if (!res.ok) throw new Error(data.detail || "Ask failed");
-      if (data.refused) {
-        statusEl.textContent = data.refusal_reason || "Refused — insufficient authorized sources.";
+      if (res.status === 401) { window.location.href = "/login"; return; }
+      var data = await res.json().catch(function () { return {}; });
+      if (!res.ok) {
+        setStatus(res.status === 429 ? "You've asked a lot of questions in a short time. Please wait a minute and try again." : friendly("", "ai_unavailable"), "error");
         return;
       }
-      statusEl.textContent = data.disclaimer || "AI support only.";
-      answerEl.hidden = false;
-      answerEl.textContent = data.answer || "";
-      var by = data.answered_by || {};
-      if (by.provider || by.model) {
-        provenanceEl.hidden = false;
-        provenanceEl.textContent = "Answered by " + [by.provider, by.model].filter(Boolean).join(" · ") +
-          (by.route ? " (" + by.route + ")" : "");
+      if (data.refused) {
+        setStatus("The archive doesn't have enough on this to give a reliable answer. Try asking in a different way, or search for the documents directly.", "info");
+        return;
       }
+      setStatus("");
+      answerEl.hidden = false;
+      answerText.textContent = data.answer || "";
+      var titles = data.source_titles || {};
       var cites = data.citations || [];
       if (cites.length) {
         citesEl.hidden = false;
         cites.forEach(function (c) {
           var li = document.createElement("li");
+          li.className = "list-card";
           var link = document.createElement("a");
           link.href = citationHref(c);
-          link.textContent = c.doc_id;
-          li.appendChild(link);
-          var tail = (c.page != null ? " · p." + c.page : "") + (c.quote ? " — “" + c.quote + "”" : "");
-          if (tail) li.appendChild(document.createTextNode(tail));
+          link.setAttribute("data-nav", "");
+          link.textContent = titles[c.doc_id] || c.doc_id;
+          var head = document.createElement("strong");
+          head.appendChild(link);
+          li.appendChild(head);
+          var meta = document.createElement("span");
+          meta.className = "list-card-meta";
+          meta.textContent = c.doc_id + (c.page != null ? " · page " + c.page : "");
+          li.appendChild(meta);
+          if (c.quote) {
+            var quote = document.createElement("blockquote");
+            quote.textContent = "“" + c.quote + "”";
+            li.appendChild(quote);
+          }
           listEl.appendChild(li);
         });
       }
+      var by = data.answered_by || {};
+      if (panel.dataset.showProvider === "true" && (by.provider || by.model)) {
+        provenanceEl.hidden = false;
+        provenanceEl.textContent = "Answered by " + [by.provider, by.model].filter(Boolean).join(" · ");
+      }
+      answerEl.setAttribute("tabindex", "-1");
+      answerEl.focus();
     } catch (err) {
-      statusEl.textContent = err.message || "Request failed";
+      if (err && err.name === "AbortError") setStatus("Stopped.", "info");
+      else setStatus(friendly(err && err.message, "network"), "error");
     } finally {
+      controller = null;
       btn.disabled = false;
+      btn.removeAttribute("aria-busy");
+      cancelBtn.hidden = true;
     }
   });
 })();

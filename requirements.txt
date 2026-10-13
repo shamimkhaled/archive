@@ -11,6 +11,7 @@ boto3>=1.30.0
 passlib[bcrypt]>=1.7.0
 python-jose>=3.3.0
 cryptography>=42.0.0
+segno>=1.6,<2
 python-dotenv>=1.0.0
 bcrypt<4.0.0
 llama-index>=0.10.0

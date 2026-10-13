@@ -36,7 +36,7 @@ from typing import Any, Callable, Dict, List, Optional
 import httpx
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_SMOKE = ("/healthz", "/readyz", "/login", "/app/")
+DEFAULT_SMOKE = ("/healthz", "/readyz", "/login", "/")
 
 
 class Timeline:

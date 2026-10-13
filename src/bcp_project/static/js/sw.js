@@ -1,24 +1,33 @@
 /* Sonali Bank Archive System service worker — caches static shell only; never caches auth HTML/API. */
-const CACHE = "sonali-archive-static-v34";
+const CACHE = "sonali-archive-static-v36";
 const PRECACHE = [
+  "/static/css/tokens.css",
   "/static/css/style.css",
+  "/static/css/components.css",
+  "/static/fonts/inter-latin-wght-normal.woff2",
+  "/static/fonts/noto-sans-bengali-bengali-wght-normal.woff2",
   "/static/js/app.js",
   "/static/js/archive-graph.js",
   "/static/js/meeting-transcription.js",
   "/static/offline.html",
-  "/static/icons/icon-192.png",
-  "/static/icons/icon-512.png",
+  "/static/icons/icon-any-192.png",
+  "/static/icons/icon-any-512.png",
+  "/static/icons/icon-maskable-192.png",
   "/static/img/sonali-bank-logo.png",
   "/static/img/sonali-bank-banner.png",
-  "/static/img/sonali-login-background.png",
+  "/static/img/sonali-login-background-960.webp",
+  "/static/img/sonali-login-background-1920.webp",
   "/static/img/governance-boardroom.png",
   "/static/manifest.webmanifest",
 ];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(PRECACHE)).then(() => self.skipWaiting())
-  );
+  // A new version waits until the person chooses "Reload" in the update banner.
+  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(PRECACHE)));
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SKIP_WAITING") self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
@@ -65,9 +74,19 @@ self.addEventListener("fetch", (event) => {
   }
 });
 
+function safeTarget(raw) {
+  try {
+    const url = new URL(raw || "/notifications", self.location.origin);
+    if (url.origin !== self.location.origin) return "/notifications";
+    return url.pathname + url.search + url.hash;
+  } catch (e) {
+    return "/notifications";
+  }
+}
+
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const target = (event.notification.data && event.notification.data.url) || "/notifications";
+  const target = safeTarget(event.notification.data && event.notification.data.url);
   event.waitUntil(
     clients.matchAll({ type: "window", includeUncontrolled: true }).then((windowClients) => {
       for (const client of windowClients) {

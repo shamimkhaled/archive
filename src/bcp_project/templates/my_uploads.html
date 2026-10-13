@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% from "macros/icons.html" import icon %}
+
+{% block title %}{{ t('nav.my_uploads') }} | {{ brand.product_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div class="title-group">
+        <h1>{{ t('nav.my_uploads') }}</h1>
+        <p>Documents you have uploaded, and where each one is now.</p>
+    </div>
+    <a class="button" href="/upload" data-nav>{{ icon('plus', 18, 2) }} Upload a document</a>
+</div>
+
+{% set filters = [
+    ('', 'All', total),
+    ('working', 'Being prepared', counts.working),
+    ('check', 'Waiting for a check', counts.check),
+    ('problem', 'Needs attention', counts.problem),
+    ('done', 'In the archive', counts.done),
+] %}
+<nav class="section-tabs" aria-label="Filter uploads">
+    {% for key, label, n in filters %}
+    <a href="/uploads/mine{% if key %}?show={{ key }}{% endif %}" data-nav{% if show == key %} class="is-active" aria-current="true"{% endif %}>{{ label }} ({{ n }})</a>
+    {% endfor %}
+</nav>
+
+{% if not items %}
+<div class="empty-state panel">
+    {% if total %}
+    <p>Nothing here right now.</p>
+    <a href="/uploads/mine" data-nav>Show all uploads</a>
+    {% else %}
+    <p><strong>You haven't uploaded anything yet.</strong></p>
+    <p class="muted">When you upload a document, you can follow its progress here.</p>
+    <a class="button" href="/upload" data-nav>Upload a document</a>
+    {% endif %}
+</div>
+{% else %}
+<ul class="card-list" role="list">
+    {% for item in items %}
+    <li class="list-card">
+        <div class="list-card-top">
+            <h3>{{ item.title or item.doc_id }}</h3>
+            <span class="status-chip status-chip-{{ item.status|status_tone }}">{{ item.status|status_label }}</span>
+        </div>
+        <p class="list-card-meta">
+            {{ item.doc_id }} · {{ item.doc_type }} · dated {{ item.doc_date|local_date }}
+            · uploaded {{ item.uploaded_at|local_dt }}
+            {% if item.current_version > 1 %} · version {{ item.current_version }}{% endif %}
+        </p>
+        {% if item.group == 'check' %}
+        <div class="next-step">
+            <strong>What happens next</strong>
+            <span>Someone else will check it before it appears in Search.{% if item.reasons %} They will look at:{% endif %}</span>
+            {% if item.reasons %}
+            <ul class="reason-list">
+                {% for code in item.reasons %}<li>{{ code|reason_label }}</li>{% endfor %}
+            </ul>
+            {% endif %}
+        </div>
+        {% elif item.group == 'problem' %}
+        <div class="banner {{ 'error' if item.status == 'failed' else 'warn' }} stack">
+            {% if item.status == 'failed' %}
+            <p>{{ friendly_error(item.error) }}</p>
+            <p class="muted">An administrator can try again from Background tasks, or you can upload it again with a different archive number.</p>
+            {% else %}
+            <p><strong>Sent back by the reviewer.</strong>{% if item.error %} Their note: “{{ item.error }}”{% endif %}</p>
+            {% endif %}
+        </div>
+        {% elif item.group == 'working' %}
+        <p class="muted">Being prepared{% if item.updated_at %} · last update {{ item.updated_at|local_dt('%H:%M') }}{% endif %}. This page doesn't refresh by itself — pull down or reload to check again.</p>
+        {% endif %}
+        <div class="list-card-actions">
+            {% if can_view and item.group == 'done' %}
+            <a class="button button-secondary" href="/view/{{ item.doc_id }}" data-nav>Open</a>
+            {% endif %}
+            <a class="button button-secondary" href="/documents/{{ item.doc_id }}/versions" data-nav>Versions</a>
+        </div>
+    </li>
+    {% endfor %}
+</ul>
+{% endif %}
+{% endblock %}

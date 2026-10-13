@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -90,7 +91,13 @@ async def admin_queues_page(
     return templates.TemplateResponse(
         request,
         "admin_queues.html",
-        {"user": current_user, "page_title": "Job queues", "overview": overview, "status": request.query_params.get("status")},
+        {
+            "user": current_user,
+            "page_title": "Background tasks",
+            "overview": overview,
+            "status": request.query_params.get("status"),
+            "checked_at": datetime.utcnow(),
+        },
     )
 
 

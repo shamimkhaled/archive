@@ -1,0 +1,340 @@
+/*
+ * Sonali Bank Archive design tokens for the Jinja UI (static/css/style.css and components.css).
+ * Change colours, type and spacing here only.
+ *
+ * <html data-theme="green|red|yellow|white" data-mode="light|dark" data-text-size="standard|large|xlarge">
+ * Breakpoints (media queries cannot read custom properties): 600px phone, 900px tablet, 1280px wide.
+ */
+
+@font-face {
+  font-family: "Inter Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("/static/fonts/inter-latin-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Inter Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("/static/fonts/inter-latin-ext-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: "Noto Sans Bengali Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("/static/fonts/noto-sans-bengali-bengali-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0951-0952, U+0964-0965, U+0980-09FE, U+1CD0, U+1CD2, U+1CD5-1CD6, U+1CD8, U+1CE1, U+1CEA, U+1CED, U+1CF2, U+1CF5-1CF7, U+200C-200D, U+20B9, U+25CC, U+A8F1;
+}
+
+/* —— Brand themes (light) —— */
+
+:root,
+[data-theme="green"] {
+  --bcg: #1a1a54;
+  --bcg-dark: #0f0f33;
+  --bcg-mid: #141444;
+  --bcg-soft: #eef0f8;
+  --bcg-accent: #8a6216;
+  --bcg-gold: #c5922f;
+  --bcg-accent-bright: #d4a84b;
+  --bcg-red: #c8102e;
+  --bcg-red-soft: #fceceb;
+  --text: #12122e;
+  --text-secondary: #3d3d5c;
+  --muted: #55557a;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --bg: #f5f6fa;
+  --border: #dcdfeb;
+  --border-strong: #c2c6da;
+  --on-primary: #ffffff;
+  --shadow-sm: 0 1px 2px rgba(18, 18, 46, 0.06);
+  --shadow-md: 0 8px 24px rgba(18, 18, 46, 0.08);
+  --shadow-lg: 0 18px 48px rgba(18, 18, 46, 0.16);
+  --sidebar-bg: linear-gradient(180deg, #16164a 0%, #0f0f33 60%, #0a0a24 100%);
+  --sidebar-fg: rgba(255, 255, 255, 0.94);
+  --sidebar-muted: rgba(255, 255, 255, 0.7);
+  --sidebar-border: rgba(197, 146, 47, 0.28);
+  --sidebar-active: rgba(197, 146, 47, 0.2);
+  --sidebar-accent: #d4a84b;
+  --login-brand-overlay: linear-gradient(165deg, rgba(15, 15, 51, 0.92), rgba(26, 26, 84, 0.78));
+  --theme-meta: #1a1a54;
+  --focus-color: #1a1a54;
+  --focus-ring: 0 0 0 3px rgba(26, 26, 84, 0.35);
+}
+
+[data-theme="red"] {
+  --bcg: #b3132a;
+  --bcg-dark: #7a0d1a;
+  --bcg-mid: #a81424;
+  --bcg-soft: #fcedec;
+  --bcg-accent: #8a5a12;
+  --bcg-gold: #d4a84b;
+  --bcg-accent-bright: #f4c81f;
+  --bcg-red: #b3132a;
+  --bcg-red-soft: #fceceb;
+  --text: #1a1214;
+  --text-secondary: #4a393c;
+  --muted: #66525a;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --bg: #f8f4f4;
+  --border: #ebdfe0;
+  --border-strong: #d7c5c7;
+  --on-primary: #ffffff;
+  --shadow-sm: 0 1px 2px rgba(26, 18, 20, 0.06);
+  --shadow-md: 0 8px 24px rgba(26, 18, 20, 0.08);
+  --shadow-lg: 0 18px 48px rgba(26, 18, 20, 0.16);
+  --sidebar-bg: linear-gradient(180deg, #a81424 0%, #8e101c 55%, #5c0a12 100%);
+  --sidebar-fg: rgba(255, 255, 255, 0.95);
+  --sidebar-muted: rgba(255, 255, 255, 0.74);
+  --sidebar-border: rgba(244, 200, 31, 0.28);
+  --sidebar-active: rgba(244, 200, 31, 0.18);
+  --sidebar-accent: #f4c81f;
+  --login-brand-overlay: linear-gradient(165deg, rgba(142, 16, 28, 0.94), rgba(201, 24, 43, 0.8));
+  --theme-meta: #8e101c;
+  --focus-color: #b3132a;
+  --focus-ring: 0 0 0 3px rgba(201, 24, 43, 0.35);
+}
+
+[data-theme="yellow"] {
+  --bcg: #7a5f00;
+  --bcg-dark: #1a1810;
+  --bcg-mid: #a88712;
+  --bcg-soft: #fbf6e4;
+  --bcg-accent: #6b5500;
+  --bcg-gold: #c9a016;
+  --bcg-accent-bright: #f4c81f;
+  --bcg-red: #b3132a;
+  --bcg-red-soft: #fceceb;
+  --text: #1a1810;
+  --text-secondary: #4a4536;
+  --muted: #625b45;
+  --surface: #fffdf7;
+  --surface-raised: #ffffff;
+  --bg: #f8f4e9;
+  --border: #e6dfcb;
+  --border-strong: #d0c6a8;
+  --on-primary: #ffffff;
+  --shadow-sm: 0 1px 2px rgba(26, 24, 16, 0.06);
+  --shadow-md: 0 8px 24px rgba(26, 24, 16, 0.08);
+  --shadow-lg: 0 18px 48px rgba(26, 24, 16, 0.16);
+  --sidebar-bg: linear-gradient(180deg, #2a2618 0%, #1a1810 60%, #0f0e09 100%);
+  --sidebar-fg: rgba(255, 250, 235, 0.96);
+  --sidebar-muted: rgba(244, 200, 31, 0.8);
+  --sidebar-border: rgba(244, 200, 31, 0.3);
+  --sidebar-active: rgba(244, 200, 31, 0.16);
+  --sidebar-accent: #f4c81f;
+  --login-brand-overlay: linear-gradient(165deg, rgba(26, 24, 16, 0.92), rgba(168, 135, 18, 0.72));
+  --theme-meta: #1a1810;
+  --focus-color: #7a5f00;
+  --focus-ring: 0 0 0 3px rgba(201, 160, 22, 0.45);
+}
+
+[data-theme="white"] {
+  --bcg: #006a4e;
+  --bcg-dark: #14201c;
+  --bcg-mid: #2f3d38;
+  --bcg-soft: #eef5f2;
+  --bcg-accent: #8a5a12;
+  --bcg-gold: #b8923e;
+  --bcg-accent-bright: #d4a84b;
+  --bcg-red: #c8102e;
+  --bcg-red-soft: #fceceb;
+  --text: #1c2421;
+  --text-secondary: #44504c;
+  --muted: #5c6864;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --bg: #f7f9f8;
+  --border: #e2e8e5;
+  --border-strong: #cad4cf;
+  --on-primary: #ffffff;
+  --shadow-sm: 0 1px 2px rgba(28, 36, 33, 0.05);
+  --shadow-md: 0 8px 24px rgba(28, 36, 33, 0.07);
+  --shadow-lg: 0 18px 48px rgba(28, 36, 33, 0.14);
+  --sidebar-bg: linear-gradient(180deg, #ffffff 0%, #f5f8f6 100%);
+  --sidebar-fg: #1c2421;
+  --sidebar-muted: #5c6864;
+  --sidebar-border: #e2e8e5;
+  --sidebar-active: rgba(0, 106, 78, 0.09);
+  --sidebar-accent: #006a4e;
+  --login-brand-overlay: linear-gradient(165deg, rgba(28, 36, 33, 0.55), rgba(0, 106, 78, 0.45));
+  --theme-meta: #ffffff;
+  --focus-color: #006a4e;
+  --focus-ring: 0 0 0 3px rgba(0, 106, 78, 0.3);
+}
+
+/* —— Dark mode: neutral surfaces for every theme, with a lighter brand colour per theme —— */
+
+[data-mode="dark"] {
+  color-scheme: dark;
+  --bcg-dark: #eef0f6;
+  --bcg-mid: #c9cde0;
+  --bcg-soft: #1c2130;
+  --bcg-accent: #e0b960;
+  --bcg-gold: #d4a84b;
+  --bcg-accent-bright: #f4c81f;
+  --bcg-red: #ff7b86;
+  --bcg-red-soft: #3a1f25;
+  --text: #eceef4;
+  --text-secondary: #c3c8d6;
+  --muted: #a3a9ba;
+  --surface: #161a24;
+  --surface-raised: #1d2230;
+  --bg: #0e1118;
+  --border: #2a3142;
+  --border-strong: #3b4357;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 18px 48px rgba(0, 0, 0, 0.55);
+  --sidebar-bg: linear-gradient(180deg, #131722 0%, #0e1118 100%);
+  --sidebar-fg: rgba(236, 238, 244, 0.95);
+  --sidebar-muted: rgba(195, 200, 214, 0.78);
+  --sidebar-border: #232a3a;
+  --login-brand-overlay: linear-gradient(165deg, rgba(14, 17, 24, 0.94), rgba(22, 26, 36, 0.86));
+  --theme-meta: #0e1118;
+}
+
+[data-mode="dark"][data-theme="green"],
+[data-mode="dark"]:not([data-theme]) {
+  --bcg: #aab4ff;
+  --on-primary: #0e1118;
+  --sidebar-active: rgba(170, 180, 255, 0.16);
+  --sidebar-accent: #d4a84b;
+  --focus-color: #aab4ff;
+  --focus-ring: 0 0 0 3px rgba(170, 180, 255, 0.45);
+}
+
+[data-mode="dark"][data-theme="red"] {
+  --bcg: #ff8a95;
+  --on-primary: #1a0d10;
+  --sidebar-active: rgba(255, 138, 149, 0.16);
+  --sidebar-accent: #f4c81f;
+  --focus-color: #ff8a95;
+  --focus-ring: 0 0 0 3px rgba(255, 138, 149, 0.45);
+}
+
+[data-mode="dark"][data-theme="yellow"] {
+  --bcg: #f4c81f;
+  --on-primary: #1a1810;
+  --sidebar-active: rgba(244, 200, 31, 0.16);
+  --sidebar-accent: #f4c81f;
+  --focus-color: #f4c81f;
+  --focus-ring: 0 0 0 3px rgba(244, 200, 31, 0.45);
+}
+
+[data-mode="dark"][data-theme="white"] {
+  --bcg: #4fd1a5;
+  --on-primary: #06140f;
+  --sidebar-active: rgba(79, 209, 165, 0.16);
+  --sidebar-accent: #4fd1a5;
+  --focus-color: #4fd1a5;
+  --focus-ring: 0 0 0 3px rgba(79, 209, 165, 0.45);
+}
+
+/* —— Semantic status colours —— */
+
+:root {
+  --ok: #146c43;
+  --ok-soft: #e7f5ee;
+  --ok-border: #b7e0c9;
+  --warn: #8a5300;
+  --warn-soft: #fff5e0;
+  --warn-border: #f2d49b;
+  --danger: #b3132a;
+  --danger-soft: #fdecee;
+  --danger-border: #f3bcc4;
+  --info: #1d4f91;
+  --info-soft: #eaf1fb;
+  --info-border: #bfd3ef;
+  --neutral-soft: #eef0f4;
+}
+
+[data-mode="dark"] {
+  --ok: #6ee0a6;
+  --ok-soft: #12301f;
+  --ok-border: #1f5537;
+  --warn: #ffc966;
+  --warn-soft: #33270f;
+  --warn-border: #5a4419;
+  --danger: #ff8a95;
+  --danger-soft: #3a1f25;
+  --danger-border: #6a2c36;
+  --info: #9cc3ff;
+  --info-soft: #172640;
+  --info-border: #2a4570;
+  --neutral-soft: #222838;
+}
+
+/* —— Layout, type and motion —— */
+
+:root {
+  --font-scale: 1;
+  --font: "Inter Variable", "Noto Sans Bengali Variable", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-bengali: "Noto Sans Bengali Variable", "Inter Variable", system-ui, sans-serif;
+  --font-display: var(--font);
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+
+  --fs-sm: 0.875rem;
+  --fs-base: 1rem;
+  --fs-md: 1.125rem;
+  --fs-lg: 1.25rem;
+  --fs-xl: 1.5rem;
+  --fs-2xl: 1.875rem;
+  --fs-3xl: 2.25rem;
+  --lh-tight: 1.25;
+  --lh-base: 1.6;
+  --lh-bangla: 1.75;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-pill: 999px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 40px;
+  --space-8: 48px;
+
+  --tap: 44px;
+  --content-max: 1120px;
+  --sidebar-w: 272px;
+  --header-h: 56px;
+  --bottom-nav-h: 68px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-top: env(safe-area-inset-top, 0px);
+
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast: 120ms;
+  --dur: 200ms;
+}
+
+[data-text-size="large"] {
+  --font-scale: 1.125;
+}
+
+[data-text-size="xlarge"] {
+  --font-scale: 1.25;
+}
+
+html {
+  font-size: calc(100% * var(--font-scale));
+}
+
+:lang(bn) {
+  font-family: var(--font-bengali);
+  line-height: var(--lh-bangla);
+}

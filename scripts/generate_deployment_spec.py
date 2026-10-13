@@ -105,8 +105,8 @@ SYSTEM_SUMMARY = (
     "The Sonali Bank Archive System is a FastAPI web tier plus separate worker services. "
     "Uploads and meeting jobs are written to a Postgres outbox in the same transaction as the record, "
     "relayed to Redis Streams, and processed by ingest, meeting, and notify workers (consumer groups, "
-    "retries, dead-letter stream). The browser app is a React TypeScript PWA under /app with the "
-    "server-rendered Jinja pages kept as a fallback. Production originals must live in S3-compatible "
+    "retries, dead-letter stream). The browser app is server-rendered Jinja pages with a small "
+    "installable PWA shell. Production originals must live in S3-compatible "
     "object storage because Railway (and typical PaaS) disks are ephemeral."
 )
 

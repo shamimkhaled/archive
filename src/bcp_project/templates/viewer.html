@@ -4,28 +4,29 @@
 {% block body_class %}viewer-chrome{% endblock %}
 
 {% block content %}
-<section class="panel viewer-panel{% if archive_doc_id %} viewer-panel-with-related{% endif %}" id="viewerPanel" data-file-url="{{ file_url }}" data-seal="{{ seal_text | e }}">
-    <header class="viewer-toolbar" role="toolbar" aria-label="Document viewer controls">
-        <a class="button button-secondary viewer-back" href="{{ back_url }}">{{ back_label }}</a>
+<section class="panel viewer-panel{% if archive_doc_id %} viewer-panel-with-related{% endif %}" id="viewerPanel"
+         data-file-url="{{ file_url }}" data-seal="{{ seal_text | e }}"
+         data-pdfjs="/static/vendor/pdfjs/" data-version="{{ static_version }}">
+    <header class="viewer-toolbar" role="toolbar" aria-label="Document controls">
+        <a class="button button-secondary viewer-back" href="{{ back_url }}">
+            <span aria-hidden="true">‹</span> {{ back_label }}
+        </a>
 
         <div class="viewer-title-block">
-            <div class="viewer-doc-title" title="{{ page_subtitle }}">{{ page_subtitle }}</div>
-            <div class="secure-note">Watermarked · view only</div>
+            <h1 class="viewer-doc-title" title="{{ page_title }}">{{ page_title }}</h1>
+            <div class="secure-note">{{ page_subtitle }}</div>
         </div>
 
         <div class="viewer-controls">
-            <button id="prev-page" type="button" class="button button-secondary" title="Previous page" aria-label="Previous page">‹</button>
-            <span id="page-info" class="viewer-page-info" aria-live="polite">—</span>
-            <button id="next-page" type="button" class="button button-secondary" title="Next page" aria-label="Next page">›</button>
-            <span class="viewer-sep" aria-hidden="true"></span>
-            <button id="zoom-out" type="button" class="button button-secondary" title="Zoom out" aria-label="Zoom out">−</button>
-            <button id="zoom-fit" type="button" class="button button-secondary" title="Fit width" aria-label="Fit to width">Fit</button>
-            <button id="zoom-in" type="button" class="button button-secondary" title="Zoom in" aria-label="Zoom in">+</button>
+            <button id="zoom-out" type="button" class="button button-secondary" title="Smaller" aria-label="Make smaller">−</button>
+            <button id="zoom-fit" type="button" class="button button-secondary" title="Fit to screen" aria-label="Fit to screen width">Fit</button>
+            <button id="zoom-in" type="button" class="button button-secondary" title="Bigger" aria-label="Make bigger">+</button>
             {% if can_download and download_url %}
+            <span class="viewer-sep" aria-hidden="true"></span>
             <a class="button button-secondary viewer-download" href="{{ download_url }}">Download</a>
             {% endif %}
             {% if versions_url %}
-            <a class="button button-secondary" href="{{ versions_url }}" title="Version history and integrity">v{{ current_version or 1 }}</a>
+            <a class="button button-secondary" href="{{ versions_url }}" title="Earlier versions of this document">Versions</a>
             {% endif %}
         </div>
     </header>
@@ -33,35 +34,49 @@
     <div class="viewer-body">
     <div class="viewer-main">
     <div class="pdf-viewer-frame" id="pdfFrame">
-        <div id="pdf-container" class="pdf-container">
+        <div id="pdf-container" class="pdf-container" tabindex="0" aria-label="Document page">
             <div class="viewer-loading" id="viewerLoading">
                 <div class="viewer-spinner" aria-hidden="true"></div>
-                <p>Opening secure document…</p>
+                <p>Opening the document…</p>
             </div>
         </div>
     </div>
 
-    <p class="viewer-seal-footer" id="viewerSeal">{{ seal_text }}</p>
+    <nav class="viewer-pager" aria-label="Pages">
+        <button id="prev-page" type="button" class="button button-secondary" aria-label="Previous page" disabled>
+            <span aria-hidden="true">‹</span><span class="viewer-pager-word">Previous</span>
+        </button>
+        <form class="viewer-goto" id="viewerGoto" novalidate>
+            <label for="pageInput">Page</label>
+            <input id="pageInput" type="number" inputmode="numeric" min="1" value="1" autocomplete="off" disabled>
+            <span>of <span id="pageCount">–</span></span>
+        </form>
+        <button id="next-page" type="button" class="button button-secondary" aria-label="Next page" disabled>
+            <span class="viewer-pager-word">Next</span><span aria-hidden="true">›</span>
+        </button>
+        <span id="page-info" class="visually-hidden" aria-live="polite"></span>
+    </nav>
+
+    <p class="viewer-seal-footer" id="viewerSeal">Protected copy, marked with your name. For viewing only. {{ seal_text }}</p>
     </div>
 
     {% if archive_doc_id %}
     <aside class="viewer-related-panel" id="viewerRelatedPanel" data-doc-id="{{ archive_doc_id }}">
         <div class="viewer-related-head">
             <div>
-                <p class="viewer-related-kicker">Mind map</p>
+                <p class="viewer-related-kicker">Connected documents</p>
                 <h2>Related documents</h2>
             </div>
-            <a class="text-link" href="/archive/map?focus={{ archive_doc_id | urlencode }}">Open mind map</a>
+            <a class="text-link" href="/archive/map?focus={{ archive_doc_id | urlencode }}">See on the map</a>
         </div>
-        <div id="viewerMiniGraph" class="viewer-mini-graph neural-tree-shell-compact" aria-label="Related documents mind map"></div>
-        <p class="field-hint" id="viewerRelatedStatus">Loading mind map…</p>
+        <div id="viewerMiniGraph" class="viewer-mini-graph neural-tree-shell-compact" aria-label="Map of related documents"></div>
+        <p class="field-hint" id="viewerRelatedStatus">Finding related documents…</p>
         <ul id="viewerRelatedList" class="viewer-related-list"></ul>
     </aside>
     {% endif %}
     </div>
 </section>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 {% if archive_doc_id %}
 <script src="/static/js/archive-graph.js?v={{ static_version }}"></script>
 {% endif %}
@@ -72,111 +87,175 @@
 
     const fileUrl = panel.getAttribute("data-file-url");
     const sealText = panel.getAttribute("data-seal") || "";
+    const pdfjsBase = panel.getAttribute("data-pdfjs");
+    const assetVersion = panel.getAttribute("data-version") || "";
     const container = document.getElementById("pdf-container");
-    const pageInfo = document.getElementById("page-info");
     const frame = document.getElementById("pdfFrame");
+    const pageInfo = document.getElementById("page-info");
+    const pageInput = document.getElementById("pageInput");
+    const pageCount = document.getElementById("pageCount");
+    const prevBtn = document.getElementById("prev-page");
+    const nextBtn = document.getElementById("next-page");
 
     let pdfDoc = null;
     let currentPage = 1;
+    let wantedPage = 1;
     let scale = null; // null = fit width
-    let isLoading = false;
-    let renderToken = 0;
+    let appliedScale = 1;
+    let rendering = false;
+    let enginePromise = null;
 
-    function showStatus(html) {
-        container.innerHTML = html;
+    function loadEngine() {
+        if (!enginePromise) {
+            const suffix = assetVersion ? "?v=" + encodeURIComponent(assetVersion) : "";
+            enginePromise = import(pdfjsBase + "pdf.min.mjs" + suffix).then(function (lib) {
+                lib.GlobalWorkerOptions.workerSrc = pdfjsBase + "pdf.worker.min.mjs" + suffix;
+                return lib;
+            });
+        }
+        return enginePromise;
+    }
+
+    function showLoading() {
+        container.innerHTML =
+            '<div class="viewer-loading"><div class="viewer-spinner" aria-hidden="true"></div><p>Opening the document…</p></div>';
     }
 
     function showError(message) {
-        showStatus(
-            '<div class="viewer-error" role="alert">' +
-                "<strong>Could not open document</strong>" +
-                "<p>" +
-                message +
-                "</p>" +
-                '<button type="button" class="button" id="viewerRetry">Try again</button>' +
-                "</div>"
-        );
-        const retry = document.getElementById("viewerRetry");
-        if (retry) retry.addEventListener("click", loadPdf);
+        const box = document.createElement("div");
+        box.className = "viewer-error";
+        box.setAttribute("role", "alert");
+        const title = document.createElement("strong");
+        title.textContent = "We couldn't open this document";
+        const text = document.createElement("p");
+        text.textContent = message;
+        const retry = document.createElement("button");
+        retry.type = "button";
+        retry.className = "button";
+        retry.textContent = "Try again";
+        retry.addEventListener("click", loadPdf);
+        box.append(title, text, retry);
+        container.replaceChildren(box);
+    }
+
+    function messageForStatus(status) {
+        if (status === 401) return "You have been signed out. Sign in again, then reopen this document.";
+        if (status === 403) return "You don't have access to this document. You can ask for access from Search.";
+        if (status === 404) return "This document could not be found. It may have been moved or removed.";
+        return "The server had a problem sending this document. Please try again in a moment.";
     }
 
     function fitScaleForPage(page) {
-        const padding = window.matchMedia("(max-width: 720px)").matches ? 24 : 48;
+        const padding = window.matchMedia("(max-width: 720px)").matches ? 16 : 48;
         const avail = Math.max(240, (frame ? frame.clientWidth : window.innerWidth) - padding);
         const base = page.getViewport({ scale: 1 });
         return Math.min(2.75, Math.max(0.45, avail / base.width));
     }
 
+    function paintPager() {
+        const total = pdfDoc ? pdfDoc.numPages : 0;
+        pageCount.textContent = total ? String(total) : "–";
+        pageInput.max = String(total || 1);
+        pageInput.value = String(currentPage);
+        pageInput.disabled = !pdfDoc || total <= 1;
+        prevBtn.disabled = !pdfDoc || currentPage <= 1;
+        nextBtn.disabled = !pdfDoc || currentPage >= total;
+        pageInfo.textContent = total ? "Page " + currentPage + " of " + total : "";
+    }
+
     async function loadPdf() {
         if (!fileUrl) {
-            showError("Missing document URL.");
+            showError("This link is missing the document address. Go back and open it again.");
             return;
         }
-        if (typeof pdfjsLib === "undefined") {
-            showError("PDF engine failed to load. Check your network, then refresh.");
-            return;
-        }
+        showLoading();
+        pdfDoc = null;
+        paintPager();
 
-        showStatus(
-            '<div class="viewer-loading"><div class="viewer-spinner" aria-hidden="true"></div><p>Opening secure document…</p></div>'
-        );
-
+        let lib;
         try {
-            pdfjsLib.GlobalWorkerOptions.workerSrc =
-                "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+            lib = await loadEngine();
+        } catch (error) {
+            enginePromise = null;
+            showError("The document viewer didn't load. Check your connection, then try again.");
+            return;
+        }
 
-            const response = await fetch(fileUrl, {
+        let response;
+        try {
+            response = await fetch(fileUrl, {
                 credentials: "same-origin",
                 headers: { Accept: "application/pdf" },
                 cache: "no-store",
             });
-            if (!response.ok) {
-                throw new Error("Server returned " + response.status + (response.status === 403 ? " (access required)" : ""));
-            }
-            const data = await response.arrayBuffer();
-            if (!data || data.byteLength < 8) {
-                throw new Error("Empty or invalid PDF response.");
-            }
+        } catch (error) {
+            showError("We can't reach the server. Check your connection, then try again.");
+            return;
+        }
+        if (!response.ok) {
+            showError(messageForStatus(response.status));
+            return;
+        }
 
-            const pdf = await pdfjsLib.getDocument({ data, useSystemFonts: true }).promise;
-            pdfDoc = pdf;
-            const requested = parseInt(new URLSearchParams(window.location.search).get("page") || "1", 10);
-            currentPage = requested >= 1 && requested <= pdf.numPages ? requested : 1;
-            scale = null;
-            await renderPage(currentPage);
+        try {
+            const data = await response.arrayBuffer();
+            if (!data || data.byteLength < 8) throw new Error("empty");
+            pdfDoc = await lib.getDocument({
+                data: data,
+                useSystemFonts: true,
+                standardFontDataUrl: pdfjsBase + "standard_fonts/",
+                wasmUrl: pdfjsBase + "wasm/",
+            }).promise;
         } catch (error) {
             console.error("PDF load error:", error);
-            showError(error && error.message ? error.message : "Unknown error");
+            showError("This file looks damaged or isn't a readable PDF. Contact the archive team if it keeps happening.");
+            return;
+        }
+        const requested = parseInt(new URLSearchParams(window.location.search).get("page") || "1", 10);
+        scale = null;
+        goToPage(requested >= 1 && requested <= pdfDoc.numPages ? requested : 1);
+    }
+
+    function goToPage(pageNum) {
+        if (!pdfDoc) return;
+        wantedPage = Math.min(Math.max(1, pageNum | 0), pdfDoc.numPages);
+        if (!rendering) renderWanted();
+    }
+
+    async function renderWanted() {
+        rendering = true;
+        try {
+            while (pdfDoc) {
+                const pageNum = wantedPage;
+                const renderScale = scale;
+                await renderPage(pageNum, renderScale);
+                if (pageNum === wantedPage && renderScale === scale) break;
+            }
+        } finally {
+            rendering = false;
         }
     }
 
-    async function renderPage(pageNum) {
-        if (!pdfDoc || isLoading) return;
-        isLoading = true;
-        const token = ++renderToken;
-
+    async function renderPage(pageNum, renderScale) {
         try {
             const page = await pdfDoc.getPage(pageNum);
-            if (token !== renderToken) return;
-
-            const appliedScale = scale == null ? fitScaleForPage(page) : scale;
+            appliedScale = renderScale == null ? fitScaleForPage(page) : renderScale;
             const viewport = page.getViewport({ scale: appliedScale });
             const canvas = document.createElement("canvas");
-            const context = canvas.getContext("2d", { alpha: false });
             const outputScale = Math.min(window.devicePixelRatio || 1, 2);
             canvas.width = Math.floor(viewport.width * outputScale);
             canvas.height = Math.floor(viewport.height * outputScale);
             canvas.style.width = Math.floor(viewport.width) + "px";
             canvas.style.height = Math.floor(viewport.height) + "px";
+            canvas.setAttribute("role", "img");
+            canvas.setAttribute("aria-label", "Page " + pageNum + " of " + pdfDoc.numPages);
 
             const transform = outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : null;
-            await page.render({ canvasContext: context, viewport: viewport, transform: transform }).promise;
-            if (token !== renderToken) return;
+            await page.render({ canvas: canvas, viewport: viewport, transform: transform }).promise;
 
             const wrapper = document.createElement("div");
             wrapper.className = "page-wrapper";
             wrapper.appendChild(canvas);
-
             // Client overlay as secondary seal; primary watermark is server-stamped.
             if (sealText) {
                 const mark = document.createElement("div");
@@ -185,81 +264,98 @@
                 mark.textContent = sealText;
                 wrapper.appendChild(mark);
             }
-
-            container.innerHTML = "";
-            container.appendChild(wrapper);
-
+            container.replaceChildren(wrapper);
+            if (pageNum !== currentPage) container.scrollTop = 0;
             currentPage = pageNum;
-            pageInfo.textContent = currentPage + " / " + pdfDoc.numPages;
-
-            const prev = document.getElementById("prev-page");
-            const next = document.getElementById("next-page");
-            if (prev) prev.disabled = currentPage <= 1;
-            if (next) next.disabled = currentPage >= pdfDoc.numPages;
+            paintPager();
+            const url = new URL(window.location.href);
+            if (currentPage > 1) url.searchParams.set("page", String(currentPage));
+            else url.searchParams.delete("page");
+            history.replaceState(history.state, "", url.pathname + url.search + url.hash);
         } catch (error) {
             console.error("PDF render error:", error);
-            showError(error && error.message ? error.message : "Render failed");
-        } finally {
-            isLoading = false;
+            showError("We couldn't show this page. Try again, or go to a different page.");
         }
     }
 
-    document.getElementById("prev-page").addEventListener("click", function () {
-        if (currentPage > 1) renderPage(currentPage - 1);
-    });
-    document.getElementById("next-page").addEventListener("click", function () {
-        if (pdfDoc && currentPage < pdfDoc.numPages) renderPage(currentPage + 1);
-    });
-    document.getElementById("zoom-in").addEventListener("click", function () {
-        const base = scale == null ? 1 : scale;
-        scale = Math.min(base + 0.2, 3);
-        if (pdfDoc) renderPage(currentPage);
-    });
-    document.getElementById("zoom-out").addEventListener("click", function () {
-        const base = scale == null ? 1 : scale;
-        scale = Math.max(base - 0.2, 0.4);
-        if (pdfDoc) renderPage(currentPage);
-    });
+    function zoomBy(delta) {
+        if (!pdfDoc) return;
+        const base = scale == null ? appliedScale : scale;
+        scale = Math.min(3, Math.max(0.4, Math.round((base + delta) * 10) / 10));
+        goToPage(currentPage);
+    }
+
+    prevBtn.addEventListener("click", function () { goToPage(currentPage - 1); });
+    nextBtn.addEventListener("click", function () { goToPage(currentPage + 1); });
+    document.getElementById("zoom-in").addEventListener("click", function () { zoomBy(0.2); });
+    document.getElementById("zoom-out").addEventListener("click", function () { zoomBy(-0.2); });
     document.getElementById("zoom-fit").addEventListener("click", function () {
         scale = null;
-        if (pdfDoc) renderPage(currentPage);
+        goToPage(currentPage);
     });
+
+    document.getElementById("viewerGoto").addEventListener("submit", function (event) {
+        event.preventDefault();
+        const n = parseInt(pageInput.value, 10);
+        if (Number.isFinite(n)) goToPage(n);
+        else paintPager();
+    });
+    pageInput.addEventListener("change", function () {
+        const n = parseInt(pageInput.value, 10);
+        if (Number.isFinite(n)) goToPage(n);
+        else paintPager();
+    });
+
+    // Swipe left/right to turn pages, only when the page isn't zoomed wider than the screen.
+    let touchStart = null;
+    frame.addEventListener("touchstart", function (event) {
+        if (event.touches.length !== 1) { touchStart = null; return; }
+        const t = event.touches[0];
+        touchStart = { x: t.clientX, y: t.clientY, at: Date.now() };
+    }, { passive: true });
+    frame.addEventListener("touchend", function (event) {
+        if (!touchStart || !pdfDoc) return;
+        const t = event.changedTouches[0];
+        const dx = t.clientX - touchStart.x;
+        const dy = t.clientY - touchStart.y;
+        const quick = Date.now() - touchStart.at < 600;
+        touchStart = null;
+        if (container.scrollWidth > container.clientWidth + 4) return;
+        if (!quick || Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx) * 0.6) return;
+        goToPage(currentPage + (dx < 0 ? 1 : -1));
+    }, { passive: true });
 
     let resizeTimer = null;
     window.addEventListener("resize", function () {
-        if (scale != null || !pdfDoc) return;
+        if (!panel.isConnected || scale != null || !pdfDoc) return;
         clearTimeout(resizeTimer);
-        resizeTimer = setTimeout(function () {
-            renderPage(currentPage);
-        }, 180);
+        resizeTimer = setTimeout(function () { goToPage(currentPage); }, 180);
     });
 
     panel.addEventListener("contextmenu", function (event) {
         event.preventDefault();
     });
     window.addEventListener("keydown", function (event) {
+        if (!panel.isConnected) return;
         const key = (event.key || "").toLowerCase();
         if ((event.ctrlKey || event.metaKey) && (key === "p" || key === "s")) {
             event.preventDefault();
         }
-        if (!pdfDoc) return;
+        if (!pdfDoc || event.target === pageInput) return;
         if (key === "arrowleft" || key === "pageup") {
             event.preventDefault();
-            if (currentPage > 1) renderPage(currentPage - 1);
+            goToPage(currentPage - 1);
         }
         if (key === "arrowright" || key === "pagedown") {
             event.preventDefault();
-            if (currentPage < pdfDoc.numPages) renderPage(currentPage + 1);
+            goToPage(currentPage + 1);
         }
     });
 
-    function boot() {
-        loadPdf();
-    }
     if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", boot);
+        document.addEventListener("DOMContentLoaded", loadPdf);
     } else {
-        boot();
+        loadPdf();
     }
 })();
 </script>

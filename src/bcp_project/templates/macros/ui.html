@@ -65,22 +65,22 @@
 {% if meeting.attendance_open %}
 {{ status_chip('Check-in open', 'open') }}
 {% elif meeting.status.value == 'completed' %}
-{{ status_chip('Closed', 'closed') }}
+{{ status_chip('Finished', 'closed') }}
 {% elif meeting.status.value == 'cancelled' %}
 {{ status_chip('Cancelled', 'danger') }}
 {% else %}
-{{ status_chip('Scheduled', 'upcoming') }}
+{{ status_chip('Coming up', 'upcoming') }}
 {% endif %}
 {% if meeting.transcription_status == 'live' %}
-{{ status_chip('Recording audio', 'approved') }}
+{{ status_chip('Recording', 'approved') }}
 {% elif meeting.transcription_status == 'processing' %}
-{{ status_chip('Transcribing', 'approved') }}
+{{ status_chip('Writing transcript', 'approved') }}
 {% elif meeting.transcription_status == 'stopped' %}
 {{ status_chip('Transcript ready', 'neutral') }}
 {% endif %}
 {% endmacro %}
 
-{% macro human_dt(dt) %}{{ dt.strftime('%d %b %Y, %H:%M') }}{% endmacro %}
+{% macro human_dt(dt) %}{{ dt | wall_dt }}{% endmacro %}
 
 {% macro dest_card(href, title, subtitle, icon='folder') %}
 <a class="dest-card" href="{{ href }}" data-nav>

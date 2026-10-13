@@ -1,177 +1,160 @@
 {% extends "base.html" %}
+{% from "macros/ui.html" import empty_state %}
 
 {% block title %}Notifications | Sonali Bank Archive System{% endblock %}
 
 {% block content %}
-{% set is_board = user.role.value == 'board_member' %}
+{% set is_board = user.role.value in ('board_member', 'uploader') %}
 {% set notify_pref = user.notifications_enabled %}
+{% set unread = items | selectattr('read_at', 'none') | list | length %}
 <div class="page-header">
     <div class="title-group">
         <h1>Notifications</h1>
-        <p>Meeting invites, reminders, and browser alerts for this device.</p>
+        <p>{% if unread %}{{ unread }} new{% else %}No new notifications{% endif %}. Meeting invitations, reminders and answers to your requests.</p>
     </div>
-    <button type="button" class="button button-secondary" id="markReadBtn">Mark all read</button>
+    {% if unread %}<button type="button" class="button button-secondary" id="markReadBtn">Mark all as read</button>{% endif %}
 </div>
 
+<section class="panel" aria-live="polite">
+    {% if items %}
+    <ul class="card-list" id="notifList">
+        {% for n in items %}
+        {% set href = ((('/board/meetings/' if is_board else '/meetings/') ~ n.meeting_id) if n.meeting_id else '') %}
+        <li class="list-card notif-card{% if n.read_at is none %} is-unread{% endif %}" data-id="{{ n.id }}">
+            <div class="list-card-top">
+                <h2 class="notif-title">
+                    {% if href %}<a href="{{ href }}" data-nav data-notif-open="{{ n.id }}">{{ n.title }}</a>{% else %}{{ n.title }}{% endif %}
+                </h2>
+                {% if n.read_at is none %}<span class="status-chip status-chip-info">New</span>{% endif %}
+            </div>
+            {% if n.body %}<p>{{ n.body }}</p>{% endif %}
+            <p class="list-card-meta">{{ status_label(n.kind, 'notification') }} · {{ n.created_at | local_dt }}</p>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    {{ empty_state("No notifications yet", "Meeting invitations, reminders and answers to your access requests will appear here.") }}
+    {% endif %}
+</section>
+
 <section class="panel">
-    <h2>Push alerts on this device</h2>
+    <h2>Alerts on this device</h2>
     <p class="muted" style="margin-top:0">
-        Account notifications are
-        <strong>{{ 'enabled' if notify_pref else 'disabled' }}</strong>
-        for {{ user.username }}. Browser push also needs permission on this phone or computer.
+        {% if notify_pref %}
+        Your account gets notifications. To see alerts even when this page is closed, turn them on for this phone or computer.
+        {% else %}
+        Notifications are switched off for your account. Ask an administrator if you want them.
+        {% endif %}
     </p>
-    <div class="push-row">
-        <span id="pushStatus" class="badge">Checking…</span>
-        <button type="button" class="button" id="enablePushBtn">Enable browser notifications</button>
+    <div class="push-row" data-account-notify="{{ '1' if notify_pref else '0' }}" id="pushRow">
+        <span id="pushStatus" class="status-chip status-chip-neutral">Checking…</span>
+        <button type="button" class="button" id="enablePushBtn">Turn on alerts</button>
     </div>
-    <p class="field-hint" id="pushHint">Allow alerts to receive invite and reminder heads-up while the app is open or installed.</p>
+    <p class="field-hint" id="pushHint"></p>
 </section>
+{% endblock %}
 
-<section class="panel">
-    <div id="notifList" class="meeting-list" aria-live="polite" data-board="{{ '1' if is_board else '0' }}" data-account-notify="{{ '1' if notify_pref else '0' }}">
-        <div class="skeleton-list" aria-hidden="true">
-            <div class="skeleton-row"><div class="skeleton skeleton-line" style="width:70%"></div><div class="skeleton skeleton-line short" style="width:40%"></div></div>
-        </div>
-    </div>
-</section>
-
+{% block scripts %}
 <script>
 (function () {
-  const list = document.getElementById('notifList');
-  const forBoard = list.dataset.board === '1';
-  const accountNotify = list.dataset.accountNotify === '1';
-  const pushStatus = document.getElementById('pushStatus');
-  const pushBtn = document.getElementById('enablePushBtn');
-  const pushHint = document.getElementById('pushHint');
-  const SEEN_KEY = 'sb-notif-seen-ids';
+  var row = document.getElementById("pushRow");
+  if (!row) return;
+  var accountNotify = row.getAttribute("data-account-notify") === "1";
+  var pushStatus = document.getElementById("pushStatus");
+  var pushBtn = document.getElementById("enablePushBtn");
+  var pushHint = document.getElementById("pushHint");
 
-  function meetingHref(id) {
-    if (!id) return '#';
-    return forBoard ? `/board/meetings/${id}` : `/meetings/${id}`;
+  function csrfHeaders(extra) {
+    return Object.assign(extra || {}, window.BCPCsrf ? window.BCPCsrf.headers() : {});
+  }
+
+  function markRead(ids) {
+    var opts = { method: "POST", credentials: "same-origin", keepalive: true };
+    if (ids) {
+      opts.headers = csrfHeaders({ "Content-Type": "application/json" });
+      opts.body = JSON.stringify({ ids: ids });
+    } else {
+      opts.headers = csrfHeaders({ "Content-Type": "application/x-www-form-urlencoded" });
+    }
+    return fetch("/api/notifications/read", opts).then(function (res) {
+      if (window.BCPUI && window.BCPUI.refreshUnreadCount) window.BCPUI.refreshUnreadCount(true);
+      return res;
+    });
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll("[data-notif-open]"), function (link) {
+    link.addEventListener("click", function () {
+      var card = link.closest(".notif-card");
+      if (card && card.classList.contains("is-unread")) markRead([Number(link.getAttribute("data-notif-open"))]);
+    });
+  });
+
+  var markAll = document.getElementById("markReadBtn");
+  if (markAll) {
+    markAll.addEventListener("click", function () {
+      markAll.disabled = true;
+      markRead(null).then(function () {
+        Array.prototype.forEach.call(document.querySelectorAll(".notif-card.is-unread"), function (card) {
+          card.classList.remove("is-unread");
+          var chip = card.querySelector(".status-chip");
+          if (chip) chip.remove();
+        });
+        markAll.hidden = true;
+        if (window.BCPUI) window.BCPUI.toast("All notifications marked as read.");
+      }, function () {
+        markAll.disabled = false;
+        if (window.BCPUI) window.BCPUI.toast("Couldn't update. Please try again.");
+      });
+    });
   }
 
   function updatePushUi() {
-    if (!('Notification' in window)) {
-      pushStatus.textContent = 'Not supported';
-      pushBtn.disabled = true;
-      pushHint.textContent = 'This browser does not support desktop notifications.';
+    if (!("Notification" in window)) {
+      pushStatus.textContent = "Not available";
+      pushBtn.hidden = true;
+      pushHint.textContent = "This browser can't show alerts. You'll still see notifications on this page.";
       return;
     }
-    const perm = Notification.permission;
-    if (perm === 'granted') {
-      pushStatus.textContent = 'Enabled';
-      pushBtn.textContent = 'Notifications enabled';
-      pushBtn.disabled = true;
-      pushHint.textContent = accountNotify
-        ? 'Browser alerts are on. New unread items can show a device notification.'
-        : 'Browser permission is on, but your account notifications are disabled. Ask an admin to enable them on your user profile.';
-    } else if (perm === 'denied') {
-      pushStatus.textContent = 'Blocked';
-      pushBtn.disabled = true;
-      pushHint.textContent = 'Notifications are blocked in browser settings. Allow them for this site, then refresh.';
+    var perm = Notification.permission;
+    if (perm === "granted") {
+      pushStatus.textContent = "On";
+      pushStatus.className = "status-chip status-chip-ok";
+      pushBtn.hidden = true;
+      pushHint.textContent = accountNotify ? "Alerts are on for this device." : "This device allows alerts, but notifications are switched off for your account.";
+    } else if (perm === "denied") {
+      pushStatus.textContent = "Blocked";
+      pushStatus.className = "status-chip status-chip-warn";
+      pushBtn.hidden = true;
+      pushHint.textContent = "Alerts are blocked in this browser's settings. Allow them for this site, then reload the page.";
     } else {
-      pushStatus.textContent = 'Off';
-      pushBtn.disabled = false;
-      pushHint.textContent = 'Tap enable to allow meeting invite and reminder alerts on this device.';
+      pushStatus.textContent = "Off";
+      pushStatus.className = "status-chip status-chip-neutral";
+      pushBtn.hidden = false;
+      pushHint.textContent = "Your browser will ask for permission.";
     }
   }
 
-  async function enablePush() {
-    if (!('Notification' in window)) return;
-    try {
-      const perm = await Notification.requestPermission();
+  pushBtn.addEventListener("click", function () {
+    if (!("Notification" in window)) return;
+    Notification.requestPermission().then(function (perm) {
       updatePushUi();
-      if (perm === 'granted' && navigator.serviceWorker) {
-        const reg = await navigator.serviceWorker.ready;
-        if (reg && reg.showNotification) {
-          await reg.showNotification('Sonali Bank Archive System', {
-            body: 'Notifications are enabled for this device.',
-            icon: '/static/img/sonali-bank-logo.png',
-            tag: 'sb-push-enabled',
-          });
-        } else {
-          new Notification('Sonali Bank Archive System', { body: 'Notifications are enabled for this device.' });
-        }
-      }
-    } catch (e) {
-      pushHint.textContent = 'Could not enable notifications. Check browser settings.';
-    }
-  }
-
-  function getSeen() {
-    try {
-      return JSON.parse(localStorage.getItem(SEEN_KEY) || '[]');
-    } catch (e) {
-      return [];
-    }
-  }
-
-  function setSeen(ids) {
-    try {
-      localStorage.setItem(SEEN_KEY, JSON.stringify(ids.slice(0, 80)));
-    } catch (e) {}
-  }
-
-  async function maybePushNew(items) {
-    if (!accountNotify || !('Notification' in window) || Notification.permission !== 'granted') return;
-    const seen = getSeen();
-    const fresh = items.filter((n) => !n.read && seen.indexOf(n.id) === -1);
-    if (!fresh.length) return;
-    const first = fresh[0];
-    try {
-      const reg = navigator.serviceWorker ? await navigator.serviceWorker.ready : null;
-      const title = first.title || 'Sonali Bank Archive System';
-      const body = first.body || 'You have a new notification.';
-      if (reg && reg.showNotification) {
-        await reg.showNotification(title, {
-          body: body,
-          icon: '/static/img/sonali-bank-logo.png',
-          tag: 'sb-notif-' + first.id,
-          data: { url: meetingHref(first.meeting_id) },
+      if (perm === "granted" && navigator.serviceWorker) {
+        navigator.serviceWorker.ready.then(function (reg) {
+          if (reg && reg.showNotification) {
+            reg.showNotification("Sonali Bank Archive", {
+              body: "Alerts are on for this device.",
+              icon: "/static/img/sonali-bank-logo.png",
+              tag: "sb-push-enabled",
+              data: { url: "/notifications" },
+            });
+          }
         });
-      } else {
-        new Notification(title, { body: body });
       }
-    } catch (e) {}
-    setSeen(seen.concat(fresh.map((n) => n.id)));
-  }
-
-  async function loadNotifications() {
-    try {
-      const headers = window.BCPCsrf ? window.BCPCsrf.headers() : {};
-      const res = await fetch('/api/notifications', { credentials: 'same-origin', headers: headers });
-      if (!res.ok) throw new Error('failed');
-      const data = await res.json();
-      if (!data.results.length) {
-        list.innerHTML = '<div class="empty-state"><h3>No notifications yet</h3><p>Meeting invites and reminders will appear here.</p></div>';
-        return;
-      }
-      await maybePushNew(data.results);
-      list.innerHTML = data.results.map((n) => {
-        const when = n.created_at ? new Date(n.created_at.endsWith('Z') ? n.created_at : n.created_at + 'Z').toLocaleString() : '';
-        const href = meetingHref(n.meeting_id);
-        return `<a class="meeting-card" href="${href}" data-nav style="${n.read ? 'opacity:0.72' : ''}">
-                <div class="meeting-card-header">
-                    <h3>${n.title.replace(/</g,'&lt;')}</h3>
-                    <span class="badge">${n.read ? 'Read' : 'New'}</span>
-                </div>
-                <p>${(n.body || '').replace(/</g,'&lt;')}</p>
-                <p class="muted">${when} · ${n.kind}</p>
-            </a>`;
-      }).join('');
-    } catch (e) {
-      list.innerHTML = '<div class="empty-state"><h3>Unable to load</h3><p>Please refresh and try again.</p></div>';
-    }
-  }
-
-  document.getElementById('markReadBtn').addEventListener('click', async () => {
-    const headers = Object.assign({ 'Content-Type': 'application/x-www-form-urlencoded' }, window.BCPCsrf ? window.BCPCsrf.headers() : {});
-    await fetch('/api/notifications/read', { method: 'POST', credentials: 'same-origin', headers: headers });
-    loadNotifications();
+    }, function () {
+      pushHint.textContent = "Couldn't turn on alerts. Please check the browser settings.";
+    });
   });
-  pushBtn.addEventListener('click', enablePush);
   updatePushUi();
-  loadNotifications();
 })();
 </script>
 {% endblock %}

@@ -3,11 +3,21 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Attendance Sheet — {{ meeting.title }}</title>
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet" />
+<title>Attendance sheet — {{ meeting.title }}</title>
 <style>
+    @font-face {
+        font-family: "Inter Variable";
+        font-display: swap;
+        font-weight: 100 900;
+        src: url("/static/fonts/inter-latin-wght-normal.woff2") format("woff2-variations");
+    }
+    @font-face {
+        font-family: "Noto Sans Bengali Variable";
+        font-display: swap;
+        font-weight: 100 900;
+        src: url("/static/fonts/noto-sans-bengali-bengali-wght-normal.woff2") format("woff2-variations");
+        unicode-range: U+0980-09FE, U+200C-200D, U+25CC;
+    }
     :root {
         --bcg: #1A1A54;
         --gold: #C5922F;
@@ -18,7 +28,7 @@
     }
     * { box-sizing: border-box; }
     body {
-        font-family: "Source Sans 3", "Noto Sans Bengali", system-ui, -apple-system, sans-serif;
+        font-family: "Inter Variable", "Noto Sans Bengali Variable", system-ui, -apple-system, sans-serif;
         color: var(--text);
         margin: 0;
         padding: 2rem 2.5rem;
@@ -26,10 +36,22 @@
     }
     .toolbar {
         display: flex;
-        justify-content: flex-end;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
         gap: 0.75rem;
         margin-bottom: 1.5rem;
     }
+    .toolbar a {
+        color: var(--bcg);
+        font-weight: 600;
+        text-decoration: none;
+        padding: 0.65rem 0.25rem;
+        min-height: 44px;
+        display: inline-flex;
+        align-items: center;
+    }
+    .toolbar a:hover { text-decoration: underline; }
     .toolbar button {
         font: inherit;
         font-weight: 700;
@@ -39,7 +61,7 @@
         background: var(--bcg);
         color: white;
         cursor: pointer;
-        min-height: 40px;
+        min-height: 44px;
     }
     header.print-masthead {
         display: flex;
@@ -69,8 +91,8 @@
     }
     header.print-masthead h1 {
         margin: 0.2rem 0 0;
-        font-family: "Cormorant Garamond", Georgia, serif;
-        font-size: 1.75rem;
+        font-family: "Inter Variable", Georgia, serif;
+        font-size: 1.6rem;
         font-weight: 600;
         letter-spacing: -0.02em;
         color: var(--bcg);
@@ -148,30 +170,31 @@
 </head>
 <body>
     <div class="toolbar no-print">
-        <button type="button" onclick="window.print()">Print</button>
+        <a href="/meetings/{{ meeting.id }}#attendance">← Back to the meeting</a>
+        <button type="button" id="printSheet">Print</button>
     </div>
 
     <header class="print-masthead">
         <img src="{{ brand.logo_path }}" alt="" width="56" height="56" />
         <div>
             <p class="org">Sonali Bank PLC</p>
-            <h1>Board Meeting Attendance Sheet</h1>
+            <h1>Board meeting attendance sheet</h1>
         </div>
     </header>
 
     <dl class="meta">
         <div><dt>Meeting:</dt> <dd>{{ meeting.title }}</dd></div>
-        <div><dt>Status:</dt> <dd>{{ meeting.status.value | capitalize }}</dd></div>
-        <div><dt>Date &amp; Time:</dt> <dd>{{ meeting.scheduled_at.strftime('%Y-%m-%d %H:%M') }}</dd></div>
-        <div><dt>Location:</dt> <dd>{{ meeting.location or '—' }}</dd></div>
+        <div><dt>Status:</dt> <dd>{{ status_label(meeting.status.value, 'meeting') }}</dd></div>
+        <div><dt>Date and time:</dt> <dd>{{ meeting.scheduled_at | wall_dt }}</dd></div>
+        <div><dt>Place:</dt> <dd>{{ meeting.location or '—' }}</dd></div>
     </dl>
 
     <table>
         <thead>
             <tr>
                 <th class="col-no">#</th>
-                <th>Board Member</th>
-                <th>Checked In At</th>
+                <th>Board member</th>
+                <th>Signed in at</th>
                 <th class="col-sig">Signature</th>
             </tr>
         </thead>
@@ -182,7 +205,7 @@
                 <td class="col-no">{{ loop.index }}</td>
                 <td>{{ invite.username }}</td>
                 {% if record %}
-                <td class="status-signed">{{ record.signed_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                <td class="status-signed">{{ record.signed_at | local_dt }}</td>
                 <td class="sig-cell"><img src="/meetings/{{ meeting.id }}/attendance/{{ invite.username }}/signature" alt="Signature of {{ invite.username }}" /></td>
                 {% else %}
                 <td class="status-pending">Not signed in</td>
@@ -191,13 +214,16 @@
             </tr>
             {% endfor %}
             {% if not invitations %}
-            <tr><td colspan="4">No board members were invited to this meeting.</td></tr>
+            <tr><td colspan="4">Nobody was invited to this meeting.</td></tr>
             {% endif %}
         </tbody>
     </table>
 
     <footer>
-        Generated by {{ generated_by }} on {{ generated_at.strftime('%Y-%m-%d %H:%M') }} UTC
+        Printed by {{ generated_by }} on {{ generated_at | local_dt }} (Dhaka time)
     </footer>
+    <script>
+        document.getElementById("printSheet").addEventListener("click", function () { window.print(); });
+    </script>
 </body>
 </html>

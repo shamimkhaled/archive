@@ -24,6 +24,7 @@ from .jobs.handlers import JOB_CHUNK_INDEX, run_chunk_index
 from .jobs.queue import enqueue_job, job_queue_enabled
 from .models import DocumentRecord, Role, User
 from .pdf_parser import parse_pdf
+from .ui import register as register_ui
 
 logger = logging.getLogger("bcp_project.deps")
 
@@ -53,7 +54,9 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 def _compute_static_version() -> str:
     candidates = [
+        STATIC_DIR / "css" / "tokens.css",
         STATIC_DIR / "css" / "style.css",
+        STATIC_DIR / "css" / "components.css",
         STATIC_DIR / "js" / "app.js",
         STATIC_DIR / "js" / "sw.js",
         STATIC_DIR / "js" / "archive-graph.js",
@@ -67,6 +70,7 @@ def _compute_static_version() -> str:
 STATIC_VERSION = _compute_static_version()
 templates.env.globals["static_version"] = STATIC_VERSION
 templates.env.globals["brand"] = BRAND
+register_ui(templates.env)
 
 
 def _safe_back_url(request: Request, fallback: str = "/") -> str:

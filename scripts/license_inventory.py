@@ -5,7 +5,7 @@ Builds the inventory from what is actually installed, not from memory:
 
   Python    requirements*.txt resolved transitively through installed package metadata
             (extras included where requested, e.g. uvicorn[standard])
-  Frontend  the PWA's runtime dependency tree from frontend/node_modules (what ships to browsers)
+  Browser   third-party files vendored under src/bcp_project/static (reviewed list)
   Runtime   services and AI models the deployment pulls in, with their licences (reviewed list)
 
 Anything copyleft or without a declared licence is flagged for legal review.
@@ -27,7 +27,6 @@ from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 ROOT = Path(__file__).resolve().parents[1]
 REQUIREMENTS = ("requirements.txt", "requirements-worker.txt", "requirements-optional.txt")
-FRONTEND_BUNDLED_DEV = ("workbox-window",)  # dev dependency compiled into the service worker client
 
 # Services and models the deployment runs alongside the code. Licences reviewed by hand; re-check
 # when a version changes.
@@ -51,6 +50,13 @@ RUNTIME: List[Tuple[str, str, str, str]] = [
     ("BAAI bge-m3", "1.0", "MIT", "Embedding model (multilingual, Bangla)"),
     ("BAAI bge-reranker-v2-m3", "2.0", "Apache-2.0", "Reranking model"),
     ("Whisper large-v3 (faster-whisper conversion)", "v3", "MIT", "Speech-to-text model"),
+]
+
+# Third-party files served to browsers from src/bcp_project/static.
+BROWSER: List[Tuple[str, str, str, str]] = [
+    ("pdf.js (pdfjs-dist, legacy build)", "6.4.299", "Apache-2.0", "PDF viewer (static/vendor/pdfjs)"),
+    ("Inter (variable)", "4.x", "OFL-1.1", "Interface font (static/fonts)"),
+    ("Noto Sans Bengali (variable)", "2.x", "OFL-1.1", "Bangla interface font (static/fonts)"),
 ]
 
 NOTES = {
@@ -159,40 +165,6 @@ def resolve_python(wanted: Dict[str, Set[str]]) -> Tuple[List[Dict[str, str]], L
     return sorted(seen.values(), key=lambda r: r["name"].lower()), sorted(missing)
 
 
-# --- Frontend -----------------------------------------------------------------------------------
-
-
-def npm_licence(pkg: Dict) -> str:
-    lic = pkg.get("license") or pkg.get("licenses")
-    if isinstance(lic, dict):
-        return lic.get("type") or "UNKNOWN"
-    if isinstance(lic, list):
-        return " OR ".join(l.get("type", "?") if isinstance(l, dict) else str(l) for l in lic)
-    return str(lic or "UNKNOWN")
-
-
-def resolve_frontend(root: Path) -> List[Dict[str, str]]:
-    manifest = json.loads((root / "package.json").read_text(encoding="utf-8"))
-    modules = root / "node_modules"
-    if not modules.exists():
-        return []
-    seen: Dict[str, Dict[str, str]] = {}
-    queue = [(name, modules) for name in list(manifest.get("dependencies", {})) + list(FRONTEND_BUNDLED_DEV)]
-    while queue:
-        name, base = queue.pop()
-        # Node resolution: nested node_modules first, then hoisted.
-        candidates = [base / name, modules / name]
-        pkg_dir = next((c for c in candidates if (c / "package.json").exists()), None)
-        if pkg_dir is None or name in seen:
-            continue
-        pkg = json.loads((pkg_dir / "package.json").read_text(encoding="utf-8"))
-        licence = npm_licence(pkg)
-        seen[name] = {"name": name, "version": pkg.get("version", "?"), "licence": licence, "class": classify(licence)}
-        for dep in list(pkg.get("dependencies", {})) + [d for d in pkg.get("optionalDependencies", {}) if (pkg_dir / "node_modules" / d).exists() or (modules / d).exists()]:
-            queue.append((dep, pkg_dir / "node_modules"))
-    return sorted(seen.values(), key=lambda r: r["name"])
-
-
 # --- report -------------------------------------------------------------------------------------
 
 
@@ -203,9 +175,10 @@ def table(rows: List[Dict[str, str]], columns: Tuple[str, ...]) -> List[str]:
     return out
 
 
-def render(python: List[Dict[str, str]], missing: List[str], frontend: List[Dict[str, str]]) -> str:
-    counts = Counter(r["class"] for r in python + frontend)
-    flagged = [r for r in python + frontend if r["class"] != "permissive"]
+def render(python: List[Dict[str, str]], missing: List[str]) -> str:
+    browser = [{"name": n, "version": v, "licence": l, "class": classify(l), "role": r} for n, v, l, r in BROWSER]
+    counts = Counter(r["class"] for r in python + browser)
+    flagged = [r for r in python + browser if r["class"] != "permissive"]
     lines = [
         "# Software components and licences",
         "",
@@ -215,7 +188,7 @@ def render(python: List[Dict[str, str]], missing: List[str], frontend: List[Dict
         "## Summary",
         "",
         f"- Python packages (direct and transitive): **{len(python)}**",
-        f"- Frontend packages shipped to browsers: **{len(frontend)}**",
+        f"- Third-party files served to browsers: **{len(browser)}**",
         f"- Licence classes: " + ", ".join(f"{k} {v}" for k, v in sorted(counts.items())),
         "- No component is licensed per user, per core, or per document: the software licence cost of the "
         "stack is zero; costs are hardware, hosting, support, and optional cloud AI usage (see sizing.md).",
@@ -241,8 +214,8 @@ def render(python: List[Dict[str, str]], missing: List[str], frontend: List[Dict
         "",
     ]
     lines += table(python, ("name", "version", "licence", "class"))
-    lines += ["", "## Frontend packages (shipped in the PWA bundle)", ""]
-    lines += table(frontend, ("name", "version", "licence", "class")) if frontend else ["frontend/node_modules not installed; run `npm ci` in frontend/ first."]
+    lines += ["", "## Browser assets (served from /static)", ""]
+    lines += table(browser, ("name", "version", "licence", "class", "role"))
     return "\n".join(lines) + "\n"
 
 
@@ -252,13 +225,12 @@ def main() -> int:
     parser.add_argument("--json", type=Path)
     args = parser.parse_args()
     python, missing = resolve_python(parse_requirements(ROOT / r for r in REQUIREMENTS))
-    frontend = resolve_frontend(ROOT / "frontend")
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(render(python, missing, frontend), encoding="utf-8")
+    args.out.write_text(render(python, missing), encoding="utf-8")
     if args.json:
-        args.json.write_text(json.dumps({"python": python, "frontend": frontend, "missing": missing}, indent=2) + "\n", encoding="utf-8")
-    flagged = sum(1 for r in python + frontend if r["class"] != "permissive")
-    print(f"wrote {args.out}: {len(python)} Python, {len(frontend)} frontend, {flagged} flagged, {len(missing)} not installed")
+        args.json.write_text(json.dumps({"python": python, "missing": missing}, indent=2) + "\n", encoding="utf-8")
+    flagged = sum(1 for r in python if r["class"] != "permissive")
+    print(f"wrote {args.out}: {len(python)} Python, {flagged} flagged, {len(missing)} not installed")
     return 0
 
 

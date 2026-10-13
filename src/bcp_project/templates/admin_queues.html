@@ -1,111 +1,144 @@
 {% extends "base.html" %}
+{% from "macros/ui.html" import breadcrumbs, empty_state %}
 
-{% block title %}Job queues | {{ brand.product_name }}{% endblock %}
+{% block title %}Background tasks | {{ brand.product_name }}{% endblock %}
 
 {% block content %}
 {% set ov = overview %}
+{% set ns = namespace(waiting=0) %}
+{% for name, row in ov.streams.items() if not name.endswith(':dead') %}{% set ns.waiting = ns.waiting + (row.length or 0) %}{% endfor %}
+{% set waiting = ns.waiting %}
+{% set stuck = ov.dead_letters | length %}
+{{ breadcrumbs([{'href': '/', 'label': 'Home'}, {'label': 'Background tasks'}]) }}
 <div class="page-header">
     <div class="title-group">
-        <h1>Job queues</h1>
-        <p>Background work on Redis Streams: ingest, meeting transcription, and notifications.</p>
+        <h1>Background tasks</h1>
+        <p>Work the system does behind the scenes: reading uploads, writing transcripts and minutes, and sending messages.</p>
     </div>
 </div>
 
+<p class="status-line" id="queuesUpdated" data-auto-refresh="30">
+    Last updated {{ checked_at | local_dt('%H:%M:%S') }}. This page updates every 30 seconds.
+    <a href="/admin/queues" data-nav>Update now</a>
+</p>
+
 {% if status == 'retried' %}
-<div class="alert alert-success" role="status">Job sent back to its queue.</div>
+<div class="alert alert-success" role="status">The task was sent back to try again.</div>
 {% endif %}
 {% if not ov.redis_ok %}
-<div class="alert alert-error" role="alert">Redis is unreachable. Uploads still queue in the database outbox and publish when Redis returns.</div>
+<div class="alert alert-error" role="alert">The task service isn't answering right now. New uploads are kept safely and will be processed when it is back. If this lasts more than a few minutes, please tell IT.</div>
+{% elif stuck %}
+<div class="banner error" role="status">{{ stuck }} task{{ 's' if stuck != 1 else '' }} stopped after several tries and need{{ '' if stuck != 1 else 's' }} a decision below.</div>
+{% elif waiting == 0 and not ov.recent_failures %}
+<div class="banner ok" role="status">Everything is running normally.</div>
 {% endif %}
 
 <section class="panel">
-    <h2>Streams</h2>
-    <div class="table-wrap">
-        <table class="data-table">
-            <thead><tr><th>Stream</th><th>Waiting</th><th>In progress</th><th>Lag</th><th>Workers</th></tr></thead>
-            <tbody>
-                {% for name, row in ov.streams.items() %}
-                <tr>
-                    <td><code>{{ name }}</code></td>
-                    <td>{{ row.length }}</td>
-                    <td>{{ row.pending if row.pending is defined else '—' }}</td>
-                    <td>{{ row.lag if row.lag is not none and row.lag is defined else '—' }}</td>
-                    <td>{{ row.consumers if row.consumers is defined else '—' }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    <p class="muted">Outbox rows waiting to publish: <strong>{{ ov.outbox_unpublished }}</strong></p>
+    <h2>Waiting to be done</h2>
+    {% if ov.streams %}
+    <ul class="stat-row">
+        {% for name, row in ov.streams.items() if not name.endswith(':dead') %}
+        <li class="stat-tile">
+            <strong>{{ row.length }}</strong>
+            <span>{{ status_label(name, 'queue') }}</span>
+            {% if row.pending is defined and row.pending %}<span class="muted">{{ row.pending }} in progress</span>{% endif %}
+            {% if row.consumers is defined %}<span class="muted">{{ row.consumers }} worker{{ 's' if row.consumers != 1 else '' }}</span>{% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">No information right now.</p>
+    {% endif %}
+    {% if ov.outbox_unpublished %}<p class="muted">{{ ov.outbox_unpublished }} more task{{ 's' if ov.outbox_unpublished != 1 else '' }} saved and waiting to be handed over.</p>{% endif %}
 </section>
 
 <section class="panel">
-    <h2>Documents by ingest state</h2>
-    <p>
+    <h2>Documents</h2>
+    <p class="chip-row">
         {% for state, count in ov.ingest_counts.items() %}
-        <span class="badge">{{ state }}: {{ count }}</span>
+        <span class="status-chip status-chip-{{ status_tone(state) }}">{{ status_label(state) }}: {{ count }}</span>
+        {% else %}<span class="muted">No documents yet.</span>
         {% endfor %}
     </p>
-    <h2>Jobs by status</h2>
-    <p>
+    <h2>Tasks so far</h2>
+    <p class="chip-row">
         {% for state, count in ov.job_status_counts.items() %}
-        <span class="badge">{{ state }}: {{ count }}</span>
-        {% else %}<span class="muted">No job history yet.</span>
+        <span class="status-chip status-chip-{{ status_tone(state, 'job') }}">{{ status_label(state, 'job') }}: {{ count }}</span>
+        {% else %}<span class="muted">No tasks yet.</span>
         {% endfor %}
     </p>
 </section>
 
 <section class="panel">
-    <h2>Recent failures</h2>
-    {% if ov.recent_failures %}
-    <div class="table-wrap">
-        <table class="data-table">
-            <thead><tr><th>Job</th><th>Type</th><th>Status</th><th>Attempts</th><th>Resource</th><th>Error</th></tr></thead>
-            <tbody>
-                {% for row in ov.recent_failures %}
-                <tr>
-                    <td><code>{{ row.id[:8] }}</code></td>
-                    <td>{{ row.job_type }}</td>
-                    <td>{{ row.status }}</td>
-                    <td>{{ row.attempts }}</td>
-                    <td>{{ row.resource }}</td>
-                    <td class="muted">{{ row.last_error }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+    <h2>Stopped tasks</h2>
+    <p class="muted" style="margin-top:0;">These tasks failed several times and stopped. Try again once the cause is fixed (for example, the AI service is back).</p>
+    {% if ov.dead_letters %}
+    <ul class="card-list">
+        {% for row in ov.dead_letters %}
+        <li class="list-card">
+            <div class="list-card-top">
+                <h3>{{ status_label(row.type or 'unknown', 'job_type') }}</h3>
+                <span class="status-chip status-chip-danger">Stopped</span>
+            </div>
+            <p class="list-card-meta">{% if row.dead_at %}Stopped {{ row.dead_at | local_dt }}{% endif %}</p>
+            {% if row.error %}<p>{{ friendly_error(row.error) }}</p>{% endif %}
+            <details class="tech-details">
+                <summary>Technical details</summary>
+                <p class="mono small">Task {{ row.job_id }} · {{ row.reason }}</p>
+                {% if row.error %}<pre class="mono small">{{ row.error[:600] }}</pre>{% endif %}
+            </details>
+            <div class="list-card-actions">
+                <form action="/admin/queues/dead/{{ row.entry_id }}/retry" method="post" class="inline-form"
+                      data-confirm-title="Try this task again?" data-confirm="It goes back into the queue and runs once more. If the cause isn't fixed, it may stop again." data-confirm-ok="Try again">
+                    <button type="submit" class="button button-secondary">Try again</button>
+                </form>
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
     {% else %}
-    <p class="muted">No failed jobs.</p>
+    <p class="muted">No stopped tasks.</p>
     {% endif %}
 </section>
 
 <section class="panel">
-    <h2>Dead letters</h2>
-    {% if ov.dead_letters %}
-    <div class="table-wrap">
-        <table class="data-table">
-            <thead><tr><th>Job</th><th>Type</th><th>Reason</th><th>Error</th><th>When</th><th></th></tr></thead>
-            <tbody>
-                {% for row in ov.dead_letters %}
-                <tr>
-                    <td><code>{{ (row.job_id or '')[:8] }}</code></td>
-                    <td>{{ row.type }}</td>
-                    <td>{{ row.reason }}</td>
-                    <td class="muted">{{ (row.error or '')[:200] }}</td>
-                    <td>{{ row.dead_at }}</td>
-                    <td>
-                        <form action="/admin/queues/dead/{{ row.entry_id }}/retry" method="post" class="inline-form">
-                            <button type="submit" class="button button-secondary">Retry</button>
-                        </form>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+    <h2>Recent problems</h2>
+    {% if ov.recent_failures %}
+    <ul class="card-list">
+        {% for row in ov.recent_failures %}
+        <li class="list-card">
+            <div class="list-card-top">
+                <h3>{{ status_label(row.job_type, 'job_type') }}</h3>
+                <span class="status-chip status-chip-{{ status_tone(row.status, 'job') }}">{{ status_label(row.status, 'job') }}</span>
+            </div>
+            <p class="list-card-meta">{{ row.attempts }} tr{{ 'ies' if row.attempts != 1 else 'y' }}{% if row.updated_at %} · last {{ row.updated_at | local_dt }}{% endif %}{% if row.resource %} · {{ row.resource }}{% endif %}</p>
+            {% if row.last_error %}<p>{{ friendly_error(row.last_error) }}</p>{% endif %}
+            <details class="tech-details">
+                <summary>Technical details</summary>
+                <p class="mono small">Task {{ row.id }}</p>
+                {% if row.last_error %}<pre class="mono small">{{ row.last_error }}</pre>{% endif %}
+            </details>
+        </li>
+        {% endfor %}
+    </ul>
     {% else %}
-    <p class="muted">The dead-letter stream is empty.</p>
+    <p class="muted">No problems recently.</p>
     {% endif %}
 </section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var marker = document.getElementById("queuesUpdated");
+  if (!marker) return;
+  var seconds = Number(marker.getAttribute("data-auto-refresh")) || 30;
+  var timer = setInterval(function () {
+    if (!marker.isConnected) { clearInterval(timer); return; }
+    if (document.hidden || document.querySelector("dialog[open]") || document.querySelector(".tech-details[open]")) return;
+    clearInterval(timer);
+    if (window.BCPNav) window.BCPNav.visit("/admin/queues", { force: true, replace: true });
+  }, seconds * 1000);
+})();
+</script>
 {% endblock %}

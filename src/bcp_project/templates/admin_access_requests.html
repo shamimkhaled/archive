@@ -1,101 +1,79 @@
 {% extends "base.html" %}
-{% from "macros/ui.html" import empty_state, status_chip %}
+{% from "macros/ui.html" import empty_state, breadcrumbs %}
 
-{% block title %}Review access requests | Sonali Bank Archive System{% endblock %}
+{% block title %}Access requests | Sonali Bank Archive System{% endblock %}
 
 {% block content %}
+{{ breadcrumbs([{'href': '/', 'label': 'Home'}, {'label': 'Access requests'}]) }}
 <div class="page-header">
     <div class="title-group">
-        <h1>Review access</h1>
-        <p>Approve or deny archive view and download requests.</p>
+        <h1>Access requests</h1>
+        <p>People asking to read a document they can't open yet. Approving lets them read it, marked with their name, for the days you choose.</p>
     </div>
-    <a class="button button-secondary" href="/access-requests">My requests</a>
+    <a class="button button-secondary" href="/access-requests" data-nav>My own requests</a>
 </div>
 
 <section class="panel">
-    <form method="get" action="/admin/access-requests" class="search-control" style="margin-bottom:1rem;">
-        <label for="status_filter" class="muted">Filter</label>
-        <select id="status_filter" name="status_filter" onchange="this.form.submit()">
-            {% for s in statuses %}
-            <option value="{{ s.value }}" {% if status_filter == s.value %}selected{% endif %}>{{ s.value | replace('_', ' ') | title }}</option>
-            {% endfor %}
-        </select>
+    <form method="get" action="/admin/access-requests" class="filter-bar" aria-label="Filter requests">
+        <div class="form-group">
+            <label for="status_filter">Show</label>
+            <select id="status_filter" name="status_filter">
+                {% for s in statuses %}
+                <option value="{{ s.value }}" {% if status_filter == s.value %}selected{% endif %}>{{ status_label(s.value, 'access') }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="filter-bar-actions"><button type="submit" class="button-secondary">Filter</button></div>
     </form>
 
     {% if not requests %}
-    {{ empty_state("Nothing in this filter", "No access requests match the selected status.") }}
+    {% if status_filter == 'pending' %}
+    {{ empty_state("Nothing to answer", "There are no requests waiting. New ones appear here.") }}
     {% else %}
-    <div class="table-wrap table-desktop">
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>Document</th>
-                    <th>Requester</th>
-                    <th>Mode</th>
-                    <th>Purpose</th>
-                    <th>Status</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for row in requests %}
-                <tr>
-                    <td>{{ row.doc_id }}</td>
-                    <td>{{ row.requester_username }}</td>
-                    <td>{{ row.requested_mode.value | replace('_', ' ') | title }}</td>
-                    <td>{{ row.purpose }}</td>
-                    <td>
-                        {% if row.status.value == 'approved' %}{{ status_chip('Approved', 'approved') }}
-                        {% elif row.status.value == 'denied' %}{{ status_chip('Denied', 'danger') }}
-                        {% elif row.status.value == 'revoked' %}{{ status_chip('Revoked', 'closed') }}
-                        {% else %}{{ status_chip('Pending', 'pending') }}
-                        {% endif %}
-                    </td>
-                    <td>
-                        {% if row.status.value == 'pending' %}
-                        <form method="post" action="/admin/access-requests/{{ row.id }}/review" class="review-actions">
-                            <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token', '') }}" />
-                            <input type="number" name="grant_days" value="7" min="1" max="365" title="Grant days" />
-                            <input type="text" name="review_note" placeholder="Note (optional)" />
-                            <button type="submit" name="decision" value="approve" class="button">Approve</button>
-                            <button type="submit" name="decision" value="deny" class="button button-secondary">Deny</button>
-                        </form>
-                        {% else %}
-                        <span class="muted">{{ row.reviewed_by or '—' }}</span>
-                        {% endif %}
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    <div class="mobile-card-list">
+    {{ empty_state("No requests here", "No requests have this status.") }}
+    {% endif %}
+    {% else %}
+    <ul class="card-list">
         {% for row in requests %}
-        <article class="review-card">
-            <div class="review-card-top">
-                <h3>{{ row.doc_id }}</h3>
-                {% if row.status.value == 'approved' %}{{ status_chip('Approved', 'approved') }}
-                {% elif row.status.value == 'denied' %}{{ status_chip('Denied', 'danger') }}
-                {% elif row.status.value == 'revoked' %}{{ status_chip('Revoked', 'closed') }}
-                {% else %}{{ status_chip('Pending', 'pending') }}
-                {% endif %}
+        {% set expired = row.status.value == 'approved' and row.expires_at and row.expires_at < now %}
+        {% set state = 'expired' if expired else row.status.value %}
+        <li class="list-card">
+            <div class="list-card-top">
+                <h2 class="notif-title">{{ titles.get(row.doc_id) or row.doc_id }}</h2>
+                <span class="status-chip status-chip-{{ status_tone(state, 'access') }}">{{ status_label(state, 'access') }}</span>
             </div>
-            <p class="muted">{{ row.requester_username }} · {{ row.requested_mode.value | replace('_', ' ') | title }}</p>
-            <p>{{ row.purpose }}</p>
+            <p class="list-card-meta">{{ row.doc_id }} · asked by <strong>{{ row.requester_username }}</strong> on {{ row.created_at | local_dt }}</p>
+            <p><span class="muted">Reason:</span> {{ row.purpose }}</p>
             {% if row.status.value == 'pending' %}
-            <form method="post" action="/admin/access-requests/{{ row.id }}/review" class="review-actions">
+            <form method="post" action="/admin/access-requests/{{ row.id }}/review" class="form-grid access-answer">
                 <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token', '') }}" />
-                <input type="number" name="grant_days" value="7" min="1" max="365" title="Grant days" />
-                <input type="text" name="review_note" placeholder="Note (optional)" />
-                <button type="submit" name="decision" value="approve" class="button">Approve</button>
-                <button type="submit" name="decision" value="deny" class="button button-secondary">Deny</button>
+                <div class="form-group">
+                    <label for="days{{ row.id }}">Days they can read it</label>
+                    <input id="days{{ row.id }}" type="number" name="grant_days" value="7" min="1" max="365" inputmode="numeric" />
+                </div>
+                <div class="form-group">
+                    <label for="note{{ row.id }}">Note to {{ row.requester_username }} (optional)</label>
+                    <input id="note{{ row.id }}" type="text" name="review_note" />
+                </div>
+                <div class="list-card-actions">
+                    <button type="submit" name="decision" value="approve" class="button"
+                            data-confirm="{{ row.requester_username }} will be able to read this document for the number of days you chose."
+                            data-confirm-title="Approve this request?" data-confirm-ok="Approve">Approve</button>
+                    <button type="submit" name="decision" value="deny" class="button button-secondary"
+                            data-confirm="{{ row.requester_username }} will be told the request was not approved, with your note."
+                            data-confirm-title="Say no to this request?" data-confirm-ok="Don't approve" data-confirm-danger>Don't approve</button>
+                </div>
             </form>
             {% else %}
-            <p class="muted">Reviewed by {{ row.reviewed_by or '—' }}</p>
+            <p class="muted">
+                Answered by {{ row.reviewed_by or '—' }}{% if row.reviewed_at %} on {{ row.reviewed_at | local_dt }}{% endif %}
+                {% if row.expires_at %} · {% if expired %}ended{% else %}can read until{% endif %} {{ row.expires_at | local_date }}{% endif %}
+            </p>
+            {% if row.review_note %}<p>Note: {{ row.review_note }}</p>{% endif %}
             {% endif %}
-        </article>
+        </li>
         {% endfor %}
-    </div>
+    </ul>
     {% endif %}
 </section>
 {% endblock %}

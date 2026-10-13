@@ -209,6 +209,7 @@ async def ask_sonali_for_principal(
                 for r in sources
             ],
             "answered_by": {"provider": call.get("provider"), "model": call.get("model"), "route": call.get("source")},
+            "source_titles": {str(r["doc_id"]): r.get("title") for r in evidence if r.get("doc_id") and r.get("title")},
             "query": q,
             "human_in_the_loop": True,
             "disclaimer": "AI support only — humans retain final decision authority.",

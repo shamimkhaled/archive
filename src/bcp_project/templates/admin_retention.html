@@ -1,201 +1,268 @@
 {% extends "base.html" %}
+{% from "macros/ui.html" import breadcrumbs %}
 
-{% block title %}Records retention | {{ brand.product_name }}{% endblock %}
+{% block title %}Keep and delete rules | {{ brand.product_name }}{% endblock %}
 
 {% block content %}
 {% set ov = overview %}
+{% set is_admin = user.role.value == 'admin' %}
+{{ breadcrumbs([{'href': '/', 'label': 'Home'}, {'label': 'Keep and delete rules'}]) }}
 <div class="page-header">
     <div class="title-group">
-        <h1>Records retention</h1>
-        <p>How long each document type is kept, which records are on legal hold, and disposal of records past retention. Disposal needs two people and leaves a permanent tombstone.</p>
+        <h1>Keep and delete rules</h1>
+        <p>How long each kind of document is kept, which documents must not be deleted, and old documents that can be deleted. Deleting always needs two people and leaves a permanent record.</p>
     </div>
 </div>
 
+<nav class="section-tabs" aria-label="Sections">
+    <a href="#rules">How long we keep</a>
+    <a href="#holds">Do not delete</a>
+    <a href="#due">Ready to delete</a>
+    <a href="#requests">Delete requests</a>
+</nav>
+
 {% set messages = {
-    'rule_saved': 'Retention rule saved and retention dates recalculated.',
-    'rule_deleted': 'Rule removed; that document type is now kept permanently.',
-    'hold_set': 'Legal hold placed. The document cannot be disposed of until it is released.',
-    'hold_released': 'Legal hold released.',
-    'proposed': 'Disposal proposed. A second person must approve it.',
-    'disposed': 'Disposal approved and carried out. The tombstone is listed below.',
-    'rejected': 'Disposal request rejected.',
-    'cancelled': 'Disposal request cancelled.',
+    'rule_saved': 'Rule saved. Keep-until dates were worked out again.',
+    'rule_deleted': 'Rule removed. That kind of document is now kept forever.',
+    'hold_set': "Marked as do-not-delete. It can't be deleted until the mark is removed.",
+    'hold_released': 'Do-not-delete mark removed.',
+    'proposed': 'Delete request sent. A second person must approve it.',
+    'disposed': 'Approved and deleted. A permanent record of the deletion is listed below.',
+    'rejected': 'Delete request not approved.',
+    'cancelled': 'Delete request cancelled.',
 } %}
 {% if status in messages %}
 <div class="alert alert-success" role="status">{{ messages[status] }}</div>
 {% endif %}
 {% if error %}
-<div class="alert alert-error" role="alert">{{ error }}</div>
+<div class="alert alert-error" role="alert">That didn't work: {{ error }}</div>
 {% endif %}
 
-<section class="panel">
-    <h2>Retention rules</h2>
-    <p class="muted">Periods come from the bank's records management policy. A document type without a rule is kept permanently.</p>
+<section class="panel" id="rules">
+    <h2>How long we keep each kind of document</h2>
+    <p class="muted">From the bank's records policy. A kind of document with no rule is kept forever.</p>
     {% if ov.rules %}
-    <div class="table-wrap">
-        <table class="data-table">
-            <thead><tr><th>Document type</th><th>Kept for</th><th>Counted from</th><th>Authority</th><th>Updated</th><th></th></tr></thead>
-            <tbody>
-                {% for r in ov.rules %}
-                <tr>
-                    <td>{{ r.doc_type }}</td>
-                    <td>{{ (r.retain_years ~ ' years') if r.retain_years else 'Permanent' }}</td>
-                    <td>{{ 'Document date' if r.trigger == 'doc_date' else 'Upload date' }}</td>
-                    <td>{{ r.authority or '—' }}</td>
-                    <td>{{ r.updated_by }}<br><span class="muted">{{ r.updated_at }}</span></td>
-                    <td>
-                        {% if user.role.value == 'admin' %}
-                        <form action="/admin/retention/rules/{{ r.id }}/delete" method="post" class="inline-form">
-                            <button type="submit" class="button button-secondary">Remove</button>
-                        </form>
-                        {% endif %}
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+    <ul class="card-list">
+        {% for r in ov.rules %}
+        <li class="list-card">
+            <div class="list-card-top">
+                <h3>{{ r.doc_type }}</h3>
+                <span class="status-chip status-chip-{{ 'info' if r.retain_years else 'neutral' }}">{{ ('Keep ' ~ r.retain_years ~ ' year' ~ ('s' if r.retain_years != 1 else '')) if r.retain_years else 'Keep forever' }}</span>
+            </div>
+            <p class="list-card-meta">
+                Counted from the {{ 'date on the document' if r.trigger == 'doc_date' else 'upload date' }}
+                · policy: {{ r.authority or 'not given' }}
+                · changed by {{ r.updated_by }}{% if r.updated_at %} on {{ r.updated_at | local_date }}{% endif %}
+            </p>
+            {% if is_admin %}
+            <div class="list-card-actions">
+                <form action="/admin/retention/rules/{{ r.id }}/delete" method="post" class="inline-form"
+                      data-confirm-title="Remove the rule for {{ r.doc_type }}?" data-confirm="Documents of this kind will then be kept forever." data-confirm-ok="Remove rule">
+                    <button type="submit" class="button button-secondary">Remove rule</button>
+                </form>
+            </div>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
     {% else %}
-    <p>No rules yet: every document is kept permanently.</p>
+    <p>No rules yet, so every document is kept forever.</p>
     {% endif %}
 
-    {% if user.role.value == 'admin' %}
-    <form action="/admin/retention/rules" method="post" class="form-grid">
-        <label>Document type
-            <input type="text" name="doc_type" required maxlength="64" placeholder="e.g. Letter">
-        </label>
-        <label>Years (blank = permanent)
-            <input type="number" name="retain_years" min="1" max="200">
-        </label>
-        <label>Counted from
-            <select name="trigger">
-                <option value="doc_date">Document date</option>
-                <option value="upload_date">Upload date</option>
-            </select>
-        </label>
-        <label>Authority
-            <input type="text" name="authority" maxlength="300" placeholder="Policy clause or circular reference">
-        </label>
-        <div><button type="submit" class="button">Save rule</button></div>
-    </form>
+    {% if is_admin %}
+    <details class="soft-details">
+        <summary>Add or change a rule</summary>
+        <form action="/admin/retention/rules" method="post" class="form-grid">
+            <div class="form-group">
+                <label for="ruleType">Kind of document</label>
+                <input id="ruleType" type="text" name="doc_type" required maxlength="64" placeholder="For example: Letter">
+                <p class="field-hint">Use the same name as on the upload form. Saving a kind that already has a rule replaces it.</p>
+            </div>
+            <div class="form-group">
+                <label for="ruleYears">Years to keep</label>
+                <input id="ruleYears" type="number" name="retain_years" min="1" max="200" inputmode="numeric">
+                <p class="field-hint">Leave empty to keep forever.</p>
+            </div>
+            <div class="form-group">
+                <label for="ruleTrigger">Count the years from</label>
+                <select id="ruleTrigger" name="trigger">
+                    <option value="doc_date">The date on the document</option>
+                    <option value="upload_date">The upload date</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="ruleAuthority">Policy reference</label>
+                <input id="ruleAuthority" type="text" name="authority" maxlength="300" placeholder="Policy clause or circular number">
+            </div>
+            <div><button type="submit" class="button">Save rule</button></div>
+        </form>
+    </details>
     {% endif %}
 </section>
 
-<section class="panel">
-    <h2>Legal holds</h2>
-    <p class="muted">A document on hold cannot be disposed of, whatever its retention date.</p>
+<section class="panel" id="holds">
+    <h2>Do not delete</h2>
+    <p class="muted">Documents marked here can't be deleted, whatever their keep-until date. Use it for legal cases, audits and investigations.</p>
     {% if ov.holds %}
-    <div class="table-wrap">
-        <table class="data-table">
-            <thead><tr><th>Document</th><th>Reason</th><th>Placed by</th><th></th></tr></thead>
-            <tbody>
-                {% for d in ov.holds %}
-                <tr>
-                    <td><a href="/view/{{ d.doc_id }}" data-nav>{{ d.doc_id }}</a><br><span class="muted">{{ d.title or d.doc_type }}</span></td>
-                    <td>{{ d.legal_hold_reason }}</td>
-                    <td>{{ d.legal_hold_by }}<br><span class="muted">{{ d.legal_hold_at }}</span></td>
-                    <td>
-                        <form action="/admin/retention/holds" method="post" class="inline-form">
-                            <input type="hidden" name="doc_id" value="{{ d.doc_id }}">
-                            <input type="hidden" name="action" value="release">
-                            <input type="text" name="reason" required placeholder="Release reference" aria-label="Release reference">
-                            <button type="submit" class="button button-secondary">Release</button>
-                        </form>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+    <ul class="card-list">
+        {% for d in ov.holds %}
+        <li class="list-card">
+            <div class="list-card-top">
+                <h3><a href="/view/{{ d.doc_id }}">{{ d.title or d.doc_type or d.doc_id }}</a></h3>
+                <span class="status-chip status-chip-warn">Do not delete</span>
+            </div>
+            <p class="list-card-meta">{{ d.doc_id }} · marked by {{ d.legal_hold_by }}{% if d.legal_hold_at %} on {{ d.legal_hold_at | local_date }}{% endif %}</p>
+            <p>Reason: {{ d.legal_hold_reason }}</p>
+            <details class="soft-details">
+                <summary>Remove the mark</summary>
+                <form action="/admin/retention/holds" method="post" class="form-grid"
+                      data-confirm-title="Remove the do-not-delete mark?" data-confirm="{{ d.doc_id }} can then be deleted when its keep-until date has passed." data-confirm-ok="Remove mark">
+                    <input type="hidden" name="doc_id" value="{{ d.doc_id }}">
+                    <input type="hidden" name="action" value="release">
+                    <div class="form-group">
+                        <label for="rel{{ loop.index }}">Reference for removing it</label>
+                        <input id="rel{{ loop.index }}" type="text" name="reason" required placeholder="Case closed, instruction number…">
+                    </div>
+                    <div><button type="submit" class="button button-secondary">Remove mark</button></div>
+                </form>
+            </details>
+        </li>
+        {% endfor %}
+    </ul>
     {% else %}
-    <p>No documents are on legal hold.</p>
+    <p>No documents are marked do-not-delete.</p>
     {% endif %}
-    <form action="/admin/retention/holds" method="post" class="form-grid">
-        <input type="hidden" name="action" value="set">
-        <label>Document ID
-            <input type="text" name="doc_id" required maxlength="128">
-        </label>
-        <label>Reason
-            <input type="text" name="reason" required maxlength="500" placeholder="Case, audit, or instruction reference">
-        </label>
-        <div><button type="submit" class="button">Place hold</button></div>
-    </form>
+
+    <details class="soft-details"{% if not ov.holds %} open{% endif %}>
+        <summary>Mark a document as do-not-delete</summary>
+        <form action="/admin/retention/holds" method="post" class="form-grid" id="holdForm">
+            <input type="hidden" name="action" value="set">
+            <div class="form-group">
+                <label for="holdDoc">Document ID</label>
+                <input id="holdDoc" type="text" name="doc_id" required maxlength="128" autocapitalize="characters" spellcheck="false" placeholder="For example: SB-2026-001" aria-describedby="holdDocInfo">
+                <p class="field-hint" id="holdDocInfo" aria-live="polite">We'll show the document's name so you can check it's the right one.</p>
+            </div>
+            <div class="form-group">
+                <label for="holdReason">Reason</label>
+                <input id="holdReason" type="text" name="reason" required maxlength="500" placeholder="Case, audit or instruction reference">
+            </div>
+            <div><button type="submit" class="button">Mark as do-not-delete</button></div>
+        </form>
+    </details>
 </section>
 
-<section class="panel">
-    <h2>Due for disposal</h2>
+<section class="panel" id="due">
+    <h2>Ready to delete</h2>
+    <p class="muted">These documents are past their keep-until date. Deleting one needs a request from you and approval from a second person.</p>
     {% if ov.due %}
-    <div class="table-wrap">
-        <table class="data-table">
-            <thead><tr><th>Document</th><th>Type</th><th>Retained until</th><th>Status</th><th></th></tr></thead>
-            <tbody>
-                {% for d in ov.due %}
-                <tr>
-                    <td><a href="/view/{{ d.doc_id }}" data-nav>{{ d.doc_id }}</a><br><span class="muted">{{ d.title or '' }}</span></td>
-                    <td>{{ d.doc_type }}</td>
-                    <td>{{ d.retention_until }}</td>
-                    <td>{% if d.blockers %}<span class="muted">Blocked: {{ d.blockers|join('; ') }}</span>{% else %}Ready{% endif %}</td>
-                    <td>
-                        {% if not d.blockers %}
-                        <form action="/admin/retention/disposals" method="post" class="inline-form">
-                            <input type="hidden" name="doc_id" value="{{ d.doc_id }}">
-                            <input type="text" name="reason" required placeholder="Schedule reference" aria-label="Disposal reason">
-                            <button type="submit" class="button button-secondary">Propose disposal</button>
-                        </form>
-                        {% endif %}
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+    <ul class="card-list">
+        {% for d in ov.due %}
+        <li class="list-card">
+            <div class="list-card-top">
+                <h3><a href="/view/{{ d.doc_id }}">{{ d.title or d.doc_id }}</a></h3>
+                {% if d.blockers %}<span class="status-chip status-chip-neutral">Can't delete yet</span>{% else %}<span class="status-chip status-chip-info">Can be deleted</span>{% endif %}
+            </div>
+            <p class="list-card-meta">{{ d.doc_id }} · {{ d.doc_type }} · keep until {{ d.retention_until | local_date }}</p>
+            {% if d.blockers %}<p class="muted">Why not: {{ d.blockers | join('; ') }}</p>{% endif %}
+            {% if not d.blockers %}
+            <details class="soft-details">
+                <summary>Ask to delete</summary>
+                <form action="/admin/retention/disposals" method="post" class="form-grid"
+                      data-confirm-title="Ask to delete {{ d.doc_id }}?" data-confirm="A second person must approve before anything is deleted." data-confirm-ok="Send request">
+                    <input type="hidden" name="doc_id" value="{{ d.doc_id }}">
+                    <div class="form-group">
+                        <label for="disp{{ loop.index }}">Records schedule reference</label>
+                        <input id="disp{{ loop.index }}" type="text" name="reason" required>
+                    </div>
+                    <div><button type="submit" class="button button-secondary">Send delete request</button></div>
+                </form>
+            </details>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
     {% else %}
-    <p>Nothing is past its retention date.</p>
+    <p>Nothing is past its keep-until date.</p>
     {% endif %}
 </section>
 
-<section class="panel">
-    <h2>Disposal requests and tombstones</h2>
+<section class="panel" id="requests">
+    <h2>Delete requests and deletion records</h2>
     {% if ov.disposals %}
-    <div class="table-wrap">
-        <table class="data-table">
-            <thead><tr><th>#</th><th>Document</th><th>Status</th><th>Proposed</th><th>Reviewed</th><th></th></tr></thead>
-            <tbody>
-                {% for d in ov.disposals %}
-                <tr>
-                    <td>{{ d.id }}</td>
-                    <td>{{ d.doc_id }}<br><span class="muted">{{ d.title or d.doc_type or '' }}</span></td>
-                    <td>
-                        {{ d.status }}{% if d.executed_at %}<br><span class="muted">{{ d.executed_at }}</span>{% endif %}
-                        {% if d.last_error %}<br><span class="muted">Last attempt failed: {{ d.last_error }}</span>{% endif %}
-                    </td>
-                    <td>{{ d.proposed_by }}<br><span class="muted">{{ d.reason }}</span></td>
-                    <td>{{ d.reviewed_by or '—' }}{% if d.review_note %}<br><span class="muted">{{ d.review_note }}</span>{% endif %}</td>
-                    <td>
-                        {% if d.status == 'proposed' and d.proposed_by != user.username %}
-                        <form action="/admin/retention/disposals/{{ d.id }}/approve" method="post" class="inline-form">
-                            <button type="submit" class="button">Approve and dispose</button>
-                        </form>
-                        {% endif %}
-                        {% if d.status == 'approved' and user.username in [d.proposed_by, d.reviewed_by] %}
-                        <form action="/admin/retention/disposals/{{ d.id }}/approve" method="post" class="inline-form">
-                            <button type="submit" class="button">Retry disposal</button>
-                        </form>
-                        {% endif %}
-                        {% if d.status in ['proposed', 'approved'] %}
-                        <form action="/admin/retention/disposals/{{ d.id }}/reject" method="post" class="inline-form">
-                            <input type="text" name="note" placeholder="Note" aria-label="Note">
-                            <button type="submit" class="button button-secondary">{{ 'Cancel' if d.proposed_by == user.username else 'Reject' }}</button>
-                        </form>
-                        {% endif %}
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+    <ul class="card-list">
+        {% for d in ov.disposals %}
+        <li class="list-card">
+            <div class="list-card-top">
+                <h3>{{ d.title or d.doc_type or d.doc_id }}</h3>
+                <span class="status-chip status-chip-{{ status_tone(d.status, 'retention') }}">{{ status_label(d.status, 'retention') }}</span>
+            </div>
+            <p class="list-card-meta">
+                {{ d.doc_id }} · asked by {{ d.proposed_by }}{% if d.proposed_at %} on {{ d.proposed_at | local_date }}{% endif %} · reference: {{ d.reason }}
+                {% if d.reviewed_by %} · answered by {{ d.reviewed_by }}{% endif %}
+                {% if d.executed_at %} · deleted {{ d.executed_at | local_dt }}{% endif %}
+            </p>
+            {% if d.review_note %}<p class="muted">Note: {{ d.review_note }}</p>{% endif %}
+            {% if d.last_error %}<p class="muted">The last try to delete didn't finish: {{ friendly_error(d.last_error) }}</p>{% endif %}
+            {% if d.status in ['proposed', 'approved'] %}
+            <div class="list-card-actions">
+                {% if d.status == 'proposed' and d.proposed_by != user.username %}
+                <form action="/admin/retention/disposals/{{ d.id }}/approve" method="post" class="inline-form"
+                      data-confirm-title="Delete {{ d.doc_id }} for good?" data-confirm="The document and all its versions are deleted and can't be brought back. Only a record that it existed is kept."
+                      data-confirm-ok="Delete for good" data-confirm-danger data-confirm-type="{{ d.doc_id }}">
+                    <button type="submit" class="button button-danger">Approve and delete</button>
+                </form>
+                {% endif %}
+                {% if d.status == 'approved' and user.username in [d.proposed_by, d.reviewed_by] %}
+                <form action="/admin/retention/disposals/{{ d.id }}/approve" method="post" class="inline-form"
+                      data-confirm-title="Try the deletion again?" data-confirm="This finishes deleting {{ d.doc_id }}." data-confirm-ok="Try again" data-confirm-danger>
+                    <button type="submit" class="button">Try deleting again</button>
+                </form>
+                {% endif %}
+                <form action="/admin/retention/disposals/{{ d.id }}/reject" method="post" class="inline-form">
+                    <label class="sr-only" for="dnote{{ d.id }}">Note</label>
+                    <input id="dnote{{ d.id }}" type="text" name="note" placeholder="Note (optional)">
+                    <button type="submit" class="button button-secondary">{{ 'Cancel my request' if d.proposed_by == user.username else "Don't approve" }}</button>
+                </form>
+            </div>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
     {% else %}
-    <p class="muted">No disposal requests yet.</p>
+    <p class="muted">No delete requests yet.</p>
     {% endif %}
 </section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var input = document.getElementById("holdDoc");
+  var info = document.getElementById("holdDocInfo");
+  if (!input || !info) return;
+  var timer = null;
+  var asked = "";
+  function look() {
+    var id = input.value.trim();
+    if (!id || id === asked) return;
+    asked = id;
+    info.textContent = "Looking it up…";
+    fetch("/api/admin/retention/lookup?doc_id=" + encodeURIComponent(id), { credentials: "same-origin", headers: { Accept: "application/json" } })
+      .then(function (res) {
+        if (res.status === 404) return { missing: true };
+        if (!res.ok) throw new Error("lookup");
+        return res.json();
+      })
+      .then(function (doc) {
+        if (input.value.trim() !== id) return;
+        if (doc.missing) { info.textContent = "No document has this ID. Please check it."; return; }
+        var name = doc.title || doc.doc_type || doc.doc_id;
+        info.textContent = "Found: " + name + (doc.doc_date ? " (" + doc.doc_date + ")" : "") + (doc.legal_hold ? ". It is already marked do-not-delete." : ".");
+      })
+      .catch(function () { info.textContent = "Couldn't check this ID right now. You can still continue."; });
+  }
+  input.addEventListener("input", function () { clearTimeout(timer); timer = setTimeout(look, 450); });
+  input.addEventListener("blur", look);
+})();
+</script>
 {% endblock %}

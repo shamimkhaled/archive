@@ -1,20 +1,26 @@
 {% extends "base.html" %}
 
-{% block title %}Sign In | {{ brand.product_name }}{% endblock %}
+{% block title %}Sign in | {{ brand.product_name }}{% endblock %}
 {% block body_class %}auth-page{% endblock %}
 
 {% block content %}
 <div class="login-shell">
     <aside class="login-brand-panel" aria-label="{{ brand.org_name }}">
-        <img
-            class="login-brand-photo"
-            src="{{ brand.login_background_path }}?v={{ static_version }}"
-            alt=""
-            width="1920"
-            height="1280"
-            decoding="async"
-            fetchpriority="high"
-        />
+        <picture>
+            {% if brand.login_background_path == '/static/img/sonali-login-background.png' %}
+            <source type="image/webp" sizes="(max-width: 899px) 100vw, 50vw"
+                    srcset="/static/img/sonali-login-background-960.webp?v={{ static_version }} 960w, /static/img/sonali-login-background-1920.webp?v={{ static_version }} 1920w" />
+            {% endif %}
+            <img
+                class="login-brand-photo"
+                src="{{ brand.login_background_path }}?v={{ static_version }}"
+                alt=""
+                width="1920"
+                height="1280"
+                decoding="async"
+                fetchpriority="high"
+            />
+        </picture>
         <div class="login-brand-scrim login-brand-scrim--photo" aria-hidden="true"></div>
         <div class="login-brand-stack">
             <div class="login-brand-inner login-brand-inner--minimal">
@@ -41,26 +47,34 @@
                 </div>
             </div>
             <h1>Sign in</h1>
-            <p class="auth-lead">Board meetings, the secure archive, and the workspace — for Sonali Bank PLC.</p>
+            <p class="auth-lead">Board meetings and the bank's secure document archive.</p>
 
-            {% if request.query_params.get('error') == 'invalid' %}
-            <div class="alert alert-error" role="alert">Incorrect username or password. Please try again.</div>
-            {% elif request.query_params.get('error') == 'inactive' %}
-            <div class="alert alert-error" role="alert">This account is inactive. Contact an administrator.</div>
-            {% elif request.query_params.get('error') == 'locked' %}
-            <div class="alert alert-error" role="alert">Too many failed attempts. Try again in a few minutes.</div>
-            {% elif request.query_params.get('error') == 'mfa_expired' %}
-            <div class="alert alert-error" role="alert">The verification step expired. Sign in again.</div>
-            {% elif request.query_params.get('error') == 'ldap_unavailable' %}
-            <div class="alert alert-error" role="alert">The bank directory is unreachable. Try again shortly or contact IT.</div>
-            {% elif request.query_params.get('error') in ('ldap_role', 'ldap_user') %}
-            <div class="alert alert-error" role="alert">Your directory account has no archive access. Contact an administrator.</div>
+            {% set err = request.query_params.get('error') or '' %}
+            {% if err == 'invalid' %}
+            <div class="alert alert-error" role="alert">The username or password is not right. Please try again.</div>
+            {% elif err == 'inactive' %}
+            <div class="alert alert-error" role="alert">This account is switched off. Please ask an administrator to turn it on.</div>
+            {% elif err == 'locked' %}
+            <div class="alert alert-error" role="alert">Too many tries. For your safety, please wait a few minutes and try again.</div>
+            {% elif err == 'mfa_expired' %}
+            <div class="alert alert-error" role="alert">The sign-in took too long. Please sign in again.</div>
+            {% elif err == 'ldap_unavailable' %}
+            <div class="alert alert-error" role="alert">We can't reach the bank's staff directory right now. Please try again in a few minutes, or call IT.</div>
+            {% elif err in ('ldap_role', 'ldap_user', 'oidc_role') %}
+            <div class="alert alert-error" role="alert">Your bank account doesn't have access to the archive yet. Please ask an administrator.</div>
+            {% elif err.startswith('oidc_') %}
+            <div class="alert alert-error" role="alert">Signing in with your bank account didn't work. Please try again, or use your username and password.</div>
+            {% endif %}
+
+            {% if oidc_enabled %}
+            <a class="button button-block" href="/auth/oidc/start">Sign in with your bank account</a>
+            <p class="auth-divider" role="separator"><span>or use a username and password</span></p>
             {% endif %}
 
             <form action="/login" method="post" class="form-grid" id="loginForm">
                 <div class="form-group">
                     <label for="username">Username</label>
-                    <input id="username" type="text" name="username" required autocomplete="username" autofocus />
+                    <input id="username" type="text" name="username" required autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false"{% if not oidc_enabled %} autofocus{% endif %} />
                 </div>
                 <div class="form-group">
                     <label for="password">Password</label>
@@ -70,22 +84,14 @@
                             Show
                         </button>
                     </div>
+                    <p class="field-hint" id="capsHint" hidden role="status">Caps Lock is on.</p>
                 </div>
                 <button type="submit" class="button-block" id="loginSubmit">
-                    <span class="login-submit-label">Sign In</span>
+                    <span class="login-submit-label">Sign in</span>
                     <span class="login-submit-busy" hidden>Signing in…</span>
                 </button>
             </form>
-            {% if oidc_enabled %}
-            <p class="auth-lead" style="margin-top:1rem;">
-                <a class="button-block" href="/auth/oidc/start">Sign in with bank SSO (OIDC)</a>
-            </p>
-            {% endif %}
-            {% if request.query_params.get('error') == 'oidc_role' %}
-            <div class="alert alert-error" role="alert">Your SSO account has no archive access. Contact an administrator.</div>
-            {% elif (request.query_params.get('error') or '').startswith('oidc_') %}
-            <div class="alert alert-error" role="alert">SSO sign-in failed. Contact an administrator.</div>
-            {% endif %}
+            <p class="auth-help">Forgot your password or can't sign in? Please contact the IT help desk or your system administrator.</p>
             <p class="auth-credit">
                 Powered by
                 <a href="https://alawaf.com.bd" target="_blank" rel="noopener noreferrer">Alawaf</a>
@@ -112,6 +118,13 @@
       if (label) label.hidden = true;
       if (busy) busy.hidden = false;
     });
+  }
+  var caps = document.getElementById("capsHint");
+  if (password && caps) {
+    var checkCaps = function (e) { if (e.getModifierState) caps.hidden = !e.getModifierState("CapsLock"); };
+    password.addEventListener("keyup", checkCaps);
+    password.addEventListener("keydown", checkCaps);
+    password.addEventListener("blur", function () { caps.hidden = true; });
   }
   if (toggle && password) {
     toggle.addEventListener("click", function () {

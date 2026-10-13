@@ -30,12 +30,37 @@
     }, 320);
   }
 
+  function showUpdateBanner(worker) {
+    var banner = document.getElementById("updateBanner");
+    var btn = document.getElementById("updateReloadBtn");
+    if (!banner || !btn || !worker) return;
+    banner.hidden = false;
+    btn.onclick = function () {
+      btn.disabled = true;
+      worker.postMessage({ type: "SKIP_WAITING" });
+    };
+  }
+
   function registerServiceWorker() {
     if (!("serviceWorker" in navigator)) return;
+    var reloading = false;
+    navigator.serviceWorker.addEventListener("controllerchange", function () {
+      if (reloading) return;
+      reloading = true;
+      window.location.reload();
+    });
     navigator.serviceWorker.register("/sw.js", { scope: "/" }).then(function (reg) {
-      if (reg && typeof reg.update === "function") {
-        try { reg.update(); } catch (e) {}
-      }
+      if (!reg) return;
+      // A new version is waiting only when an older one already controls this page.
+      if (reg.waiting && navigator.serviceWorker.controller) showUpdateBanner(reg.waiting);
+      reg.addEventListener("updatefound", function () {
+        var next = reg.installing;
+        if (!next) return;
+        next.addEventListener("statechange", function () {
+          if (next.state === "installed" && navigator.serviceWorker.controller) showUpdateBanner(next);
+        });
+      });
+      try { reg.update(); } catch (e) {}
     }).catch(function () {});
   }
 
@@ -46,36 +71,335 @@
     }
   }
 
+  var FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+  function sheetParts() {
+    return {
+      toggle: document.getElementById("moreNavToggle"),
+      sheet: document.getElementById("moreSheet"),
+      backdrop: document.getElementById("moreSheetBackdrop"),
+    };
+  }
+
+  function closeMoreSheet(restoreFocus) {
+    var p = sheetParts();
+    if (!p.sheet || p.sheet.hidden) return;
+    p.sheet.hidden = true;
+    if (p.backdrop) p.backdrop.hidden = true;
+    if (p.toggle) p.toggle.setAttribute("aria-expanded", "false");
+    document.body.classList.remove("sheet-open");
+    if (restoreFocus && p.toggle) p.toggle.focus();
+  }
+
+  function openMoreSheet() {
+    var p = sheetParts();
+    if (!p.sheet) return;
+    p.sheet.hidden = false;
+    if (p.backdrop) p.backdrop.hidden = false;
+    if (p.toggle) p.toggle.setAttribute("aria-expanded", "true");
+    document.body.classList.add("sheet-open");
+    var first = p.sheet.querySelector(FOCUSABLE);
+    (first || p.sheet).focus();
+  }
+
   function initMoreSheet() {
-    var toggle = document.getElementById("moreNavToggle");
-    var sheet = document.getElementById("moreSheet");
-    var backdrop = document.getElementById("moreSheetBackdrop");
-    if (!toggle || !sheet) return;
+    var p = sheetParts();
+    if (!p.toggle || !p.sheet) return;
+    p.toggle.addEventListener("click", function () {
+      if (p.sheet.hidden) openMoreSheet();
+      else closeMoreSheet(true);
+    });
+    if (p.backdrop) p.backdrop.addEventListener("click", function () { closeMoreSheet(true); });
+    p.sheet.querySelectorAll("a").forEach(function (link) {
+      link.addEventListener("click", function () { closeMoreSheet(false); });
+    });
+    p.sheet.querySelectorAll("[data-sheet-close]").forEach(function (btn) {
+      btn.addEventListener("click", function () { closeMoreSheet(true); });
+    });
+  }
 
-    function open() {
-      sheet.hidden = false;
-      if (backdrop) backdrop.hidden = false;
-      toggle.setAttribute("aria-expanded", "true");
-      document.body.classList.add("sheet-open");
+  function onSheetKeydown(e) {
+    var p = sheetParts();
+    if (!p.sheet || p.sheet.hidden) return;
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closeMoreSheet(true);
+      return;
     }
-    function close() {
-      sheet.hidden = true;
-      if (backdrop) backdrop.hidden = true;
-      toggle.setAttribute("aria-expanded", "false");
-      document.body.classList.remove("sheet-open");
+    if (e.key !== "Tab") return;
+    var items = Array.prototype.filter.call(p.sheet.querySelectorAll(FOCUSABLE), function (el) {
+      return el.offsetParent !== null;
+    });
+    if (!items.length) return;
+    var first = items[0];
+    var last = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
     }
+  }
 
-    toggle.addEventListener("click", function () {
-      if (sheet.hidden) open();
-      else close();
+  function announce(text) {
+    var region = document.getElementById("routeAnnouncer");
+    if (!region) return;
+    region.textContent = "";
+    setTimeout(function () { region.textContent = text; }, 50);
+  }
+
+  function focusNewPage() {
+    var heading = document.querySelector("#main-content h1");
+    var target = heading || document.getElementById("main-content");
+    if (!target) return;
+    if (!target.hasAttribute("tabindex")) target.setAttribute("tabindex", "-1");
+    try { target.focus({ preventScroll: true }); } catch (e) { target.focus(); }
+    announce((heading && heading.textContent.trim()) || document.title);
+  }
+
+  function toast(message, ms) {
+    var region = document.getElementById("toastRegion");
+    if (!region || !message) return;
+    var el = document.createElement("div");
+    el.className = "ui-toast";
+    el.textContent = message;
+    region.appendChild(el);
+    setTimeout(function () { el.remove(); }, ms || 4200);
+  }
+
+  /**
+   * Plain confirm dialog. opts: { title, text, ok, danger, typeToConfirm }.
+   * Resolves true when the person confirms.
+   */
+  function confirmAction(opts) {
+    opts = opts || {};
+    var dialog = document.getElementById("confirmDialog");
+    if (!dialog || typeof dialog.showModal !== "function") {
+      return Promise.resolve(window.confirm(opts.text || opts.title || "Are you sure?"));
+    }
+    var title = document.getElementById("confirmDialogTitle");
+    var text = document.getElementById("confirmDialogText");
+    var extra = document.getElementById("confirmDialogExtra");
+    var ok = document.getElementById("confirmDialogOk");
+    title.textContent = opts.title || "Are you sure?";
+    text.textContent = opts.text || "";
+    ok.textContent = opts.ok || "Confirm";
+    ok.className = "button" + (opts.danger ? " button-danger" : "");
+    extra.innerHTML = "";
+    var typed = null;
+    if (opts.typeToConfirm) {
+      var label = document.createElement("label");
+      label.textContent = 'Type "' + opts.typeToConfirm + '" to confirm';
+      label.setAttribute("for", "confirmDialogInput");
+      typed = document.createElement("input");
+      typed.id = "confirmDialogInput";
+      typed.autocomplete = "off";
+      extra.appendChild(label);
+      extra.appendChild(typed);
+      ok.disabled = true;
+      typed.addEventListener("input", function () {
+        ok.disabled = typed.value.trim() !== opts.typeToConfirm;
+      });
+    } else {
+      ok.disabled = false;
+    }
+    return new Promise(function (resolve) {
+      dialog.addEventListener(
+        "close",
+        function () {
+          resolve(dialog.returnValue === "ok");
+        },
+        { once: true }
+      );
+      dialog.returnValue = "";
+      dialog.showModal();
+      (typed || ok).focus();
     });
-    if (backdrop) backdrop.addEventListener("click", close);
-    sheet.querySelectorAll("a").forEach(function (link) {
-      link.addEventListener("click", close);
+  }
+
+  /** Dialog with one text box. opts: { title, text, label, value, ok }. Resolves the text, or null if cancelled. */
+  function promptAction(opts) {
+    opts = opts || {};
+    var dialog = document.getElementById("confirmDialog");
+    if (!dialog || typeof dialog.showModal !== "function") {
+      var answer = window.prompt(opts.label || opts.title || "", opts.value || "");
+      return Promise.resolve(answer && answer.trim() ? answer.trim() : null);
+    }
+    var extra = document.getElementById("confirmDialogExtra");
+    var ok = document.getElementById("confirmDialogOk");
+    document.getElementById("confirmDialogTitle").textContent = opts.title || "";
+    document.getElementById("confirmDialogText").textContent = opts.text || "";
+    ok.textContent = opts.ok || "OK";
+    ok.className = "button";
+    extra.innerHTML = "";
+    var label = document.createElement("label");
+    label.setAttribute("for", "confirmDialogInput");
+    label.textContent = opts.label || "";
+    var input = document.createElement("textarea");
+    input.id = "confirmDialogInput";
+    input.rows = 2;
+    input.maxLength = 500;
+    input.value = opts.value || "";
+    extra.appendChild(label);
+    extra.appendChild(input);
+    ok.disabled = !input.value.trim();
+    input.addEventListener("input", function () {
+      ok.disabled = !input.value.trim();
     });
-    document.addEventListener("keydown", function (e) {
-      if (e.key === "Escape") close();
+    return new Promise(function (resolve) {
+      dialog.addEventListener(
+        "close",
+        function () {
+          resolve(dialog.returnValue === "ok" && input.value.trim() ? input.value.trim() : null);
+        },
+        { once: true }
+      );
+      dialog.returnValue = "";
+      dialog.showModal();
+      input.focus();
+      input.select();
     });
+  }
+
+  function confirmOptionsFrom(el) {
+    return {
+      title: el.getAttribute("data-confirm-title") || el.getAttribute("data-confirm"),
+      text: el.getAttribute("data-confirm-title") ? el.getAttribute("data-confirm") : el.getAttribute("data-confirm-text") || "",
+      ok: el.getAttribute("data-confirm-ok") || "",
+      danger: el.hasAttribute("data-confirm-danger"),
+      typeToConfirm: el.getAttribute("data-confirm-type") || "",
+    };
+  }
+
+  // Forms or submit buttons marked data-confirm ask first; the dialog is the same everywhere.
+  function onConfirmSubmit(e) {
+    var form = e.target;
+    if (!(form instanceof HTMLFormElement)) return;
+    var submitter = e.submitter;
+    var source = submitter && submitter.hasAttribute("data-confirm") ? submitter : form.hasAttribute("data-confirm") ? form : null;
+    if (!source || form.dataset.confirmed === "1") {
+      delete form.dataset.confirmed;
+      markBusy(e, form, submitter);
+      return;
+    }
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    confirmAction(confirmOptionsFrom(source)).then(function (yes) {
+      if (!yes) return;
+      form.dataset.confirmed = "1";
+      if (typeof form.requestSubmit === "function") form.requestSubmit(submitter || undefined);
+      else form.submit();
+    });
+  }
+
+  // Prevent double submits on ordinary forms: the pressed button shows it is working.
+  // Forms handled by page scripts (they call preventDefault) manage their own buttons.
+  function markBusy(e, form, submitter) {
+    if (form.hasAttribute("data-no-busy") || (form.getAttribute("method") || "get").toLowerCase() !== "post") return;
+    var btn = submitter || form.querySelector('button[type="submit"], button:not([type])');
+    if (!btn) return;
+    setTimeout(function () {
+      if (e.defaultPrevented) return;
+      btn.setAttribute("aria-busy", "true");
+      btn.disabled = true;
+    }, 0);
+  }
+
+  function releaseBusyButtons() {
+    document.querySelectorAll('button[aria-busy="true"]').forEach(function (btn) {
+      btn.removeAttribute("aria-busy");
+      btn.disabled = false;
+    });
+  }
+
+  function onConfirmClick(e) {
+    var link = e.target.closest && e.target.closest("a[data-confirm]");
+    if (!link) return;
+    if (link.dataset.confirmed === "1") {
+      delete link.dataset.confirmed;
+      return;
+    }
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    confirmAction(confirmOptionsFrom(link)).then(function (yes) {
+      if (!yes) return;
+      link.dataset.confirmed = "1";
+      link.click();
+    });
+  }
+
+  var ERROR_PATTERNS = [
+    [/already exists/i, "duplicate_id"],
+    [/(413|too large|exceeds)/i, "too_large"],
+    [/(could not extract|no text|pdf.*(invalid|corrupt|damaged)|EOF marker|PdfReadError|not a pdf)/i, "unreadable_pdf"],
+    [/(unsupported|content type|file type)/i, "unsupported_file"],
+    [/(timed? ?out|connection|unreachable|temporarily|failed to fetch|networkerror)/i, "network"],
+  ];
+  var errorCopy = null;
+
+  /** Plain message for a server or network error; mirrors ui.friendly_error on the server. */
+  function friendlyError(raw, fallbackKey) {
+    if (!errorCopy) {
+      try {
+        errorCopy = JSON.parse((document.getElementById("uiErrorCopy") || {}).textContent || "{}");
+      } catch (e) {
+        errorCopy = {};
+      }
+    }
+    var text = String(raw || "");
+    for (var i = 0; i < ERROR_PATTERNS.length; i += 1) {
+      if (ERROR_PATTERNS[i][0].test(text)) return errorCopy[ERROR_PATTERNS[i][1]] || text;
+    }
+    return errorCopy[fallbackKey || "processing_failed"] || "Something went wrong. Please try again.";
+  }
+
+  function updateOnlineState() {
+    var banner = document.getElementById("offlineBanner");
+    if (banner) banner.hidden = navigator.onLine !== false;
+  }
+
+  var unreadFetchedAt = 0;
+  function refreshUnreadCount(force) {
+    var badges = document.querySelectorAll("[data-unread-count]");
+    if (!badges.length) return;
+    var now = Date.now();
+    if (!force && now - unreadFetchedAt < 60000 && window.__bcpUnread != null) {
+      paintUnread(window.__bcpUnread);
+      return;
+    }
+    unreadFetchedAt = now;
+    fetch("/api/notifications/unread-count", { credentials: "same-origin", headers: { Accept: "application/json" } })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (body) {
+        if (!body) return;
+        window.__bcpUnread = body.unread || 0;
+        paintUnread(window.__bcpUnread);
+      })
+      .catch(function () {});
+  }
+
+  function paintUnread(count) {
+    document.querySelectorAll("[data-unread-count]").forEach(function (el) {
+      el.hidden = !count;
+      el.textContent = count > 99 ? "99+" : String(count || "");
+      var host = el.closest("a");
+      if (host) host.setAttribute("aria-label", "Notifications" + (count ? " (" + count + " unread)" : ""));
+    });
+  }
+
+  function onGlobalSearchSubmit(e) {
+    var form = e.target;
+    if (!(form instanceof HTMLFormElement) || !form.classList.contains("app-topbar-search")) return;
+    e.preventDefault();
+    var q = ((form.querySelector('input[name="q"]') || {}).value || "").trim();
+    var pageInput = document.getElementById("searchQuery");
+    if (pageInput && document.querySelector('[data-page="search"]')) {
+      pageInput.value = q;
+      runSearch(true);
+      return;
+    }
+    visit("/search" + (q ? "?q=" + encodeURIComponent(q) : ""));
   }
 
   function initPullToRefresh() {
@@ -310,6 +634,8 @@
     if (url.pathname.indexOf("/meetings/") === 0 && /\/documents\/\d+\/view$/.test(url.pathname)) return false;
     if (url.pathname.indexOf("/board/meetings/") === 0 && /\/documents\/\d+\/view$/.test(url.pathname)) return false;
     if (url.pathname.indexOf("/download/") === 0) return false;
+    // The organizer page needs its own Permissions-Policy (microphone), which only a full load applies.
+    if (/^\/meetings\/\d+\/?$/.test(url.pathname)) return false;
     if (url.pathname.indexOf("/attendance/") !== -1 && url.pathname.indexOf("/print") !== -1) return false;
     if (url.pathname.indexOf("/signature") !== -1) return false;
     return true;
@@ -397,6 +723,7 @@
     }
 
     var pageScripts = collectPageScripts(doc);
+    leaveGuard = null;
 
     document.title = doc.title || document.title;
 
@@ -427,6 +754,7 @@
       .then(function () {
         bootPage();
         endProgress();
+        if (!opts.replace) focusNewPage();
       });
   }
 
@@ -450,8 +778,6 @@
         window.location.href = "/login";
         throw new Error("auth");
       }
-      var hardNav = res.headers.get("X-BCP-Hard-Nav");
-      if (hardNav) return { hardNav: hardNav };
       if (!res.ok) throw new Error("nav failed");
       return res.text().then(function (text) {
         var finalUrl = res.url || url;
@@ -462,8 +788,49 @@
     });
   }
 
+  /**
+   * A page doing work that would be lost on navigation (for example a live recording) can ask
+   * before the person leaves. guard: { title, message, ok, onLeave } or null to clear.
+   */
+  var leaveGuard = null;
+
+  function setLeaveGuard(guard) {
+    leaveGuard = guard ? { title: guard.title, message: guard.message, ok: guard.ok, onLeave: guard.onLeave, url: location.href } : null;
+  }
+
+  function checkLeave(proceed, cancel) {
+    var guard = leaveGuard;
+    if (!guard) {
+      proceed();
+      return;
+    }
+    confirmAction({
+      title: guard.title || "Leave this page?",
+      text: guard.message || "Work on this page will be lost.",
+      ok: guard.ok || "Leave",
+      danger: true,
+    }).then(function (yes) {
+      if (!yes) {
+        if (cancel) cancel(guard);
+        return;
+      }
+      leaveGuard = null;
+      try {
+        if (guard.onLeave) guard.onLeave();
+      } catch (e) {}
+      proceed();
+    });
+  }
+
   function visit(href, opts) {
     opts = opts || {};
+    if (leaveGuard && !opts.leaving) {
+      checkLeave(function () {
+        opts.leaving = true;
+        visit(href, opts);
+      });
+      return;
+    }
     if (navigating && !opts.force) return;
     var url = new URL(href, location.href).href;
     if (!opts.force && url === location.href) return;
@@ -475,10 +842,6 @@
     // serve a stale Search page (e.g. missing metadata panel markup).
     fetchPage(url, true)
       .then(function (payload) {
-        if (payload.hardNav) {
-          location.href = payload.hardNav;
-          return;
-        }
         swap(payload.html, payload.url, opts);
       })
       .catch(function () {
@@ -507,45 +870,19 @@
     visit(anchor.href);
   }
 
-  function onPrefetch(e) {
-    var anchor = e.target.closest && e.target.closest("a");
-    if (!shouldIntercept(anchor)) return;
-    prefetch(anchor.href);
-  }
-
   function onPopState() {
-    visit(location.href, { replace: true, force: true });
-  }
-
-  function showSearchPanel(which) {
-    var root = document.querySelector('[data-page="search"]');
-    if (!root) return;
-    var showMeta = which === "metadata";
-    var tabKeyword = document.getElementById("tabKeyword");
-    var tabMetadata = document.getElementById("tabMetadata");
-    var keywordPanel = document.getElementById("keywordPanel");
-    var metadataPanel = document.getElementById("metadataPanel");
-    var searchResults = document.getElementById("searchResults");
-    if (!tabKeyword || !tabMetadata || !keywordPanel || !metadataPanel) return;
-
-    tabKeyword.classList.toggle("active", !showMeta);
-    tabMetadata.classList.toggle("active", showMeta);
-    tabKeyword.setAttribute("aria-selected", showMeta ? "false" : "true");
-    tabMetadata.setAttribute("aria-selected", showMeta ? "true" : "false");
-
-    // Class-only toggle (avoid inline display fighting CSS !important)
-    keywordPanel.classList.toggle("is-hidden", showMeta);
-    metadataPanel.classList.toggle("is-hidden", !showMeta);
-    keywordPanel.removeAttribute("hidden");
-    metadataPanel.removeAttribute("hidden");
-    keywordPanel.style.removeProperty("display");
-    metadataPanel.style.removeProperty("display");
-    keywordPanel.setAttribute("aria-hidden", showMeta ? "true" : "false");
-    metadataPanel.setAttribute("aria-hidden", showMeta ? "false" : "true");
-
-    if (searchResults && searchResults.dataset.idleHtml) {
-      searchResults.innerHTML = searchResults.dataset.idleHtml;
+    if (leaveGuard) {
+      checkLeave(
+        function () {
+          visit(location.href, { replace: true, force: true, leaving: true });
+        },
+        function (guard) {
+          history.pushState({ turbo: true }, "", guard.url);
+        }
+      );
+      return;
     }
+    visit(location.href, { replace: true, force: true });
   }
 
   function skeletonHtml() {
@@ -558,7 +895,7 @@
   }
 
   function emptyHtml(title, message) {
-    return '<div class="empty-state"><h3>' + title + "</h3><p>" + message + "</p></div>";
+    return '<div class="empty-state"><h3>' + escapeHtml(title) + "</h3><p>" + escapeHtml(message) + "</p></div>";
   }
 
   var THEME_META = {
@@ -566,37 +903,77 @@
     red: "#8e101c",
     yellow: "#1a1810",
     white: "#ffffff",
-    black: "#0b1210",
   };
+  var DARK_META = "#0e1118";
+  var darkQuery = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
 
-  function applyTheme(theme) {
-    if (!/^(green|red|yellow|white|black)$/.test(theme)) theme = "green";
-    document.documentElement.setAttribute("data-theme", theme);
-    try {
-    writeStorage("sb-theme", theme);
-    } catch (e) {}
+  /** Reads the saved appearance: brand theme, light/dark/system mode and text size. */
+  function readAppearance() {
+    var theme = readStorage("sb-theme", "bcb-theme") || "green";
+    var mode = readStorage("sb-mode");
+    if (theme === "black") {
+      theme = "white";
+      if (!mode) mode = "dark";
+    }
+    if (!/^(green|red|yellow|white)$/.test(theme)) theme = "green";
+    if (!/^(light|dark|system)$/.test(mode || "")) mode = "system";
+    var text = readStorage("sb-text");
+    if (!/^(standard|large|xlarge)$/.test(text || "")) text = "standard";
+    return { theme: theme, mode: mode, text: text };
+  }
+
+  function applyAppearance(next, save) {
+    var current = readAppearance();
+    var a = {
+      theme: (next && next.theme) || current.theme,
+      mode: (next && next.mode) || current.mode,
+      text: (next && next.text) || current.text,
+    };
+    var root = document.documentElement;
+    var dark = a.mode === "dark" || (a.mode === "system" && darkQuery && darkQuery.matches);
+    root.setAttribute("data-theme", a.theme);
+    root.setAttribute("data-mode", dark ? "dark" : "light");
+    if (a.text === "standard") root.removeAttribute("data-text-size");
+    else root.setAttribute("data-text-size", a.text);
+    if (save) {
+      writeStorage("sb-theme", a.theme);
+      writeStorage("sb-mode", a.mode);
+      writeStorage("sb-text", a.text);
+    }
     var meta = document.getElementById("metaThemeColor");
-    if (meta) meta.setAttribute("content", THEME_META[theme] || THEME_META.green);
-    document.querySelectorAll("[data-theme-choice]").forEach(function (btn) {
-      var active = btn.getAttribute("data-theme-choice") === theme;
-      btn.classList.toggle("is-active", active);
-      btn.setAttribute("aria-selected", active ? "true" : "false");
+    if (meta) meta.setAttribute("content", dark ? DARK_META : THEME_META[a.theme] || THEME_META.green);
+    syncAppearanceControls(a);
+    return a;
+  }
+
+  function syncAppearanceControls(a) {
+    document.querySelectorAll("input[data-appearance]").forEach(function (input) {
+      input.checked = a[input.getAttribute("data-appearance")] === input.value;
     });
   }
 
+  // Back-compat for callers of the old API.
+  function applyTheme(theme) {
+    if (theme === "black") return applyAppearance({ theme: "white", mode: "dark" }, true);
+    return applyAppearance({ theme: theme }, true);
+  }
+
   function initTheme() {
-    var stored = "green";
-    try {
-      stored = readStorage("sb-theme", "bcb-theme") || "green";
-    } catch (e) {}
-    applyTheme(stored);
+    applyAppearance(null, false);
   }
 
   function initAppearancePage() {
-    var root = document.querySelector('[data-page="appearance"]');
-    if (!root) return;
-    var current = document.documentElement.getAttribute("data-theme") || "green";
-    applyTheme(current);
+    if (!document.querySelector('[data-page="appearance"]')) return;
+    syncAppearanceControls(readAppearance());
+  }
+
+  function onAppearanceChange(e) {
+    var input = e.target;
+    if (!input || !input.matches || !input.matches("input[data-appearance]")) return;
+    var change = {};
+    change[input.getAttribute("data-appearance")] = input.value;
+    applyAppearance(change, true);
+    toast("Saved on this device.");
   }
 
   function onThemeClick(e) {
@@ -606,52 +983,13 @@
     applyTheme(btn.getAttribute("data-theme-choice"));
   }
 
-  function setSearchLang(lang) {
-    var query = document.getElementById("searchQuery");
-    var hint = document.getElementById("searchLangHint");
-    var en = document.getElementById("langEn");
-    var bn = document.getElementById("langBn");
-    var isBn = lang === "bn";
-    if (en) en.classList.toggle("is-active", !isBn);
-    if (bn) bn.classList.toggle("is-active", isBn);
-    if (query) {
-      query.setAttribute("lang", isBn ? "bn" : "en");
-      query.placeholder = isBn
-        ? "অনুসন্ধান লিখুন… (Bangla or English)"
-        : "Keyword, summary, or বাংলা phrase…";
-    }
-    if (hint) {
-      hint.textContent = isBn
-        ? "বাংলা অগ্রাধিকার — hybrid search ranks Bangla evidence higher."
-        : "English preference — hybrid search ranks Latin-script evidence higher.";
-    }
-    try {
-    writeStorage("sb-search-lang", isBn ? "bn" : "en");
-    } catch (e) {}
-  }
-
-  function initSearchLang() {
-    if (!document.querySelector('[data-page="search"]')) return;
-    var lang = "en";
-    try {
-      lang = readStorage("sb-search-lang", "bcb-search-lang") || "en";
-    } catch (e) {}
-    setSearchLang(lang);
-  }
-
-  function onSearchLangClick(e) {
-    var btn = e.target.closest("[data-search-lang]");
-    if (!btn || !document.querySelector('[data-page="search"]')) return;
-    e.preventDefault();
-    setSearchLang(btn.getAttribute("data-search-lang"));
-  }
-
   function escapeHtml(value) {
     return String(value == null ? "" : value)
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
   }
 
   function renderAccessActions(result) {
@@ -661,139 +999,99 @@
       var links =
         '<a class="doc-link" href="/view/' +
         encodeURIComponent(result.doc_id) +
-        "?from=/search" +
+        "?from=" +
+        encodeURIComponent(location.pathname + location.search) +
         (page > 0 ? "&page=" + page : "") +
-        '">' +
+        '" data-nav>' +
         escapeHtml(result.title || result.doc_id) +
-        "</a>" +
-        (result.title ? ' <span class="muted result-doc-id">' + escapeHtml(result.doc_id) + "</span>" : "") +
-        (page > 0 ? ' <span class="badge">p. ' + page + "</span>" : "");
-      if (result.can_download) {
-        links +=
-          ' <a class="button button-secondary result-download" href="/download/' +
-          encodeURIComponent(result.doc_id) +
-          '">Download (watermarked)</a>';
-      }
+        "</a>";
       return links;
     }
-    if (status === "pending") {
-      return (
-        "<strong>" +
-        escapeHtml(result.doc_id) +
-        '</strong> <span class="badge">Request pending</span> · <a href="/access-requests">Track request</a>'
-      );
+    return "<span>" + escapeHtml(result.title || result.doc_id) + "</span>";
+  }
+
+  var MATCH_LABELS = {
+    summary: "the summary",
+    chunk: "the page text",
+    keyword: "the keywords",
+    project: "the project name",
+    doc_id: "the archive number",
+    title: "the title",
+  };
+
+  function shortDate(iso) {
+    if (!iso) return "";
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso));
+    if (!m) return String(iso);
+    var months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    return m[3] + " " + months[parseInt(m[2], 10) - 1] + " " + m[1];
+  }
+
+  function accessHtml(result) {
+    if (result.can_view) {
+      if (!result.can_download) return "";
+      return '<a class="button button-secondary" href="/download/' + encodeURIComponent(result.doc_id) + '">Download a copy</a>';
+    }
+    if (result.access_status === "pending") {
+      return '<span class="status-chip status-chip-warn">Access requested</span> <a href="/access-requests" data-nav>See my requests</a>';
     }
     return (
-      "<strong>" +
+      '<button type="button" class="button button-secondary access-request-btn" data-doc-id="' +
       escapeHtml(result.doc_id) +
-      '</strong> <span class="badge">Access required</span>' +
-      ' <button type="button" class="button button-secondary access-request-btn" data-doc-id="' +
-      encodeURIComponent(result.doc_id) +
-      '" data-mode="view_only">Request view</button>'
+      '" data-doc-title="' +
+      escapeHtml(result.title || result.doc_id) +
+      '">Ask for access</button>'
     );
   }
 
-  function renderKeywordResults(results) {
-    var reasonLabels = {
-      summary: "Summary meaning",
-      chunk: "Page text",
-      keyword: "Keyword",
-      project: "Project",
-      doc_id: "Document ID",
-      hybrid: "Hybrid",
-    };
-    return results
-      .map(function (result) {
-        var keywords = Array.isArray(result.searchable_keywords)
-          ? result.searchable_keywords.slice(0, 10).join(", ")
-          : "";
-        var score =
-          result.score != null && !isNaN(Number(result.score))
-            ? Number(result.score).toFixed(3)
-            : "N/A";
-        var source = result.source || "summary";
-        var reasons = Array.isArray(result.match_reasons) && result.match_reasons.length
-          ? result.match_reasons
-          : [source];
-        var reasonHtml = reasons
-          .map(function (reason) {
-            return (
-              '<span class="search-reason-chip search-reason-' +
-              escapeHtml(reason) +
-              '">' +
-              escapeHtml(reasonLabels[reason] || reason) +
-              "</span>"
-            );
-          })
-          .join("");
-        var snippet = result.snippet
-          ? '<p class="result-snippet">“' + escapeHtml(result.snippet) + '”</p>'
-          : "";
-        if (result.can_view === false) {
-          reasonHtml = "";
-          snippet = '<p class="result-meta muted">Excerpt hidden until your access request is approved.</p>';
-        }
-        var metaBits = [];
-        if (result.doc_date) metaBits.push(result.doc_date);
-        if (result.department) metaBits.push(result.department);
-        if (result.category) metaBits.push(result.category);
-        if (result.reference_number) metaBits.push("Ref " + result.reference_number);
-        if (result.can_view !== false) metaBits.push("Score " + score);
-        return (
-          '<article class="result-card list-row search-result-card">' +
-          '<div class="result-header">' +
-          "<h3>" +
-          renderAccessActions(result) +
-          "</h3>" +
-          '<span class="badge">' +
-          escapeHtml(result.doc_type || "Document") +
-          "</span></div>" +
-          '<div class="search-reason-row">' + reasonHtml + "</div>" +
-          snippet +
-          '<p class="result-meta">' +
-          escapeHtml(metaBits.join(" · ")) +
-          "</p>" +
-          (keywords ? '<p class="result-meta"><strong>Keywords:</strong> ' + escapeHtml(keywords) + "</p>" : "") +
-          "</article>"
-        );
-      })
-      .join("");
-  }
-
-  function renderMetadataResults(results) {
-    return results
-      .map(function (result) {
-        var keywords = Array.isArray(result.searchable_keywords)
-          ? result.searchable_keywords.slice(0, 8).join(", ")
-          : "";
-        return (
-          '<article class="result-card list-row">' +
-          '<div class="result-header">' +
-          "<h3>" +
-          renderAccessActions(result) +
-          "</h3>" +
-          '<span class="badge">' +
-          escapeHtml(result.doc_type || "Document") +
-          "</span></div>" +
-          '<p class="result-meta">Date: ' +
-          escapeHtml(result.doc_date || "—") +
-          " · Uploaded by: " +
-          escapeHtml(result.uploaded_by || "—") +
-          (result.department ? " · " + escapeHtml(result.department) : "") +
-          (result.category ? " · " + escapeHtml(result.category) : "") +
-          "</p>" +
-          (keywords ? '<p class="result-meta">Topics: ' + escapeHtml(keywords) + "</p>" : "") +
-          "</article>"
-        );
-      })
-      .join("");
+  function renderResults(results) {
+    return (
+      '<ul class="card-list search-result-list" role="list">' +
+      results
+        .map(function (result) {
+          var meta = [escapeHtml(result.doc_id)];
+          if (result.doc_date) meta.push(escapeHtml(shortDate(result.doc_date)));
+          if (result.department) meta.push(escapeHtml(result.department));
+          if (result.reference_number) meta.push("Ref. " + escapeHtml(result.reference_number));
+          var page = parseInt(result.page, 10);
+          var reasons = (Array.isArray(result.match_reasons) ? result.match_reasons : [result.source])
+            .map(function (r) { return MATCH_LABELS[r]; })
+            .filter(Boolean);
+          var found = "";
+          if (result.can_view !== false && reasons.length) {
+            found = '<p class="list-card-meta">Found in ' + escapeHtml(reasons.join(", ")) + (page > 0 ? " · page " + page : "") + "</p>";
+          }
+          var snippet = "";
+          if (result.can_view === false) {
+            snippet = '<p class="muted">You can see this document exists. Ask for access to read it.</p>';
+          } else if (result.snippet) {
+            snippet = '<p class="result-snippet">“' + escapeHtml(result.snippet) + '”</p>';
+          }
+          var actions = accessHtml(result);
+          return (
+            '<li class="list-card search-result">' +
+            '<div class="list-card-top"><h3>' +
+            renderAccessActions(result) +
+            '</h3><span class="status-chip status-chip-neutral">' +
+            escapeHtml(result.doc_type || "Document") +
+            "</span></div>" +
+            '<p class="list-card-meta">' + meta.join(" · ") + "</p>" +
+            snippet +
+            found +
+            (actions ? '<div class="list-card-actions">' + actions + "</div>" : "") +
+            "</li>"
+          );
+        })
+        .join("") +
+      "</ul>"
+    );
   }
 
   function loadSearchFacets(root) {
     var selects = root.querySelectorAll("select[data-facet]");
-    if (!selects.length || root.dataset.facetsLoaded) return;
+    if (!selects.length || root.dataset.facetsLoaded) return Promise.resolve();
     root.dataset.facetsLoaded = "1";
-    fetch("/api/search/facets", { credentials: "same-origin" })
+    return fetch("/api/search/facets", { credentials: "same-origin" })
       .then(function (response) {
         if (!response.ok) throw new Error("facets");
         return response.json();
@@ -801,12 +1099,21 @@
       .then(function (facets) {
         Array.prototype.forEach.call(selects, function (select) {
           var values = facets[select.getAttribute("data-facet")] || [];
+          var wanted = select.getAttribute("data-value") || "";
           values.forEach(function (value) {
             var option = document.createElement("option");
             option.value = value;
             option.textContent = value;
+            if (value === wanted) option.selected = true;
             select.appendChild(option);
           });
+          if (wanted && select.value !== wanted) {
+            var extra = document.createElement("option");
+            extra.value = wanted;
+            extra.textContent = wanted;
+            extra.selected = true;
+            select.appendChild(extra);
+          }
         });
       })
       .catch(function () {
@@ -814,114 +1121,203 @@
       });
   }
 
+  var FILTER_FIELDS = ["doc_type", "department", "category", "date_from", "date_to", "reference_number", "doc_id", "uploaded_by"];
+  var REFINE_FIELDS = ["doc_type", "department", "category", "date_from", "date_to", "reference_number"];
+
   function fieldValue(id) {
     var el = document.getElementById(id);
     return el && el.value ? String(el.value).trim() : "";
   }
 
-  function refineParams(params) {
-    var map = {
-      department: "refineDepartment",
-      category: "refineCategory",
-      doc_type: "refineDocType",
-      reference_number: "refineReference",
-      date_from: "refineDateFrom",
-      date_to: "refineDateTo",
-    };
-    Object.keys(map).forEach(function (key) {
-      var value = fieldValue(map[key]);
-      if (value) params.set(key, value);
+  function currentFilters() {
+    var out = {};
+    FILTER_FIELDS.forEach(function (key) {
+      var value = fieldValue("f_" + key);
+      if (value) out[key] = value;
     });
-    return params;
+    return out;
+  }
+
+  function paintFilterCount() {
+    var badge = document.getElementById("filterCount");
+    if (!badge) return;
+    var n = Object.keys(currentFilters()).length;
+    badge.hidden = !n;
+    badge.textContent = n ? String(n) : "";
+  }
+
+  function openFilters(open) {
+    var panel = document.getElementById("filtersPanel");
+    var toggle = document.getElementById("filtersToggle");
+    if (!panel || !toggle) return;
+    panel.hidden = !open;
+    toggle.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+
+  function showSearchPanel(which) {
+    openFilters(which === "metadata");
+  }
+
+  function searchLang() {
+    var checked = document.querySelector('input[data-search-lang]:checked');
+    return checked ? checked.value : readStorage("sb-search-lang", "bcb-search-lang") || "en";
+  }
+
+  function initSearchLang() {
+    if (!document.querySelector('[data-page="search"]')) return;
+    var params = new URLSearchParams(location.search);
+    var lang = params.get("lang") || readStorage("sb-search-lang", "bcb-search-lang") || "en";
+    document.querySelectorAll("input[data-search-lang]").forEach(function (input) {
+      input.checked = input.value === lang;
+    });
+    var query = document.getElementById("searchQuery");
+    if (query) query.setAttribute("lang", lang === "bn" ? "bn" : "en");
+  }
+
+  function onSearchLangClick(e) {
+    var input = e.target.closest && e.target.closest("input[data-search-lang]");
+    if (!input || !document.querySelector('[data-page="search"]')) return;
+    writeStorage("sb-search-lang", input.value === "bn" ? "bn" : "en");
+    var query = document.getElementById("searchQuery");
+    if (query) query.setAttribute("lang", input.value === "bn" ? "bn" : "en");
+  }
+
+  var searchSeq = 0;
+
+  function runSearch(pushUrl) {
+    var results = document.getElementById("searchResults");
+    var button = document.getElementById("searchButton");
+    if (!results) return;
+    var q = fieldValue("searchQuery");
+    var filters = currentFilters();
+    var lang = searchLang();
+    paintFilterCount();
+
+    var urlParams = new URLSearchParams();
+    if (q) urlParams.set("q", q);
+    Object.keys(filters).forEach(function (k) { urlParams.set(k, filters[k]); });
+    if (lang === "bn") urlParams.set("lang", "bn");
+    var nextUrl = "/search" + (urlParams.toString() ? "?" + urlParams.toString() : "");
+    if (pushUrl && nextUrl !== location.pathname + location.search) {
+      history.replaceState({ turbo: true }, "", nextUrl);
+    }
+
+    if (!q && !Object.keys(filters).length) {
+      results.innerHTML = results.dataset.idleHtml || "";
+      return;
+    }
+
+    var apiUrl;
+    if (q) {
+      var p = new URLSearchParams({ q: q, lang: lang });
+      REFINE_FIELDS.forEach(function (k) { if (filters[k]) p.set(k, filters[k]); });
+      if (filters.doc_id || filters.uploaded_by) {
+        // These two only narrow the filter-only search; mention it rather than silently ignoring them.
+        results.dataset.note = "Archive number and uploader filters apply when the search box is empty.";
+      } else {
+        delete results.dataset.note;
+      }
+      apiUrl = "/api/search?" + p.toString();
+    } else {
+      delete results.dataset.note;
+      apiUrl = "/api/search/metadata?" + new URLSearchParams(filters).toString();
+    }
+
+    var seq = (searchSeq += 1);
+    if (button) button.disabled = true;
+    results.setAttribute("aria-busy", "true");
+    results.innerHTML = skeletonHtml();
+    fetch(apiUrl, { credentials: "same-origin", headers: { Accept: "application/json" } })
+      .then(function (response) {
+        if (response.status === 400) {
+          return response.json().then(function (body) {
+            var err = new Error(body.detail || "Check the filters");
+            err.plain = true;
+            throw err;
+          });
+        }
+        if (response.status === 401) {
+          window.location.href = "/login";
+          throw new Error("auth");
+        }
+        if (!response.ok) throw new Error("Search failed");
+        return response.json();
+      })
+      .then(function (payload) {
+        if (seq !== searchSeq) return;
+        var list = payload.results || [];
+        if (!list.length) {
+          results.innerHTML = emptyHtml(
+            "No documents found",
+            q ? "Nothing matched “" + q + "”. Try fewer or different words, or remove some filters." : "No documents match these filters."
+          );
+          announce("No documents found");
+          return;
+        }
+        var head =
+          '<p class="search-count" role="status">' +
+          list.length +
+          (list.length === 1 ? " document" : " documents") +
+          "</p>";
+        if (payload.degraded) {
+          head += '<p class="banner info">Showing simple word matches for now. Results may be less complete than usual.</p>';
+        }
+        if (results.dataset.note) head += '<p class="muted small">' + escapeHtml(results.dataset.note) + "</p>";
+        results.innerHTML = head + renderResults(list);
+        announce(list.length + (list.length === 1 ? " document found" : " documents found"));
+      })
+      .catch(function (err) {
+        if (seq !== searchSeq || (err && err.message === "auth")) return;
+        var message = err && err.plain ? err.message : friendlyError(err && err.message, "search_unavailable");
+        results.innerHTML = emptyHtml("Search didn't work", message);
+      })
+      .finally(function () {
+        if (seq !== searchSeq) return;
+        if (button) button.disabled = false;
+        results.removeAttribute("aria-busy");
+      });
   }
 
   function initSearchPage() {
     var root = document.querySelector('[data-page="search"]');
-    var searchResults = document.getElementById("searchResults");
-    if (root && searchResults && !searchResults.dataset.idleHtml) {
-      searchResults.dataset.idleHtml = searchResults.innerHTML;
+    if (!root) return;
+    var results = document.getElementById("searchResults");
+    if (results && !results.dataset.idleHtml) results.dataset.idleHtml = results.innerHTML;
+    var params = new URLSearchParams(location.search);
+    var hasFilters = FILTER_FIELDS.some(function (k) { return params.get(k); });
+    if (hasFilters) openFilters(true);
+    loadSearchFacets(root).then(function () {
+      paintFilterCount();
+      if ((params.get("q") || "").trim() || hasFilters) runSearch(false);
+    });
+    var form = document.getElementById("searchForm");
+    if (form && !form.dataset.bound) {
+      form.dataset.bound = "1";
+      form.addEventListener("submit", function (e) {
+        e.preventDefault();
+        runSearch(true);
+      });
+      form.addEventListener("change", function (e) {
+        if (e.target && e.target.matches && e.target.matches("select, input[type=date]")) paintFilterCount();
+      });
     }
-    if (root) loadSearchFacets(root);
-    // Ensure keyword is the default visible panel after SPA navigation
-    if (root) {
-      var active = document.querySelector(".search-tab.active");
-      var which = active && active.getAttribute("data-search-tab") === "metadata" ? "metadata" : "keyword";
-      showSearchPanel(which);
-      var params = new URLSearchParams(window.location.search);
-      var preset = (params.get("q") || "").trim();
-      var searchQuery = document.getElementById("searchQuery");
-      if (preset && searchQuery) {
-        searchQuery.value = preset;
-        var btn = document.getElementById("searchButton");
-        if (btn) window.setTimeout(function () { btn.click(); }, 0);
-      }
+    if (!(params.get("q") || "").trim() && !hasFilters) {
+      var input = document.getElementById("searchQuery");
+      if (input && window.matchMedia && window.matchMedia("(min-width: 900px)").matches) input.focus();
     }
   }
 
-  function onSearchUiClick(e) {
-    var tab = e.target.closest("[data-search-tab]");
-    if (tab && document.querySelector('[data-page="search"]')) {
-      e.preventDefault();
-      e.stopPropagation();
-      showSearchPanel(tab.getAttribute("data-search-tab"));
-      return;
-    }
-
-    if (e.target.closest("#searchButton")) {
-      e.preventDefault();
-      var searchQuery = document.getElementById("searchQuery");
-      var searchResults = document.getElementById("searchResults");
-      var searchButton = document.getElementById("searchButton");
-      if (!searchResults || !searchButton) return;
-      var query = (searchQuery && searchQuery.value.trim()) || "";
-      if (!query) {
-        searchResults.innerHTML = emptyHtml("Enter a query", "Type a keyword or phrase to search.");
-        return;
-      }
-      searchButton.disabled = true;
-      searchResults.innerHTML = skeletonHtml();
-      var lang = "en";
-      try {
-        lang = readStorage("sb-search-lang", "bcb-search-lang") || "en";
-      } catch (e) {}
-      var searchParams = refineParams(new URLSearchParams({ q: query, lang: lang }));
-      fetch("/api/search?" + searchParams.toString(), { credentials: "same-origin" })
-        .then(function (response) {
-          if (response.status === 400) {
-            return response.json().then(function (body) {
-              throw new Error(body.detail || "Invalid filters");
-            });
-          }
-          if (!response.ok) throw new Error("Search failed");
-          return response.json();
-        })
-        .then(function (payload) {
-          if (!payload.results.length) {
-            searchResults.innerHTML = emptyHtml("No results", 'Nothing matched “' + payload.query + '”.');
-            return;
-          }
-          var html = renderKeywordResults(payload.results);
-          if (payload.degraded) {
-            html = '<p class="muted">Showing keyword matches. Similarity ranking will return when the search index is reachable.</p>' + html;
-          }
-          searchResults.innerHTML = html;
-        })
-        .catch(function (err) {
-          var detail = err && err.message && err.message !== "Search failed" ? err.message : "Unable to complete search. Please try again.";
-          searchResults.innerHTML = emptyHtml("Search unavailable", detail);
-        })
-        .finally(function () {
-          searchButton.disabled = false;
-        });
-      return;
-    }
-
-    if (e.target.closest(".access-request-btn")) {
-      e.preventDefault();
-      var btn = e.target.closest(".access-request-btn");
-      var docId = decodeURIComponent(btn.getAttribute("data-doc-id") || "");
-      if (!docId) return;
-      var purpose = window.prompt("Why do you need to view " + docId + "?", "Board affairs review");
+  function requestAccess(btn) {
+    var docId = btn.getAttribute("data-doc-id") || "";
+    var title = btn.getAttribute("data-doc-title") || docId;
+    if (!docId) return;
+    promptAction({
+      title: "Ask for access to " + title,
+      text: "An administrator or the board secretary will look at your request. You'll get a notification when they decide.",
+      label: "Why do you need it?",
+      value: "Board affairs review",
+      ok: "Send request",
+    }).then(function (purpose) {
       if (!purpose) return;
       var body = new FormData();
       body.append("purpose", purpose);
@@ -939,86 +1335,51 @@
           return response.json();
         })
         .then(function () {
-          window.location.href = "/access-requests?status=submitted";
+          var wrap = btn.parentNode;
+          if (wrap) wrap.innerHTML = '<span class="status-chip status-chip-warn">Access requested</span> <a href="/access-requests" data-nav>See my requests</a>';
+          toast("Request sent. You'll be notified when it's decided.");
         })
         .catch(function () {
           btn.disabled = false;
-          alert("Could not submit access request.");
+          toast("We couldn't send the request. Please try again.");
         });
-      return;
-    }
-
-    if (e.target.closest("#metadataSearchButton")) {
-      e.preventDefault();
-      var searchResults2 = document.getElementById("searchResults");
-      var metadataSearchButton = document.getElementById("metadataSearchButton");
-      if (!searchResults2 || !metadataSearchButton) return;
-      var params = new URLSearchParams();
-      var docId = ((document.getElementById("metaDocId") || {}).value || "").trim();
-      var docType = ((document.getElementById("metaDocType") || {}).value || "").trim();
-      var uploadedBy = ((document.getElementById("metaUploadedBy") || {}).value || "").trim();
-      var dateFrom = (document.getElementById("metaDateFrom") || {}).value || "";
-      var dateTo = (document.getElementById("metaDateTo") || {}).value || "";
-      var metaDepartment = fieldValue("metaDepartment");
-      var metaCategory = fieldValue("metaCategory");
-      var metaReference = fieldValue("metaReference");
-
-      if (!docId && !docType && !uploadedBy && !dateFrom && !dateTo && !metaDepartment && !metaCategory && !metaReference) {
-        searchResults2.innerHTML = emptyHtml("Add a filter", "Enter at least one metadata field.");
-        return;
-      }
-      if (docId) params.set("doc_id", docId);
-      if (docType) params.set("doc_type", docType);
-      if (uploadedBy) params.set("uploaded_by", uploadedBy);
-      if (dateFrom) params.set("date_from", dateFrom);
-      if (dateTo) params.set("date_to", dateTo);
-      if (metaDepartment) params.set("department", metaDepartment);
-      if (metaCategory) params.set("category", metaCategory);
-      if (metaReference) params.set("reference_number", metaReference);
-
-      metadataSearchButton.disabled = true;
-      searchResults2.innerHTML = skeletonHtml();
-      fetch("/api/search/metadata?" + params.toString(), { credentials: "same-origin" })
-        .then(function (response) {
-          if (!response.ok) throw new Error("Search failed");
-          return response.json();
-        })
-        .then(function (payload) {
-          if (!payload.results.length) {
-            searchResults2.innerHTML = emptyHtml("No results", "No documents matched those filters.");
-            return;
-          }
-          searchResults2.innerHTML = renderMetadataResults(payload.results);
-        })
-        .catch(function () {
-          searchResults2.innerHTML = emptyHtml("Search unavailable", "Unable to complete search. Please try again.");
-        })
-        .finally(function () {
-          metadataSearchButton.disabled = false;
-        });
-    }
-  }
-
-  function onSearchKeydown(e) {
-    if (e.key !== "Enter") return;
-    if (e.target && e.target.id === "searchQuery") {
-      e.preventDefault();
-      var btn = document.getElementById("searchButton");
-      if (btn) btn.click();
-    }
-  }
-
-  function warmNavPrefetch() {
-    var seen = Object.create(null);
-    document.querySelectorAll(".sidebar-link[href], .bottom-nav a[href]").forEach(function (a) {
-      var href = a.getAttribute("href");
-      if (!href || href.charAt(0) !== "/" || seen[href]) return;
-      seen[href] = true;
-      setTimeout(function () {
-        prefetch(href);
-      }, 600);
     });
   }
+
+  function onSearchUiClick(e) {
+    if (!document.querySelector('[data-page="search"]')) return;
+    var toggle = e.target.closest("#filtersToggle");
+    if (toggle) {
+      e.preventDefault();
+      var panel = document.getElementById("filtersPanel");
+      openFilters(panel && panel.hidden);
+      return;
+    }
+    if (e.target.closest("#filtersClear")) {
+      e.preventDefault();
+      FILTER_FIELDS.forEach(function (k) {
+        var el = document.getElementById("f_" + k);
+        if (el) el.value = "";
+      });
+      runSearch(true);
+      return;
+    }
+    var example = e.target.closest("[data-search-example]");
+    if (example) {
+      e.preventDefault();
+      var input = document.getElementById("searchQuery");
+      if (input) input.value = example.textContent.trim();
+      runSearch(true);
+      return;
+    }
+    var accessBtn = e.target.closest(".access-request-btn");
+    if (accessBtn) {
+      e.preventDefault();
+      requestAccess(accessBtn);
+    }
+  }
+
+  function onSearchKeydown() {}
 
   function onAdminUsersClick(e) {
     var editBtn = e.target.closest("[data-edit-user]");
@@ -1055,43 +1416,113 @@
     }
   }
 
+  var sectionObserver = null;
+
+  /** Section tabs (`.section-tabs a[href="#id"]`) show which part of the page is on screen. */
+  function initSectionTabs() {
+    if (sectionObserver) {
+      sectionObserver.disconnect();
+      sectionObserver = null;
+    }
+    var nav = document.querySelector(".section-tabs");
+    if (!nav) return;
+    var links = Array.prototype.slice.call(nav.querySelectorAll('a[href^="#"]'));
+    var targets = links
+      .map(function (link) { return document.getElementById(link.getAttribute("href").slice(1)); })
+      .filter(Boolean);
+    if (!targets.length) return;
+
+    function mark(id) {
+      links.forEach(function (link) {
+        var on = link.getAttribute("href") === "#" + id;
+        link.classList.toggle("is-active", on);
+        if (on) link.setAttribute("aria-current", "true");
+        else link.removeAttribute("aria-current");
+      });
+    }
+    nav.addEventListener("click", function (e) {
+      var link = e.target.closest && e.target.closest('a[href^="#"]');
+      if (link) mark(link.getAttribute("href").slice(1));
+    });
+    var initial = location.hash ? document.getElementById(location.hash.slice(1)) : null;
+    var owner = initial && targets.filter(function (t) { return t === initial || t.contains(initial); })[0];
+    mark((owner || targets[0]).id);
+    if (typeof IntersectionObserver !== "function") return;
+    var visible = {};
+    sectionObserver = new IntersectionObserver(
+      function (entries) {
+        entries.forEach(function (entry) { visible[entry.target.id] = entry.isIntersecting; });
+        for (var i = 0; i < targets.length; i += 1) {
+          if (visible[targets[i].id]) {
+            mark(targets[i].id);
+            return;
+          }
+        }
+      },
+      { rootMargin: "-30% 0px -60% 0px" }
+    );
+    targets.forEach(function (t) { sectionObserver.observe(t); });
+  }
+
   function bootPage() {
     if (window.BCPCsrf && typeof window.BCPCsrf.injectForms === "function") {
       window.BCPCsrf.injectForms();
     }
     markInstalledApp();
     initTheme();
+    initSectionTabs();
     initMoreSheet();
     initPullToRefresh();
     initInstallHint();
     initSearchPage();
     initSearchLang();
     initAppearancePage();
+    updateOnlineState();
+    refreshUnreadCount(false);
     document.body.classList.add("ready");
   }
 
   // Capture phase so it wins even if other handlers stop bubbling
+  document.addEventListener("click", onConfirmClick, true);
+  document.addEventListener("submit", onConfirmSubmit, true);
+  document.addEventListener("submit", onGlobalSearchSubmit);
   document.addEventListener("click", onSearchUiClick, true);
   document.addEventListener("click", onThemeClick, true);
+  document.addEventListener("change", onAppearanceChange, true);
   document.addEventListener("click", onSearchLangClick, true);
   document.addEventListener("click", onAdminUsersClick, true);
   document.addEventListener("keydown", onSearchKeydown, true);
+  document.addEventListener("keydown", onSheetKeydown);
   document.addEventListener("click", onClick);
-  document.addEventListener("mouseover", onPrefetch, { passive: true });
-  document.addEventListener("touchstart", onPrefetch, { passive: true });
   window.addEventListener("popstate", onPopState);
+  window.addEventListener("online", updateOnlineState);
+  window.addEventListener("offline", updateOnlineState);
+  window.addEventListener("pageshow", function (e) {
+    if (e.persisted) releaseBusyButtons();
+  });
+  if (darkQuery && typeof darkQuery.addEventListener === "function") {
+    darkQuery.addEventListener("change", function () { applyAppearance(null, false); });
+  }
 
   document.addEventListener("DOMContentLoaded", function () {
     registerServiceWorker();
     bootPage();
-    warmNavPrefetch();
   });
 
-  // Expose for pull-to-refresh
   window.BCPNav = {
     visit: visit,
     prefetch: prefetch,
     showSearchPanel: showSearchPanel,
     applyTheme: applyTheme,
+    applyAppearance: applyAppearance,
+  };
+  window.BCPUI = {
+    toast: toast,
+    confirm: confirmAction,
+    prompt: promptAction,
+    escapeHtml: escapeHtml,
+    friendlyError: friendlyError,
+    refreshUnreadCount: refreshUnreadCount,
+    setLeaveGuard: setLeaveGuard,
   };
 })();

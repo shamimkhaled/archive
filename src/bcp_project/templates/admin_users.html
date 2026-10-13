@@ -1,235 +1,198 @@
 {% extends "base.html" %}
-{% from "macros/ui.html" import empty_state %}
+{% from "macros/ui.html" import empty_state, breadcrumbs %}
 
-{% block title %}Manage Users | Sonali Bank Archive System{% endblock %}
+{% block title %}People | Sonali Bank Archive System{% endblock %}
+
+{% macro role_hint(value) -%}
+{%- if value == 'admin' -%}Can do everything, including adding people
+{%- elif value == 'board_secretary' -%}Runs meetings, checks documents, answers access requests
+{%- elif value == 'uploader' -%}Adds documents to the archive
+{%- elif value == 'board_member' -%}Reads meeting papers and archive documents
+{%- endif -%}
+{%- endmacro %}
 
 {% block content %}
 {% set fv = form_values|default({}) %}
 {% set fe = field_errors|default({}) %}
+{{ breadcrumbs([{'href': '/', 'label': 'Home'}, {'label': 'People'}]) }}
 <div class="page-header">
     <div class="title-group">
         <h1>People</h1>
-        <p>Create accounts and assign roles for the board workspace.</p>
+        <p>Who can sign in, and what each person can do.</p>
     </div>
+    <a class="button" href="#addPerson">Add a person</a>
 </div>
 
-<section class="panel">
-    <h2>Create person</h2>
-    {% if status == 'created' or status == 'success' %}
-    <div class="alert alert-success" role="status">User created successfully.</div>
-    {% elif status == 'updated' %}
-    <div class="alert alert-success" role="status">User updated successfully.</div>
-    {% elif status == 'deleted' %}
-    <div class="alert alert-success" role="status">User deleted.</div>
-    {% elif status == 'mfa_reset' %}
-    <div class="alert alert-success" role="status">Authenticator reset. The user will enrol again at next sign-in.</div>
-    {% endif %}
-    {% if error %}
-    <div class="alert alert-error" role="alert">{{ error | replace('+', ' ') }}</div>
-    {% endif %}
-
-    <form action="/admin/users" method="post" class="form-grid" novalidate>
-        <div class="form-group{% if fe.username %} has-error{% endif %}">
-            <label for="username">Username</label>
-            <input id="username" type="text" name="username" required minlength="3" maxlength="64"
-                   autocomplete="off" value="{{ fv.username or '' }}"
-                   aria-describedby="usernameHelp usernameError" />
-            <p class="field-hint" id="usernameHelp">3–64 characters. Letters, numbers, hyphens, underscores.</p>
-            {% if fe.username %}<p class="field-error" id="usernameError">{{ fe.username }}</p>{% endif %}
-        </div>
-        <div class="form-group{% if fe.password %} has-error{% endif %}">
-            <label for="password">Password</label>
-            <input id="password" type="password" name="password" required minlength="8"
-                   autocomplete="new-password" aria-describedby="passwordHelp passwordError" />
-            <p class="field-hint" id="passwordHelp">At least 8 characters.</p>
-            {% if fe.password %}<p class="field-error" id="passwordError">{{ fe.password }}</p>{% endif %}
-        </div>
-        <div class="form-group{% if fe.email %} has-error{% endif %}">
-            <label for="email">Email <span class="muted">(optional)</span></label>
-            <input id="email" type="text" name="email" inputmode="email" autocomplete="email"
-                   placeholder="name@example.com" value="{{ fv.email or '' }}"
-                   aria-describedby="emailHelp emailError" />
-            <p class="field-hint" id="emailHelp">Used for meeting invitation emails when notifications are on.</p>
-            {% if fe.email %}<p class="field-error" id="emailError">{{ fe.email }}</p>{% endif %}
-        </div>
-        <div class="form-group{% if fe.role %} has-error{% endif %}">
-            <label for="role">Role</label>
-            <select id="role" name="role" required aria-describedby="roleError roleHelp">
-                {% for role in roles %}
-                <option value="{{ role.value }}" {% if fv.role == role.value %}selected{% endif %}>
-                    {% if role.value == 'admin' %}Admin — full access
-                    {% elif role.value == 'board_secretary' %}Board Secretary — search, view, meetings
-                    {% elif role.value == 'uploader' %}Uploader — upload only
-                    {% elif role.value == 'board_member' %}Board Member — archive read or view, invited meetings, agenda read or view
-                    {% else %}{{ role.value }}
-                    {% endif %}
-                </option>
-                {% endfor %}
-            </select>
-            <p class="field-hint" id="roleHelp">The role controls archive, meetings, and admin tools.</p>
-            {% if fe.role %}<p class="field-error" id="roleError">{{ fe.role }}</p>{% endif %}
-        </div>
-        <label class="checkbox-item">
-            <input type="checkbox" name="notifications_enabled" value="1" checked />
-            Enable meeting email &amp; in-app notifications for this user
-        </label>
-        <button type="submit" class="button-block">Create user</button>
-    </form>
-</section>
+{% if status == 'created' or status == 'success' %}
+<div class="alert alert-success" role="status">Person added. They can sign in now.</div>
+{% elif status == 'updated' %}
+<div class="alert alert-success" role="status">Changes saved.</div>
+{% elif status == 'deleted' %}
+<div class="alert alert-success" role="status">Person removed.</div>
+{% elif status == 'mfa_reset' %}
+<div class="alert alert-success" role="status">Phone check reset. They will set it up again next time they sign in.</div>
+{% endif %}
+{% if error %}
+<div class="alert alert-error" role="alert">{{ error | replace('+', ' ') }}</div>
+{% endif %}
 
 <section class="panel">
-    <h2>Directory</h2>
-    <p class="muted" style="margin-top: 0;">Edit a person to change username, email, role, password, or status.</p>
-    {% if users %}
-    <div class="table-wrap table-desktop">
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>Username</th>
-                    <th>Email</th>
-                    <th>Role</th>
-                    <th>Notify</th>
-                    <th>Status</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for u in users %}
-                <tr>
-                    <td>{{ u.username }}{% if u.id == user.id %} <span class="badge">You</span>{% endif %}</td>
-                    <td>{{ u.email or '—' }}</td>
-                    <td>{% if u.role.value == 'board_member' %}Board Member{% else %}{{ u.role.value | replace('_', ' ') | title }}{% endif %}</td>
-                    <td>{{ 'On' if u.notifications_enabled else 'Off' }}</td>
-                    <td>{{ 'Active' if u.is_active else 'Inactive' }}</td>
-                    <td class="user-actions">
-                        <button type="button" class="button button-secondary" data-edit-user="{{ u.id }}">Edit</button>
-                        {% if u.id != user.id %}
-                        <form action="/admin/users/{{ u.id }}/delete" method="post" class="inline-form"
-                              onsubmit="return confirm('Delete user {{ u.username }}? This cannot be undone.');">
-                            <button type="submit" class="button button-secondary danger-action">Delete</button>
-                        </form>
-                        {% endif %}
-                        {% if u.role.value in ('admin', 'board_secretary') %}
-                        <form action="/admin/users/{{ u.id }}/mfa/reset" method="post" class="inline-form"
-                              onsubmit="return confirm('Reset authenticator for {{ u.username }}?');">
-                            <button type="submit" class="button button-secondary">Reset MFA</button>
-                        </form>
-                        {% endif %}
-                    </td>
-                </tr>
-                <tr class="user-edit-row" id="edit-row-{{ u.id }}" hidden>
-                    <td colspan="6">
-                        <form action="/admin/users/{{ u.id }}/update" method="post" class="form-grid user-edit-form">
-                            <div class="form-group">
-                                <label>Username</label>
-                                <input type="text" name="username" value="{{ u.username }}" required minlength="3" maxlength="64" autocomplete="off" />
-                            </div>
-                            <div class="form-group">
-                                <label>Email</label>
-                                <input type="text" name="email" value="{{ u.email or '' }}" inputmode="email" />
-                            </div>
-                            <div class="form-group">
-                                <label>Role</label>
-                                <select name="role" {% if u.id == user.id %}disabled{% endif %}>
-                                    {% for role in roles %}
-                                    <option value="{{ role.value }}" {% if u.role.value == role.value %}selected{% endif %}>
-                                        {% if role.value == 'board_member' %}Board Member
-                                        {% else %}{{ role.value | replace('_', ' ') | title }}{% endif %}
-                                    </option>
-                                    {% endfor %}
-                                </select>
-                                {% if u.id == user.id %}<input type="hidden" name="role" value="admin" />{% endif %}
-                            </div>
-                            <div class="form-group">
-                                <label>New password <span class="muted">(optional)</span></label>
-                                <input type="password" name="new_password" minlength="8" autocomplete="new-password" placeholder="Leave blank to keep current" />
-                            </div>
-                            <label class="checkbox-item">
-                                <input type="checkbox" name="notifications_enabled" value="1" {% if u.notifications_enabled %}checked{% endif %} />
-                                Notifications on
-                            </label>
-                            {% if u.id != user.id %}
-                            <label class="checkbox-item">
-                                <input type="checkbox" name="is_active" value="1" {% if u.is_active %}checked{% endif %} />
-                                Active account
-                            </label>
-                            {% endif %}
-                            <div class="form-actions-row">
-                                <button type="submit" class="button">Save changes</button>
-                                <button type="button" class="button button-secondary" data-cancel-edit="{{ u.id }}">Cancel</button>
-                            </div>
-                        </form>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+    <div class="filter-bar">
+        <div class="form-group filter-bar-grow">
+            <label for="peopleSearch">Find a person</label>
+            <input id="peopleSearch" type="search" placeholder="Name, email or role" autocomplete="off" data-filter-target="peopleList" />
+        </div>
     </div>
-
-    <div class="mobile-card-list">
+    <p class="muted" id="peopleCount" aria-live="polite" style="margin-top:0;">{{ users | length }} {{ 'person' if users | length == 1 else 'people' }}</p>
+    {% if users %}
+    <ul class="card-list" id="peopleList">
         {% for u in users %}
-        <article class="mobile-card">
-            <h3>{{ u.username }}{% if u.id == user.id %} <span class="badge">You</span>{% endif %}</h3>
-            <dl>
-                <div><dt>Role</dt><dd>{% if u.role.value == 'board_member' %}Board Member{% else %}{{ u.role.value | replace('_', ' ') | title }}{% endif %}</dd></div>
-                <div><dt>Email</dt><dd>{{ u.email or '—' }}</dd></div>
-                <div><dt>Notify</dt><dd>{{ 'On' if u.notifications_enabled else 'Off' }}</dd></div>
-                <div><dt>Status</dt><dd>{{ 'Active' if u.is_active else 'Inactive' }}</dd></div>
-            </dl>
-            <div class="user-actions">
-                <button type="button" class="button button-secondary" data-edit-user="{{ u.id }}">Edit</button>
-                {% if u.id != user.id %}
-                <form action="/admin/users/{{ u.id }}/delete" method="post" class="inline-form"
-                      onsubmit="return confirm('Delete user {{ u.username }}?');">
-                    <button type="submit" class="button button-secondary danger-action">Delete</button>
+        {% set is_me = u.id == user.id %}
+        <li class="list-card person-card{% if not u.is_active %} is-off{% endif %}"
+            data-filter-text="{{ (u.username ~ ' ' ~ (u.email or '') ~ ' ' ~ role_display_label(u.role)) | lower }}">
+            <div class="list-card-top">
+                <h2 class="notif-title">{{ u.username }}{% if is_me %} <span class="muted">(you)</span>{% endif %}</h2>
+                {% if u.is_active %}<span class="status-chip status-chip-ok">Can sign in</span>{% else %}<span class="status-chip status-chip-neutral">Switched off</span>{% endif %}
+            </div>
+            <p class="list-card-meta">{{ role_display_label(u.role) }} · {{ u.email or 'no email' }} · notifications {{ 'on' if u.notifications_enabled else 'off' }}</p>
+            <div class="list-card-actions">
+                {% if not is_me %}
+                <form action="/admin/users/{{ u.id }}/update" method="post" class="inline-form"
+                      {% if u.is_active %}data-confirm-title="Switch off {{ u.username }}?" data-confirm="They won't be able to sign in. Their records and history are kept, and you can switch them back on at any time." data-confirm-ok="Switch off"{% endif %}>
+                    <input type="hidden" name="username" value="{{ u.username }}" />
+                    <input type="hidden" name="email" value="{{ u.email or '' }}" />
+                    <input type="hidden" name="role" value="{{ u.role.value }}" />
+                    {% if u.notifications_enabled %}<input type="hidden" name="notifications_enabled" value="1" />{% endif %}
+                    {% if not u.is_active %}<input type="hidden" name="is_active" value="1" />{% endif %}
+                    <button type="submit" class="button button-secondary">{{ 'Switch off' if u.is_active else 'Switch back on' }}</button>
+                </form>
+                {% endif %}
+                {% if u.role.value in ('admin', 'board_secretary') %}
+                <form action="/admin/users/{{ u.id }}/mfa/reset" method="post" class="inline-form"
+                      data-confirm-title="Reset {{ u.username }}'s phone check?" data-confirm="Use this if they lost or changed their phone. They will scan a new code the next time they sign in." data-confirm-ok="Reset">
+                    <button type="submit" class="button button-secondary">Reset phone check</button>
                 </form>
                 {% endif %}
             </div>
-            <div class="user-edit-row" id="edit-card-{{ u.id }}" hidden>
+            <details class="soft-details">
+                <summary>Change details</summary>
                 <form action="/admin/users/{{ u.id }}/update" method="post" class="form-grid user-edit-form">
                     <div class="form-group">
-                        <label>Username</label>
-                        <input type="text" name="username" value="{{ u.username }}" required minlength="3" maxlength="64" autocomplete="off" />
+                        <label for="un{{ u.id }}">Username</label>
+                        <input id="un{{ u.id }}" type="text" name="username" value="{{ u.username }}" required minlength="3" maxlength="64" autocomplete="off" autocapitalize="none" spellcheck="false" />
                     </div>
                     <div class="form-group">
-                        <label>Email</label>
-                        <input type="text" name="email" value="{{ u.email or '' }}" />
+                        <label for="em{{ u.id }}">Email (optional)</label>
+                        <input id="em{{ u.id }}" type="email" name="email" value="{{ u.email or '' }}" inputmode="email" autocomplete="off" />
                     </div>
                     <div class="form-group">
-                        <label>Role</label>
-                        <select name="role" {% if u.id == user.id %}disabled{% endif %}>
+                        <label for="ro{{ u.id }}">Role</label>
+                        <select id="ro{{ u.id }}" name="role" {% if is_me %}disabled{% endif %}>
                             {% for role in roles %}
-                            <option value="{{ role.value }}" {% if u.role.value == role.value %}selected{% endif %}>
-                                {% if role.value == 'board_member' %}Board Member
-                                {% else %}{{ role.value | replace('_', ' ') | title }}{% endif %}
-                            </option>
+                            <option value="{{ role.value }}" {% if u.role.value == role.value %}selected{% endif %}>{{ role_display_label(role) }}</option>
                             {% endfor %}
                         </select>
-                        {% if u.id == user.id %}<input type="hidden" name="role" value="admin" />{% endif %}
+                        {% if is_me %}<input type="hidden" name="role" value="admin" /><p class="field-hint">You can't change your own role.</p>{% endif %}
                     </div>
                     <div class="form-group">
-                        <label>New password</label>
-                        <input type="password" name="new_password" minlength="8" placeholder="Optional" />
+                        <label for="pw{{ u.id }}">New password (optional)</label>
+                        <input id="pw{{ u.id }}" type="password" name="new_password" minlength="8" autocomplete="new-password" placeholder="Leave empty to keep the current one" />
                     </div>
                     <label class="checkbox-item">
                         <input type="checkbox" name="notifications_enabled" value="1" {% if u.notifications_enabled %}checked{% endif %} />
-                        Notifications on
+                        Send meeting emails and notifications
                     </label>
-                    {% if u.id != user.id %}
+                    {% if not is_me %}
                     <label class="checkbox-item">
                         <input type="checkbox" name="is_active" value="1" {% if u.is_active %}checked{% endif %} />
-                        Active
+                        Can sign in
                     </label>
                     {% endif %}
-                    <button type="submit" class="button">Save</button>
+                    <div><button type="submit" class="button">Save changes</button></div>
                 </form>
-            </div>
-        </article>
+                {% if not is_me %}
+                <form action="/admin/users/{{ u.id }}/delete" method="post" class="danger-zone"
+                      data-confirm-title="Remove {{ u.username }} for good?" data-confirm="This can't be undone. To stop someone signing in but keep their history, use Switch off instead."
+                      data-confirm-ok="Remove for good" data-confirm-danger data-confirm-type="{{ u.username }}">
+                    <p class="muted">Removing someone can't be undone. Usually "Switch off" is better.</p>
+                    <button type="submit" class="button button-secondary danger-action">Remove for good</button>
+                </form>
+                {% endif %}
+            </details>
+        </li>
         {% endfor %}
-    </div>
+    </ul>
+    <p class="muted" id="peopleNone" hidden>Nobody matches your search.</p>
     {% else %}
-    {{ empty_state("No users yet", "Create the first account above.") }}
+    {{ empty_state("Nobody yet", "Add the first person below.") }}
     {% endif %}
 </section>
 
+<section class="panel" id="addPerson">
+    <h2>Add a person</h2>
+    <form action="/admin/users" method="post" class="form-grid" novalidate>
+        <div class="form-group{% if fe.username %} has-error{% endif %}">
+            <label for="username">Username <span class="req">required</span></label>
+            <input id="username" type="text" name="username" required minlength="3" maxlength="64"
+                   autocomplete="off" autocapitalize="none" spellcheck="false" value="{{ fv.username or '' }}"
+                   aria-describedby="usernameHelp{% if fe.username %} usernameError{% endif %}" />
+            <p class="field-hint" id="usernameHelp">3 to 64 letters or numbers. You can also use - and _.</p>
+            {% if fe.username %}<p class="field-error" id="usernameError">{{ fe.username }}</p>{% endif %}
+        </div>
+        <div class="form-group{% if fe.password %} has-error{% endif %}">
+            <label for="password">First password <span class="req">required</span></label>
+            <input id="password" type="password" name="password" required minlength="8"
+                   autocomplete="new-password" aria-describedby="passwordHelp{% if fe.password %} passwordError{% endif %}" />
+            <p class="field-hint" id="passwordHelp">At least 8 characters. Give it to them privately.</p>
+            {% if fe.password %}<p class="field-error" id="passwordError">{{ fe.password }}</p>{% endif %}
+        </div>
+        <div class="form-group{% if fe.email %} has-error{% endif %}">
+            <label for="email">Email (optional)</label>
+            <input id="email" type="email" name="email" inputmode="email" autocomplete="off"
+                   placeholder="name@sonalibank.com.bd" value="{{ fv.email or '' }}"
+                   aria-describedby="emailHelp{% if fe.email %} emailError{% endif %}" />
+            <p class="field-hint" id="emailHelp">Needed for meeting invitations by email.</p>
+            {% if fe.email %}<p class="field-error" id="emailError">{{ fe.email }}</p>{% endif %}
+        </div>
+        <fieldset class="form-group role-choice{% if fe.role %} has-error{% endif %}" style="grid-column: 1 / -1;">
+            <legend>What can they do? <span class="req">required</span></legend>
+            {% for role in roles %}
+            <label class="checkbox-item">
+                <input type="radio" name="role" value="{{ role.value }}" required {% if fv.role == role.value or (not fv.role and role.value == 'board_member') %}checked{% endif %} />
+                <span><strong>{{ role_display_label(role) }}</strong> <span class="muted">· {{ role_hint(role.value) }}</span></span>
+            </label>
+            {% endfor %}
+            {% if fe.role %}<p class="field-error" id="roleError">{{ fe.role }}</p>{% endif %}
+        </fieldset>
+        <label class="checkbox-item">
+            <input type="checkbox" name="notifications_enabled" value="1" checked />
+            Send meeting emails and notifications
+        </label>
+        <div><button type="submit" class="button">Add person</button></div>
+    </form>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var input = document.getElementById("peopleSearch");
+  var list = document.getElementById("peopleList");
+  if (!input || !list) return;
+  var items = Array.prototype.slice.call(list.querySelectorAll("[data-filter-text]"));
+  var count = document.getElementById("peopleCount");
+  var none = document.getElementById("peopleNone");
+  input.addEventListener("input", function () {
+    var q = input.value.trim().toLowerCase();
+    var shown = 0;
+    items.forEach(function (li) {
+      var hit = !q || li.getAttribute("data-filter-text").indexOf(q) !== -1;
+      li.hidden = !hit;
+      if (hit) shown++;
+    });
+    count.textContent = q ? shown + " of " + items.length + " shown" : items.length + (items.length === 1 ? " person" : " people");
+    none.hidden = shown !== 0;
+  });
+})();
+</script>
 {% endblock %}

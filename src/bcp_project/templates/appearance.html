@@ -1,64 +1,63 @@
 {% extends "base.html" %}
+{% from "macros/ui.html" import breadcrumbs %}
 
 {% block title %}Appearance | {{ brand.product_name }}{% endblock %}
 
 {% block content %}
+{{ breadcrumbs([{'href': '/', 'label': 'Home'}, {'label': 'Appearance'}]) }}
 <div class="page-header">
     <div class="title-group">
         <h1>Appearance</h1>
-        <p>Boardroom palettes for web and the installed app. Saved on this device.</p>
+        <p>Choose colours, light or dark, and text size. Changes apply straight away and are saved on this device only.</p>
     </div>
 </div>
 
-<section class="panel" data-page="appearance">
-    <h2>Theme</h2>
-    <p class="muted" style="margin-top:0;">Institutional palettes for boardroom reading — day and night.</p>
-    <div class="theme-grid" id="themeGrid" role="listbox" aria-label="Theme options">
-        <button type="button" class="theme-option" data-theme-choice="green" aria-selected="false">
-            <div class="theme-swatch" aria-hidden="true">
-                <span style="background:#1A1A54"></span>
-                <span style="background:#C5922F"></span>
-                <span style="background:#eef0f8"></span>
-            </div>
-            <strong>Green</strong>
-            <span class="theme-desc">Sonali default — navy &amp; gold</span>
-        </button>
-        <button type="button" class="theme-option" data-theme-choice="red" aria-selected="false">
-            <div class="theme-swatch" aria-hidden="true">
-                <span style="background:#c9182b"></span>
-                <span style="background:#f4c81f"></span>
-                <span style="background:#ffffff"></span>
-            </div>
-            <strong>Red</strong>
-            <span class="theme-desc">Crimson leadership with crisp white surfaces</span>
-        </button>
-        <button type="button" class="theme-option" data-theme-choice="yellow" aria-selected="false">
-            <div class="theme-swatch" aria-hidden="true">
-                <span style="background:#c9a016"></span>
-                <span style="background:#1a1810"></span>
-                <span style="background:#fbf6e4"></span>
-            </div>
-            <strong>Yellow</strong>
-            <span class="theme-desc">Warm gold surfaces with high-contrast text</span>
-        </button>
-        <button type="button" class="theme-option" data-theme-choice="white" aria-selected="false">
-            <div class="theme-swatch" aria-hidden="true">
-                <span style="background:#ffffff;border:1px solid #ddd"></span>
-                <span style="background:#1A1A54"></span>
-                <span style="background:#b8923e"></span>
-            </div>
-            <strong>White</strong>
-            <span class="theme-desc">Clean editorial light with thin accents</span>
-        </button>
-        <button type="button" class="theme-option" data-theme-choice="black" aria-selected="false">
-            <div class="theme-swatch" aria-hidden="true">
-                <span style="background:#0b1210"></span>
-                <span style="background:#2d9a72"></span>
-                <span style="background:#d4a84b"></span>
-            </div>
-            <strong>Black</strong>
-            <span class="theme-desc">Dark executive — night-friendly reading</span>
-        </button>
-    </div>
+<div data-page="appearance">
+<section class="panel">
+    <fieldset class="appearance-set">
+        <legend><h2>Colours</h2></legend>
+        <div class="theme-grid">
+            {% for value, name, desc, swatch in [
+                ('green', 'Navy and gold', 'Sonali Bank colours (standard)', ['#1a1a54', '#c5922f', '#f5f6fa']),
+                ('red', 'Crimson', 'Deep red with gold', ['#b3132a', '#d4a84b', '#f8f4f4']),
+                ('yellow', 'Gold', 'Warm gold with dark text', ['#7a5f00', '#c9a016', '#f8f4e9']),
+                ('white', 'Bangladesh green', 'Green with gold on white', ['#006a4e', '#b8923e', '#f7f9f8']),
+            ] %}
+            <label class="theme-option appearance-choice">
+                <input type="radio" name="theme" value="{{ value }}" data-appearance="theme" />
+                <span class="theme-swatch" aria-hidden="true">
+                    {% for c in swatch %}<span style="background:{{ c }}"></span>{% endfor %}
+                </span>
+                <strong>{{ name }}</strong>
+                <span class="theme-desc">{{ desc }}</span>
+            </label>
+            {% endfor %}
+        </div>
+    </fieldset>
 </section>
+
+<section class="panel">
+    <fieldset class="appearance-set">
+        <legend><h2>Light or dark</h2></legend>
+        <div class="segmented" role="presentation">
+            <label class="segmented-option"><input type="radio" name="mode" value="system" data-appearance="mode" /> <span>Same as this device</span></label>
+            <label class="segmented-option"><input type="radio" name="mode" value="light" data-appearance="mode" /> <span>Light</span></label>
+            <label class="segmented-option"><input type="radio" name="mode" value="dark" data-appearance="mode" /> <span>Dark</span></label>
+        </div>
+        <p class="field-hint">Dark is easier on the eyes at night. "Same as this device" follows your phone or computer setting.</p>
+    </fieldset>
+</section>
+
+<section class="panel">
+    <fieldset class="appearance-set">
+        <legend><h2>Text size</h2></legend>
+        <div class="segmented" role="presentation">
+            <label class="segmented-option"><input type="radio" name="text" value="standard" data-appearance="text" /> <span>Standard</span></label>
+            <label class="segmented-option"><input type="radio" name="text" value="large" data-appearance="text" /> <span style="font-size:1.1em">Large</span></label>
+            <label class="segmented-option"><input type="radio" name="text" value="xlarge" data-appearance="text" /> <span style="font-size:1.25em">Extra large</span></label>
+        </div>
+        <p class="appearance-preview">Preview: The Board approved the annual budget. <span lang="bn">পরিচালনা পর্ষদ বার্ষিক বাজেট অনুমোদন করেছে।</span></p>
+    </fieldset>
+</section>
+</div>
 {% endblock %}

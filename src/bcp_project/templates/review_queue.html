@@ -1,52 +1,70 @@
 {% extends "base.html" %}
 
-{% block title %}Verification queue | {{ brand.product_name }}{% endblock %}
+{% block title %}{{ t('nav.review') }} | {{ brand.product_name }}{% endblock %}
 
 {% block content %}
 <div class="page-header">
     <div class="title-group">
-        <h1>Verification queue</h1>
-        <p>Scans whose OCR confidence was too low to trust. They stay out of search until someone checks the text and confirms the metadata.</p>
+        <h1>{{ t('nav.review') }}</h1>
+        <p>New uploads that need a person to check them before they appear in Search. Compare each page with the scan, fix anything wrong, then publish it or send it back.</p>
     </div>
 </div>
 
 {% if status == 'approved' %}
-<div class="alert alert-success" role="status">Approved. The corrected text is being indexed and will be searchable shortly.</div>
+<div class="alert alert-success" role="status"><span><strong>Published.</strong> The document will be searchable in a few moments.</span></div>
 {% elif status == 'rejected' %}
-<div class="alert alert-success" role="status">Rejected. The version will not be indexed.</div>
-{% endif %}
-{% if four_eyes %}
-<p class="muted">Four-eyes rule is on: you cannot verify a document you uploaded.</p>
+<div class="alert alert-info" role="status"><span><strong>Sent back.</strong> It won't appear in Search. The uploader can see your note in My uploads.</span></div>
 {% endif %}
 
-<section class="panel">
-    {% if items %}
-    <div class="table-wrap">
-        <table class="data-table">
-            <thead>
-                <tr><th>Document</th><th>Type</th><th>Classification</th><th>OCR confidence</th><th>Pages</th><th>Uploaded</th><th></th></tr>
-            </thead>
-            <tbody>
-                {% for it in items %}
-                <tr>
-                    <td>
-                        <strong>{{ it.doc_id }}</strong>{% if it.is_new_version %} <span class="badge">v{{ it.version }}</span>{% endif %}
-                        {% if it.title %}<br><span class="muted">{{ it.title }}</span>{% endif %}
-                        {% if it.review_reasons %}<br><span class="muted small">{{ it.review_reasons|join('; ') }}</span>{% endif %}
-                    </td>
-                    <td>{{ it.doc_type }}</td>
-                    <td><span class="badge">{{ it.sensitivity }}</span></td>
-                    <td>{% if it.ocr_confidence is not none %}{{ '%.0f'|format(it.ocr_confidence) }}%{% else %}—{% endif %}</td>
-                    <td>{{ it.page_count or '—' }}</td>
-                    <td>{{ it.uploaded_by }}<br><span class="muted">{{ (it.uploaded_at or '')[:16]|replace('T', ' ') }}</span></td>
-                    <td><a class="button" href="/review/{{ it.doc_id }}?v={{ it.version }}">Verify</a></td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% else %}
-    <p class="muted">Nothing is waiting for verification.</p>
-    {% endif %}
-</section>
+{% set show = request.query_params.get('show', '') %}
+{% set mine = items|selectattr('uploaded_by', 'equalto', user.username)|list %}
+{% set others = items|rejectattr('uploaded_by', 'equalto', user.username)|list %}
+{% if four_eyes and mine %}
+<nav class="section-tabs" aria-label="Filter the list">
+    <a href="/review" data-nav{% if show not in ('mine', 'others') %} class="is-active" aria-current="true"{% endif %}>All ({{ items|length }})</a>
+    <a href="/review?show=others" data-nav{% if show == 'others' %} class="is-active" aria-current="true"{% endif %}>Ones you can check ({{ others|length }})</a>
+    <a href="/review?show=mine" data-nav{% if show == 'mine' %} class="is-active" aria-current="true"{% endif %}>Uploaded by you ({{ mine|length }})</a>
+</nav>
+{% endif %}
+{% set shown = mine if show == 'mine' else (others if show == 'others' else items) %}
+
+{% if shown %}
+<ul class="card-list" role="list">
+    {% for it in shown %}
+    {% set is_mine = four_eyes and it.uploaded_by == user.username %}
+    <li class="list-card">
+        <div class="list-card-top">
+            <h3>{{ it.title or it.doc_id }}</h3>
+            {% if is_mine %}
+            <span class="status-chip status-chip-neutral">You uploaded this</span>
+            {% else %}
+            <span class="status-chip status-chip-warn">Waiting for a check</span>
+            {% endif %}
+        </div>
+        <p class="list-card-meta">
+            {{ it.doc_id }}{% if it.is_new_version %} · new version {{ it.version }}{% endif %}
+            · {{ it.doc_type }} · {{ it.sensitivity|status_label('sensitivity') }}
+            {% if it.page_count %} · {{ it.page_count }} page{{ '' if it.page_count == 1 else 's' }}{% endif %}
+            · uploaded by {{ it.uploaded_by }} on {{ it.uploaded_at|local_dt }}
+        </p>
+        {% if it.review_reason_codes %}
+        <ul class="reason-list" aria-label="Why it needs a check">
+            {% for code in it.review_reason_codes %}<li>{{ code|reason_label }}</li>{% endfor %}
+        </ul>
+        {% endif %}
+        {% if is_mine %}
+        <p class="muted">Someone else must check a document you uploaded.</p>
+        {% endif %}
+        <div class="list-card-actions">
+            <a class="button{% if is_mine %} button-secondary{% endif %}" href="/review/{{ it.doc_id }}?v={{ it.version }}" data-nav>{% if is_mine %}Look at it{% else %}Check this document{% endif %}</a>
+        </div>
+    </li>
+    {% endfor %}
+</ul>
+{% else %}
+<div class="empty-state panel">
+    <p><strong>Nothing to check right now.</strong></p>
+    <p class="muted">New uploads that need a person to look at them will appear here.</p>
+</div>
+{% endif %}
 {% endblock %}

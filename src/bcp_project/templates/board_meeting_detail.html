@@ -4,8 +4,11 @@
 {% block title %}{{ meeting.title }} | Sonali Bank Archive System{% endblock %}
 
 {% block content %}
-{% set crumbs = [{'href': '/board/meetings', 'label': 'Meetings'}, {'label': meeting.title}] %}
+{% set crumbs = [{'href': '/board/meetings', 'label': 'My meetings'}, {'label': meeting.title}] %}
 {{ breadcrumbs(crumbs) }}
+
+{% set location = (meeting.location or '') | trim %}
+{% set location_is_link = location.startswith('https://') or location.startswith('http://') %}
 
 <header class="meeting-hero">
     <div class="meeting-hero-row">
@@ -15,51 +18,67 @@
             </div>
             <h1>{{ meeting.title }}</h1>
             <ul class="meeting-hero-facts">
-                <li>{{ meeting.scheduled_at.strftime('%d %b %Y, %H:%M') }}</li>
-                {% if meeting.location %}<li>{{ meeting.location }}</li>{% endif %}
+                <li><time datetime="{{ meeting.scheduled_at.isoformat() }}">{{ meeting.scheduled_at | wall_dt }}</time></li>
+                {% if location %}
+                <li>
+                    {% if location_is_link %}
+                    <a href="{{ location }}" target="_blank" rel="noopener noreferrer">Join online</a>
+                    {% else %}
+                    {{ location }} · <a href="https://www.google.com/maps/search/?api=1&amp;query={{ location | urlencode }}" target="_blank" rel="noopener noreferrer">Show on map</a>
+                    {% endif %}
+                </li>
+                {% endif %}
             </ul>
         </div>
     </div>
 </header>
 
 {% if status == 'signed' %}
-<div class="alert alert-success" role="status">You're checked in. Thank you for signing in.</div>
+<div class="alert alert-success" role="status">You're signed in. Thank you.</div>
+{% elif status == 'already_signed' %}
+<div class="alert alert-success" role="status">You had already signed in for this meeting. Nothing else to do.</div>
+{% elif status == 'attendance_locked' %}
+<div class="alert alert-error" role="alert">Sign-in is closed for this meeting. Please speak to the meeting organizer.</div>
+{% elif status == 'signature_invalid' %}
+<div class="alert alert-error" role="alert">We couldn't read your signature. Please clear the box, sign again and press "Sign in".</div>
 {% endif %}
 
 {% if meeting.transcription_status == 'live' %}
-<div class="alert alert-success" role="status">The organizer is recording with live captions for a draft transcript of this sitting.</div>
+<div class="banner info" role="status">The organizer is recording this meeting to prepare the minutes.</div>
 {% elif meeting.transcription_status == 'processing' %}
-<div class="alert alert-success" role="status">The organizer has stopped recording; a transcript and minutes draft are being prepared.</div>
+<div class="banner info" role="status">The recording has stopped. The minutes are being prepared.</div>
 {% endif %}
 
 <nav class="section-tabs" aria-label="Meeting sections">
-    <a href="#attendance">Check-in</a>
+    <a href="#attendance">Sign in</a>
     <a href="#agenda">Agenda</a>
     <a href="#documents">Papers</a>
-    <a href="#intelligence">Archive</a>
+    {% if minutes_viewable %}<a href="#minutes">Minutes</a>{% endif %}
+    <a href="#intelligence">Past records</a>
 </nav>
 
 <section class="panel checkin-card" id="attendance">
-    <h2>Check-in</h2>
+    <h2>Sign in</h2>
     {% if my_attendance %}
     <div class="checkin-done">
         <strong>You are signed in</strong>
-        <p class="muted">Checked in at {{ my_attendance.signed_at.strftime('%d %b %Y, %H:%M') }}.</p>
+        <p class="muted">Signed in at {{ my_attendance.signed_at | local_dt }}.</p>
     </div>
     {% elif meeting.attendance_open %}
-    <p>Sign below to record your attendance for this sitting.</p>
+    <p>Sign your name in the box with your finger, pen or mouse. Then press "Sign in".</p>
     <div class="sig-wrap">
-        <canvas id="sig-pad" width="400" height="150" aria-label="Signature pad"></canvas>
+        <canvas id="sig-pad" aria-label="Signature box. Draw your signature here." role="img"></canvas>
+        <p class="sig-hint muted" id="sig-hint">Sign inside the box</p>
         <div class="sig-actions">
             <button type="button" id="sig-clear" class="button-secondary">Clear</button>
-            <form id="sig-form" action="/board/meetings/{{ meeting.id }}/attendance" method="post" style="flex:1;">
+            <form id="sig-form" action="/board/meetings/{{ meeting.id }}/attendance" method="post" class="sig-form" data-no-busy>
                 <input type="hidden" name="signature" id="sig-data" />
-                <button type="submit" id="sig-submit" class="button-block" disabled>Sign &amp; check in</button>
+                <button type="submit" id="sig-submit" class="button-block" disabled>Sign in</button>
             </form>
         </div>
     </div>
     {% else %}
-    <p class="muted">Attendance check-in has not been opened by the organizer yet.</p>
+    <p class="muted">Sign-in hasn't opened yet. The organizer opens it when the meeting starts. Come back to this page then.</p>
     {% endif %}
 </section>
 
@@ -74,68 +93,75 @@
     {% elif meeting.agenda %}
     <p class="agenda-paper">{{ meeting.agenda }}</p>
     {% else %}
-    {{ empty_state("No agenda yet", "The organizer has not posted an agenda.") }}
+    {{ empty_state("No agenda yet", "The organizer hasn't added an agenda yet.") }}
     {% endif %}
 </section>
 
 <section class="panel" id="documents">
-    <h2>Documents</h2>
+    <h2>Papers for this meeting</h2>
     {% if documents %}
-    <table class="data-table table-desktop">
-        <thead>
-            <tr>
-                <th>Title</th>
-                <th>Uploaded at</th>
-                <th></th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for doc in documents %}
-            <tr>
-                <td>{{ doc.title }}</td>
-                <td>{{ doc.uploaded_at.strftime('%d %b %Y, %H:%M') }}</td>
-                <td><a class="button button-secondary" href="/board/meetings/{{ meeting.id }}/documents/{{ doc.id }}/view">View</a>{% if doc.archive_doc_id in briefed_doc_ids %} <a class="button button-secondary" href="/documents/{{ doc.archive_doc_id }}/briefing">Briefing</a>{% endif %}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    <div class="mobile-card-list">
+    <div class="card-list">
         {% for doc in documents %}
-        <article class="mobile-card">
-            <h3>{{ doc.title }}</h3>
-            <dl>
-                <div><dt>Uploaded</dt><dd>{{ doc.uploaded_at.strftime('%d %b %Y, %H:%M') }}</dd></div>
-            </dl>
-            <p style="margin-top: 0.75rem;"><a class="button" href="/board/meetings/{{ meeting.id }}/documents/{{ doc.id }}/view">View document</a>{% if doc.archive_doc_id in briefed_doc_ids %} <a class="button button-secondary" href="/documents/{{ doc.archive_doc_id }}/briefing">Approved briefing</a>{% endif %}</p>
+        <article class="list-card">
+            <div class="list-card-top">
+                <h3>{{ doc.title }}</h3>
+                {% if doc.archive_doc_id in briefed_doc_ids %}<span class="status-chip status-chip-ok">Briefing ready</span>{% endif %}
+            </div>
+            <p class="list-card-meta">Added {{ doc.uploaded_at | local_dt }}</p>
+            <div class="list-card-actions">
+                <a class="button" href="/board/meetings/{{ meeting.id }}/documents/{{ doc.id }}/view">Read</a>
+                {% if doc.archive_doc_id in briefed_doc_ids %}
+                <a class="button button-secondary" href="/documents/{{ doc.archive_doc_id }}/briefing" data-nav>Read the briefing</a>
+                {% endif %}
+            </div>
         </article>
         {% endfor %}
     </div>
     {% else %}
-    {{ empty_state("No documents", "No documents have been shared for this meeting yet.") }}
+    {{ empty_state("No papers yet", "The organizer hasn't shared any papers for this meeting yet.") }}
     {% endif %}
 </section>
 
+{% if minutes_viewable %}
+<section class="panel" id="minutes">
+    <h2>Approved minutes</h2>
+    <p class="muted">The minutes of this meeting have been approved.</p>
+    <p><a class="button" href="/view/{{ minutes_doc_id }}">Read the minutes</a></p>
+    {% if decisions %}
+    <h3>Decisions</h3>
+    <ol class="decision-list">
+        {% for d in decisions %}
+        <li>
+            {{ d.text }}
+            {% if d.agenda_item %}<span class="muted"> · Agenda: {{ d.agenda_item }}</span>{% endif %}
+        </li>
+        {% endfor %}
+    </ol>
+    {% endif %}
+</section>
+{% endif %}
+
 <section class="panel" id="intelligence">
-    <h2>Context</h2>
-    <p class="muted" style="margin-top:0;">Look up this sitting in the archive. Answers come from stored papers only.</p>
+    <h2>Past records</h2>
+    <p class="muted" style="margin-top:0;">Find earlier papers on the same subjects. Results come from the archive only.</p>
     <div class="intel-actions">
         {% for q in intel_queries %}
         <a class="button button-secondary" href="/search?q={{ q | urlencode }}" data-nav>{{ q[:56] }}{% if q|length > 56 %}…{% endif %}</a>
         {% endfor %}
-        <a class="button button-secondary" href="/archive/map" data-nav>Open mind map</a>
+        <a class="button button-secondary" href="/archive/map" data-nav>See how documents connect</a>
     </div>
     {% if related_meetings %}
-    <p class="form-section-label" style="margin-top:1.25rem;">Other sittings</p>
+    <h3 class="form-section-label" style="margin-top:1.25rem;">Other meetings</h3>
     <div class="meeting-list">
         {% for other in related_meetings %}
         <a class="meeting-brief" href="/board/meetings/{{ other.id }}" data-nav>
             <time class="meeting-dateblock" datetime="{{ other.scheduled_at.isoformat() }}">
-                <span class="meeting-dateblock-day">{{ other.scheduled_at.strftime('%d') }}</span>
-                <span class="meeting-dateblock-month">{{ other.scheduled_at.strftime('%b') }}</span>
+                <span class="meeting-dateblock-day">{{ other.scheduled_at | wall_dt('%d') }}</span>
+                <span class="meeting-dateblock-month">{{ other.scheduled_at | wall_dt('%b') }}</span>
             </time>
             <div class="meeting-brief-body">
                 <h3>{{ other.title }}</h3>
-                <p class="meeting-brief-meta">{{ other.scheduled_at.strftime('%d %b %Y, %H:%M') }}</p>
+                <p class="meeting-brief-meta">{{ other.scheduled_at | wall_dt }}</p>
             </div>
         </a>
         {% endfor %}

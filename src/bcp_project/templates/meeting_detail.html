@@ -4,11 +4,14 @@
 {% block title %}{{ meeting.title }} | Sonali Bank Archive System{% endblock %}
 
 {% block content %}
-{% set crumbs = [{'href': '/meetings', 'label': 'Meetings'}, {'label': meeting.title}] %}
+{% set crumbs = [{'href': '/meetings', 'label': 'Manage meetings'}, {'label': meeting.title}] %}
 {% set invite_count = invitations | length %}
 {% set signed_count = attendance | length %}
 {% set tx = meeting.transcription_status or 'off' %}
 {% set lines = transcript_segments or meeting.transcription_json or [] %}
+{% set mv = minutes_view or {} %}
+{% set wf = mv.workflow or {} %}
+{% set minutes_state = wf.state or 'draft' %}
 {{ breadcrumbs(crumbs) }}
 
 <div class="meeting-workspace" data-page="meeting-organizer">
@@ -20,7 +23,7 @@
             </div>
             <h1>{{ meeting.title }}</h1>
             <ul class="meeting-hero-facts">
-                <li>{{ meeting.scheduled_at.strftime('%d %b %Y, %H:%M') }}</li>
+                <li>{{ meeting.scheduled_at | wall_dt }}</li>
                 {% if meeting.location %}<li>{{ meeting.location }}</li>{% endif %}
                 <li>{{ signed_count }} of {{ invite_count }} signed in</li>
             </ul>
@@ -32,394 +35,84 @@
 {% if status == 'agenda_updated' %}
 <div class="alert alert-success" role="status">Agenda saved.</div>
 {% elif status == 'doc_uploaded' %}
-<div class="alert alert-success" role="status">Paper uploaded to this sitting.</div>
+<div class="alert alert-success" role="status">Paper added to this meeting.</div>
 {% elif status == 'created' %}
-<div class="alert alert-success" role="status">Meeting created{% if meeting.notifications_enabled %} and invitations queued{% endif %}.</div>
+<div class="alert alert-success" role="status">Meeting created{% if meeting.notifications_enabled %}. Invitations are on their way{% endif %}.</div>
 {% elif status == 'attendance_opened' %}
-<div class="alert alert-success" role="status">Members can now sign in.</div>
+<div class="alert alert-success" role="status">Check-in is open. Members can now sign in on their own devices.</div>
 {% elif status == 'attendance_closed' %}
 <div class="alert alert-success" role="status">Check-in is closed.</div>
 {% elif status == 'notifications_updated' %}
-<div class="alert alert-success" role="status">Notification settings saved.</div>
+<div class="alert alert-success" role="status">Notification setting saved.</div>
 {% elif status == 'invites_resent' %}
-<div class="alert alert-success" role="status">Invitation emails resent.</div>
+<div class="alert alert-success" role="status">Invitations sent again.</div>
 {% elif status == 'notifications_disabled' %}
-<div class="alert alert-error" role="alert">Enable notifications first, then resend invitations.</div>
+<div class="alert alert-error" role="alert">Turn on notifications first, then send the invitations again.</div>
 {% elif status == 'transcription_started' %}
-<div class="alert alert-success" role="status">Recording started. Allow the microphone when prompted — keep this tab open until you stop.</div>
+<div class="alert alert-success" role="status">Recording started. Choose “Allow” if the browser asks to use the microphone, and keep this page open until you stop.</div>
 {% elif status == 'transcription_stopped' %}
-<div class="alert alert-success" role="status">Transcript ready for this sitting.</div>
+<div class="alert alert-success" role="status">The recording is saved and the transcript is ready.</div>
 {% elif status == 'transcription_processing' %}
-<div class="alert alert-success" role="status">Audio saved. Finalizing the transcript and drafting minutes — this page will refresh when ready.</div>
+<div class="alert alert-success" role="status">The recording is saved. The AI is writing the transcript and a first draft of the minutes. This page updates by itself.</div>
 {% elif status == 'transcription_already_live' %}
-<div class="alert alert-success" role="status">Recording is already running for this sitting.</div>
+<div class="alert alert-success" role="status">The recording is already running.</div>
 {% elif status == 'transcription_not_live' %}
-<div class="alert alert-error" role="alert">Transcription is not recording.</div>
+<div class="alert alert-error" role="alert">Nothing is being recorded right now.</div>
 {% elif status == 'minutes_saved' %}
-<div class="alert alert-success" role="status">Minutes draft saved.</div>
+<div class="alert alert-success" role="status">Your changes to the minutes are saved.</div>
 {% elif status == 'minutes_generating' %}
-<div class="alert alert-success" role="status">Regenerating minutes draft from the transcript.</div>
+<div class="alert alert-success" role="status">The AI is writing the minutes again from the recording.</div>
 {% elif status == 'minutes_no_transcript' %}
-<div class="alert alert-error" role="alert">No transcript yet — finish a recording first.</div>
+<div class="alert alert-error" role="alert">There's no recording text yet. Record the meeting or upload a recording first.</div>
 {% elif status == 'minutes_submitted' %}
-<div class="alert alert-success" role="status">Minutes submitted for review. They are locked until approved or returned.</div>
+<div class="alert alert-success" role="status">Sent for approval. The minutes can't be changed while they wait.</div>
 {% elif status == 'minutes_returned' %}
-<div class="alert alert-success" role="status">Minutes returned to draft with your note.</div>
+<div class="alert alert-success" role="status">Sent back as a draft with your note.</div>
 {% elif status == 'minutes_approved' %}
-<div class="alert alert-success" role="status">Minutes approved and locked. The approved copy is being archived and indexed for search.</div>
+<div class="alert alert-success" role="status">Approved and locked. A copy is being saved in the archive so people can find it in Search.</div>
 {% elif status == 'minutes_amending' %}
-<div class="alert alert-success" role="status">Amendment opened. The previously approved minutes stay in the archive until this version is approved.</div>
+<div class="alert alert-success" role="status">Reopened for a correction. The approved minutes stay in the archive until the corrected version is approved.</div>
 {% elif status == 'minutes_locked' %}
-<div class="alert alert-error" role="alert">Minutes are in review or approved, so they cannot be changed. Return them to draft (or open an amendment) first.</div>
+<div class="alert alert-error" role="alert">The minutes are waiting for approval or already approved, so they can't be changed. Send them back, or reopen them for a correction, first.</div>
 {% elif status == 'minutes_four_eyes' %}
-<div class="alert alert-error" role="alert">Four-eyes rule: minutes must be approved by someone other than the person who submitted or last edited them.</div>
+<div class="alert alert-error" role="alert">A different person must approve: not the person who sent or last edited the minutes.</div>
 {% elif status == 'minutes_input_required' %}
-<div class="alert alert-error" role="alert">Add the required text (minutes body, a note, or a reason) and try again.</div>
+<div class="alert alert-error" role="alert">Please fill in the box first (the minutes, a note, or a reason).</div>
 {% elif status == 'minutes_archive_failed' %}
-<div class="alert alert-error" role="alert">Approval was not saved: the minutes could not be archived. Try again or contact an administrator.</div>
+<div class="alert alert-error" role="alert">Not approved: the minutes couldn't be saved to the archive. Please try again, or contact an administrator.</div>
 {% elif status in ('decision_saved', 'action_saved') %}
 <div class="alert alert-success" role="status">Saved.</div>
 {% elif status in ('decision_deleted', 'action_deleted') %}
 <div class="alert alert-success" role="status">Removed.</div>
 {% elif status == 'items_extracted' %}
-<div class="alert alert-success" role="status">Suggested decisions and actions refreshed. Only items with a supporting quote from the transcript are kept.</div>
+<div class="alert alert-success" role="status">Decisions and follow-up tasks were picked out of the recording. Only ones backed by a quote were kept.</div>
 {% elif status == 'recording_processing' %}
-<div class="alert alert-success" role="status">Recording uploaded. Transcribing and drafting minutes — this page will refresh when ready.</div>
+<div class="alert alert-success" role="status">Recording uploaded. The AI is writing the transcript and the minutes. This page updates by itself.</div>
 {% elif status == 'recording_unsupported' %}
-<div class="alert alert-error" role="alert">That file is not a supported audio or video recording (WAV, MP3, M4A/MP4, WebM, OGG, FLAC, AMR).</div>
+<div class="alert alert-error" role="alert">That file isn't a sound or video recording we can use. Use WAV, MP3, M4A, MP4, WebM, OGG, FLAC or AMR.</div>
 {% elif status == 'recording_too_large' %}
-<div class="alert alert-error" role="alert">The recording is larger than {{ recording_max_mb }} MB.</div>
+<div class="alert alert-error" role="alert">That recording is too big. The limit is {{ recording_max_mb }} MB.</div>
 {% elif status == 'speakers_saved' %}
 <div class="alert alert-success" role="status">Speaker names saved.</div>
 {% endif %}
 
-<nav class="section-tabs" aria-label="Meeting sections">
-    <a href="#run-sitting">In the room</a>
-    <a href="#agenda">Agenda</a>
-    <a href="#documents">Papers</a>
-    <a href="#invitees">People</a>
-    <a href="#minutes">Minutes</a>
-    <a href="#decisions">Decisions</a>
-    <a href="#intelligence">Archive</a>
+<nav class="section-tabs" aria-label="Meeting stages">
+    <a href="#before">Before</a>
+    <a href="#during">During</a>
+    <a href="#after">After</a>
 </nav>
 
-<section class="sitting-ops" id="run-sitting">
-    <header class="sitting-ops-head">
-        <p class="briefing-kicker">When the sitting begins</p>
-        <h2>Run the room</h2>
-        <p>Check-in and transcription are separate. Use only what this sitting needs.</p>
-    </header>
-
-    <div class="sitting-ops-grid">
-        <article class="sitting-card{% if meeting.attendance_open %} is-active{% endif %}" id="attendance">
-            <p class="sitting-card-kicker">Attendance</p>
-            <h3>Member check-in</h3>
-            <p class="sitting-card-lead">Open this when members are present so they can sign on their devices.</p>
-            <p class="sitting-card-metric"><strong>{{ signed_count }}</strong><span>signed / {{ invite_count }} invited</span></p>
-            {% if meeting.attendance_open %}
-            <p class="sitting-card-state is-on">Check-in is open{% if meeting.attendance_opened_at %} · since {{ meeting.attendance_opened_at.strftime('%H:%M') }}{% endif %}</p>
-            <form action="/meetings/{{ meeting.id }}/attendance/close" method="post">
-                <button type="submit" class="button-secondary button-block">Close check-in</button>
-            </form>
-            {% else %}
-            <p class="sitting-card-state">Check-in is closed</p>
-            <form action="/meetings/{{ meeting.id }}/attendance/open" method="post">
-                <button type="submit" class="button-block">Open check-in</button>
-            </form>
-            {% endif %}
-        </article>
-
-        <article class="sitting-card sitting-card-transcript{% if tx == 'live' %} is-live{% elif tx == 'processing' %} is-live{% elif tx == 'stopped' %} is-saved{% endif %}" id="transcription" data-meeting-id="{{ meeting.id }}" data-transcription-status="{{ tx }}">
-            <p class="sitting-card-kicker">Optional · Live captions</p>
-            <h3>Meeting voice transcription</h3>
-            <p class="sitting-card-lead">Records this device’s microphone, streams live captions while you speak, then finalizes the transcript and drafts minutes after you stop. Keep this tab open while recording.</p>
-
-            {% if tx == 'live' %}
-            <p class="sitting-card-state is-on" id="transcriptionPulse">
-                <span class="tx-eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
-                Live captions
-            </p>
-            <p class="muted" id="txChunkMeta">Chunks uploaded: <span id="txChunkCount">{{ audio_chunk_count | default(0) }}</span></p>
-            <p class="muted" id="txMicStatus">Requesting microphone…</p>
-            <button type="button" class="button-secondary button-block" id="txStopBtn" data-stop-url="/meetings/{{ meeting.id }}/transcription/stop">Stop &amp; finalize</button>
-            <ol class="transcription-log" id="transcriptionLog" aria-live="polite"{% if not lines %} hidden{% endif %}>
-                {% for line in lines %}
-                <li>
-                    <span class="transcription-speaker">{{ line.speaker }}</span>
-                    <span class="transcription-text">{{ line.text }}</span>
-                </li>
-                {% endfor %}
-            </ol>
-            {% elif tx == 'processing' %}
-            <p class="sitting-card-state is-on" id="transcriptionPulse">
-                <span class="tx-eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
-                Finalizing transcript &amp; minutes
-            </p>
-            <ol class="transcription-log" id="transcriptionLog" aria-live="polite">
-                {% for line in lines %}
-                <li>
-                    <span class="transcription-speaker">{{ line.speaker }}</span>
-                    <span class="transcription-text">{{ line.text }}</span>
-                </li>
-                {% endfor %}
-            </ol>
-            {% elif tx == 'stopped' %}
-            <p class="sitting-card-state">Draft saved{% if meeting.transcription_started_at and meeting.transcription_stopped_at %} · {{ meeting.transcription_started_at.strftime('%H:%M') }}–{{ meeting.transcription_stopped_at.strftime('%H:%M') }}{% endif %}</p>
-            <form action="/meetings/{{ meeting.id }}/transcription/start" method="post">
-                <button type="submit" class="button-secondary button-block">Start a new recording</button>
-            </form>
-            <ol class="transcription-log" id="transcriptionLog">
-                {% for line in lines %}
-                <li>
-                    <span class="transcription-speaker">{{ line.speaker }}</span>
-                    <span class="transcription-text">{{ line.text }}</span>
-                </li>
-                {% endfor %}
-            </ol>
-            {% else %}
-            <p class="sitting-card-state">Not recording</p>
-            <form action="/meetings/{{ meeting.id }}/transcription/start" method="post">
-                <button type="submit" class="button-block">Start AI transcription</button>
-            </form>
-            {% endif %}
-
-            {% set minutes_state = (minutes_view or {}).get('workflow', {}).get('state', 'draft') %}
-            {% if tx not in ('live', 'processing') and minutes_state == 'draft' %}
-            <details class="recording-upload">
-                <summary>Upload a recording instead</summary>
-                <p class="muted">For a sitting recorded on another device. Audio or video up to {{ recording_max_mb }} MB; it replaces the current transcript and minutes draft.</p>
-                {% if recording_name %}<p class="muted">Last recording: {{ recording_name }}</p>{% endif %}
-                <form action="/meetings/{{ meeting.id }}/recording" method="post" enctype="multipart/form-data" class="form-grid">
-                    <div class="form-group">
-                        <label for="recording-file">Recording file</label>
-                        <input id="recording-file" type="file" name="file" accept="audio/*,video/*" required>
-                    </div>
-                    <button type="submit" class="button-secondary button-block">Upload &amp; transcribe</button>
-                </form>
-            </details>
-            {% endif %}
-
-            {% if speakers and tx not in ('live', 'processing') %}
-            <details class="speaker-names"{% if minutes_state == 'draft' %} open{% endif %}>
-                <summary>Speakers ({{ speakers | length }})</summary>
-                {% if minutes_state == 'draft' %}
-                <form action="/meetings/{{ meeting.id }}/speakers" method="post" class="form-grid">
-                    {% for sp in speakers %}
-                    <div class="form-group">
-                        <label for="speaker-{{ loop.index }}">{{ sp.label }} · {{ sp.segments }} lines</label>
-                        <input id="speaker-{{ loop.index }}" type="text" name="name_{{ sp.label }}" value="{{ (meeting.speaker_map or {}).get(sp.label, '') }}" placeholder="{{ sp.name }}" maxlength="80">
-                    </div>
-                    {% endfor %}
-                    <button type="submit" class="button-secondary">Save speaker names</button>
-                </form>
-                {% else %}
-                <ul>{% for sp in speakers %}<li>{{ sp.name }} ({{ sp.label }})</li>{% endfor %}</ul>
-                {% endif %}
-            </details>
-            {% endif %}
-        </article>
-    </div>
-</section>
-
-{% set mv = minutes_view or {} %}
-{% set wf = mv.workflow or {} %}
-<section class="panel" id="minutes" data-meeting-id="{{ meeting.id }}" data-minutes-status="{{ meeting.minutes_status or 'off' }}" data-minutes-state="{{ wf.state or 'draft' }}">
-    <div class="panel-head">
-        <h2>Minutes</h2>
-        <span class="muted">
-            <span class="badge{% if wf.state == 'approved' %} badge-accent{% elif wf.state == 'in_review' %} badge-warn{% endif %}">{% if wf.state == 'approved' %}Approved{% elif wf.state == 'in_review' %}In review{% else %}Draft{% endif %} · v{{ wf.version or 1 }}</span>
-            {% if mv.generating %} · Generating…{% endif %}
-            {% if meeting.minutes_source %} · {{ meeting.minutes_source }}{% endif %}
-        </span>
-    </div>
-    {% if wf.review_note %}<div class="alert alert-error" role="note">{{ wf.review_note }}</div>{% endif %}
-    {% if wf.state == 'approved' %}
-    <p class="muted" style="margin-top:0;">Approved by {{ wf.approved_by }}{% if wf.approved_at %} on {{ wf.approved_at[:16] | replace('T', ' ') }} UTC{% endif %}. Locked; SHA-256 <code>{{ (wf.sha256 or '')[:16] }}…</code>{% if wf.doc_id %} · <a href="/view/{{ wf.doc_id }}">Archived copy ({{ wf.doc_id }})</a>{% endif %}</p>
-    {% elif wf.state == 'in_review' %}
-    <p class="muted" style="margin-top:0;">Submitted by {{ wf.submitted_by }}{% if wf.submitted_at %} on {{ wf.submitted_at[:16] | replace('T', ' ') }} UTC{% endif %}. Locked while in review.{% if wf.four_eyes %} Four-eyes approval is on.{% endif %}</p>
-    {% else %}
-    <p class="muted" style="margin-top:0;">Auto-drafted from the transcript. Edit, then submit for review. Only approved minutes are archived and searchable.</p>
-    {% endif %}
-
-    {% if mv.generating %}
-    <p class="sitting-card-state is-on">Drafting minutes from the transcript…</p>
-    {% elif mv.body_md and wf.locked %}
-    <pre class="minutes-draft minutes-locked" aria-label="Minutes (read-only)">{{ meeting.minutes_draft }}</pre>
-    <div class="form-actions-row" style="margin-top:0.75rem; gap:0.75rem; flex-wrap:wrap;">
-        {% if wf.state == 'in_review' %}
-        {% if wf.approve_blocker %}
-        <p class="muted">{{ wf.approve_blocker }}</p>
-        {% else %}
-        <form action="/meetings/{{ meeting.id }}/minutes/approve" method="post">
-            <button type="submit">Approve &amp; lock</button>
-        </form>
-        {% endif %}
-        <form action="/meetings/{{ meeting.id }}/minutes/reject" method="post" class="inline-form">
-            <input type="text" name="note" required minlength="3" maxlength="1000" placeholder="What needs to change" aria-label="What needs to change">
-            <button type="submit" class="button-secondary">Return to draft</button>
-        </form>
-        {% elif wf.state == 'approved' and can_amend %}
-        <form action="/meetings/{{ meeting.id }}/minutes/amend" method="post" class="inline-form">
-            <input type="text" name="reason" required minlength="3" maxlength="1000" placeholder="Reason for amendment" aria-label="Reason for amendment">
-            <button type="submit" class="button-secondary">Open amendment</button>
-        </form>
-        {% endif %}
-    </div>
-    {% elif mv.body_md %}
-    <form action="/meetings/{{ meeting.id }}/minutes" method="post" class="form-grid">
-        <div class="form-group">
-            <label for="minutes-body">Draft (Markdown)</label>
-            <textarea id="minutes-body" name="body_md" rows="16" class="minutes-draft">{{ meeting.minutes_draft }}</textarea>
-        </div>
-        <div class="form-actions-row">
-            <button type="submit">Save minutes</button>
-        </div>
-    </form>
-    <div class="form-actions-row" style="margin-top:0.75rem; gap:0.75rem;">
-        <form action="/meetings/{{ meeting.id }}/minutes/submit" method="post">
-            <button type="submit">Submit for review</button>
-        </form>
-        <form action="/meetings/{{ meeting.id }}/minutes/regenerate" method="post">
-            <button type="submit" class="button-secondary">Regenerate from transcript</button>
-        </form>
-    </div>
-    {% else %}
-    {{ empty_state("No minutes yet", "Stop a transcription sitting to generate a draft, or regenerate after a transcript exists.") }}
-    {% if tx == 'stopped' %}
-    <form action="/meetings/{{ meeting.id }}/minutes/regenerate" method="post" style="margin-top:0.75rem;">
-        <button type="submit" class="button-secondary">Generate minutes draft</button>
-    </form>
-    {% endif %}
-    {% endif %}
-</section>
-
-{% set items_open = not wf.locked %}
-<section class="panel" id="decisions">
-    <div class="panel-head">
-        <h2>Decisions &amp; actions</h2>
-        <span class="muted">{{ decisions | length }} decisions · {{ actions | length }} actions</span>
-    </div>
-    <p class="muted" style="margin-top:0;">Suggestions from the transcript carry a supporting quote; anything without one is dropped. {% if not items_open %}Decisions are locked with the minutes; action status can still be updated.{% endif %}</p>
-
-    {% if decisions %}
-    <table class="data-table">
-        <thead><tr><th>#</th><th>Decision</th><th>Agenda item</th><th>Source</th>{% if items_open %}<th></th>{% endif %}</tr></thead>
-        <tbody>
-        {% for d in decisions %}
-        <tr>
-            <td>{{ d.seq }}</td>
-            <td>
-                {{ d.text }}
-                {% if d.evidence %}<details><summary class="muted">Evidence</summary><blockquote>{{ d.evidence }}</blockquote></details>{% endif %}
-                {% if items_open %}
-                <details><summary class="muted">Edit</summary>
-                    <form action="/meetings/{{ meeting.id }}/decisions/{{ d.id }}/edit" method="post" class="form-grid">
-                        <textarea name="text" rows="3" required minlength="3" aria-label="Decision text">{{ d.text }}</textarea>
-                        <input type="text" name="agenda_item" value="{{ d.agenda_item or '' }}" placeholder="Agenda item" aria-label="Agenda item">
-                        <button type="submit" class="button-secondary">Save</button>
-                    </form>
-                </details>
-                {% endif %}
-            </td>
-            <td>{{ d.agenda_item or '—' }}</td>
-            <td><span class="badge">{{ d.source }}</span></td>
-            {% if items_open %}
-            <td>
-                <form action="/meetings/{{ meeting.id }}/decisions/{{ d.id }}/delete" method="post">
-                    <button type="submit" class="button-ghost">Remove</button>
-                </form>
-            </td>
-            {% endif %}
-        </tr>
-        {% endfor %}
-        </tbody>
-    </table>
-    {% else %}
-    <p class="muted">No decisions recorded yet.</p>
-    {% endif %}
-
-    {% if actions %}
-    <h3>Actions</h3>
-    <table class="data-table">
-        <thead><tr><th>Action</th><th>Owner</th><th>Responsible division</th><th>Due</th><th>Status</th>{% if items_open %}<th></th>{% endif %}</tr></thead>
-        <tbody>
-        {% for a in actions %}
-        <tr>
-            <td>
-                {{ a.description }}
-                {% if a.evidence %}<details><summary class="muted">Evidence</summary><blockquote>{{ a.evidence }}</blockquote></details>{% endif %}
-                {% if items_open %}
-                <details><summary class="muted">Edit</summary>
-                    <form action="/meetings/{{ meeting.id }}/actions/{{ a.id }}/edit" method="post" class="form-grid">
-                        <textarea name="description" rows="2" required minlength="3" aria-label="Action">{{ a.description }}</textarea>
-                        <input type="text" name="owner" value="{{ a.owner or '' }}" placeholder="Owner" aria-label="Owner">
-                        <input type="text" name="division" value="{{ a.division or '' }}" placeholder="Responsible division" aria-label="Responsible division">
-                        <input type="date" name="due_date" value="{{ a.due_date.isoformat() if a.due_date else '' }}" aria-label="Due date">
-                        <select name="decision_id" aria-label="Linked decision">
-                            <option value="">No linked decision</option>
-                            {% for d in decisions %}<option value="{{ d.id }}"{% if a.decision_id == d.id %} selected{% endif %}>#{{ d.seq }} {{ d.text[:60] }}</option>{% endfor %}
-                        </select>
-                        <button type="submit" class="button-secondary">Save</button>
-                    </form>
-                </details>
-                {% endif %}
-            </td>
-            <td>{{ a.owner or '—' }}</td>
-            <td>{{ a.division or '—' }}</td>
-            <td>{{ a.due_date.isoformat() if a.due_date else '—' }}</td>
-            <td>
-                <form action="/meetings/{{ meeting.id }}/actions/{{ a.id }}/status" method="post" class="inline-form">
-                    <select name="status" aria-label="Status" onchange="this.form.submit()">
-                        {% for s in action_statuses %}<option value="{{ s }}"{% if a.status == s %} selected{% endif %}>{{ s | replace('_', ' ') }}</option>{% endfor %}
-                    </select>
-                    <noscript><button type="submit" class="button-ghost">Update</button></noscript>
-                </form>
-            </td>
-            {% if items_open %}
-            <td>
-                <form action="/meetings/{{ meeting.id }}/actions/{{ a.id }}/delete" method="post">
-                    <button type="submit" class="button-ghost">Remove</button>
-                </form>
-            </td>
-            {% endif %}
-        </tr>
-        {% endfor %}
-        </tbody>
-    </table>
-    {% endif %}
-
-    {% if items_open %}
-    <div class="sitting-ops-grid" style="margin-top:1rem;">
-        <form action="/meetings/{{ meeting.id }}/decisions" method="post" class="form-grid">
-            <h3>Add decision</h3>
-            <textarea name="text" rows="3" required minlength="3" placeholder="The Board approved…" aria-label="Decision text"></textarea>
-            <input type="text" name="agenda_item" placeholder="Agenda item (optional)" aria-label="Agenda item">
-            <button type="submit" class="button-secondary">Add decision</button>
-        </form>
-        <form action="/meetings/{{ meeting.id }}/actions" method="post" class="form-grid">
-            <h3>Add action</h3>
-            <textarea name="description" rows="2" required minlength="3" placeholder="Prepare…" aria-label="Action"></textarea>
-            <input type="text" name="owner" placeholder="Owner" aria-label="Owner">
-            <input type="text" name="division" placeholder="Responsible division" aria-label="Responsible division">
-            <input type="date" name="due_date" aria-label="Due date">
-            <select name="decision_id" aria-label="Linked decision">
-                <option value="">No linked decision</option>
-                {% for d in decisions %}<option value="{{ d.id }}">#{{ d.seq }} {{ d.text[:60] }}</option>{% endfor %}
-            </select>
-            <button type="submit" class="button-secondary">Add action</button>
-        </form>
-    </div>
-    {% if mv.body_md and transcript_segments %}
-    <form action="/meetings/{{ meeting.id }}/minutes/extract" method="post" style="margin-top:0.75rem;">
-        <button type="submit" class="button-secondary">Suggest from transcript</button>
-    </form>
-    {% endif %}
-    {% endif %}
-</section>
+{# ———————————————————— BEFORE ———————————————————— #}
+<div class="meeting-stage" id="before">
+<header class="meeting-stage-head">
+    <p class="briefing-kicker">Step 1</p>
+    <h2>Before the meeting</h2>
+    <p class="muted">Set the agenda, add the papers and check who is invited.</p>
+</header>
 
 <section class="panel" id="agenda">
     <div class="panel-head">
-        <h2>Agenda</h2>
+        <h3>Agenda</h3>
         <span class="muted">{{ agenda_items | length }} item{{ 's' if agenda_items | length != 1 else '' }}</span>
     </div>
     {% if agenda_items %}
@@ -432,193 +125,527 @@
     <p class="muted">No agenda yet. Add items so members can prepare.</p>
     {% endif %}
     <details class="soft-details">
-        <summary>Edit agenda</summary>
+        <summary>{% if agenda_items %}Change the agenda{% else %}Write the agenda{% endif %}</summary>
         <form action="/meetings/{{ meeting.id }}/agenda" method="post" class="form-grid" style="margin-top:1rem;">
             <div class="form-group">
                 <label for="agenda-text">One item per line</label>
-                <textarea id="agenda-text" name="agenda" rows="8" placeholder="1. Confirm minutes&#10;2. Financial performance">{{ meeting.agenda }}</textarea>
+                <textarea id="agenda-text" name="agenda" rows="8" placeholder="1. Confirm last meeting's minutes&#10;2. Financial results">{{ meeting.agenda }}</textarea>
             </div>
             <label class="checkbox-item">
                 <input type="checkbox" name="notify_invitees" value="1" {% if meeting.notifications_enabled %}checked{% endif %} />
-                Notify invitees about this update
+                Tell invited people about this change
             </label>
-            <button type="submit">Save agenda</button>
+            <div><button type="submit">Save agenda</button></div>
         </form>
     </details>
 </section>
 
 <section class="panel" id="documents">
     <div class="panel-head">
-        <h2>Papers</h2>
-        <span class="muted">{{ documents | length }} file{{ 's' if documents | length != 1 else '' }}</span>
+        <h3>Papers</h3>
+        <span class="muted">{{ documents | length }} paper{{ 's' if documents | length != 1 else '' }}</span>
     </div>
     {% if documents %}
-    <table class="data-table table-desktop">
-        <thead>
-            <tr>
-                <th>Title</th>
-                <th>Archive</th>
-                <th>Uploaded by</th>
-                <th>Uploaded at</th>
-                <th></th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for doc in documents %}
-            <tr>
-                <td>{{ doc.title }}</td>
-                <td>
-                    {% if doc.archive_doc_id %}
-                    <code>{{ doc.archive_doc_id }}</code>
-                    {% set st = archive_status.get(doc.archive_doc_id) %}
-                    {% if st == 'needs_review' %}<a class="badge badge-warn" href="/review/{{ doc.archive_doc_id }}">needs OCR review</a>
-                    {% elif st %}<span class="badge">{{ st|replace('_', ' ') }}</span>{% endif %}
-                    {% else %}<span class="muted">not archived</span>{% endif %}
-                </td>
-                <td>{{ doc.uploaded_by }}</td>
-                <td>{{ doc.uploaded_at.strftime('%d %b %Y, %H:%M') }}</td>
-                <td class="doc-actions"><a class="button button-secondary" href="/meetings/{{ meeting.id }}/documents/{{ doc.id }}/view">View</a>{% if doc.archive_doc_id %} <a class="button button-secondary" href="/documents/{{ doc.archive_doc_id }}/briefing">Briefing</a>{% endif %}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    <div class="mobile-card-list">
+    <ul class="card-list" role="list">
         {% for doc in documents %}
-        <article class="mobile-card">
-            <h3>{{ doc.title }}</h3>
-            <dl>
-                <div><dt>By</dt><dd>{{ doc.uploaded_by }}</dd></div>
-                <div><dt>At</dt><dd>{{ doc.uploaded_at.strftime('%d %b %Y, %H:%M') }}</dd></div>
-            </dl>
-            <p style="margin-top: 0.75rem;"><a class="button" href="/meetings/{{ meeting.id }}/documents/{{ doc.id }}/view">View document</a>{% if doc.archive_doc_id %} <a class="button button-secondary" href="/documents/{{ doc.archive_doc_id }}/briefing">Briefing</a>{% endif %}</p>
-        </article>
+        {% set st = archive_status.get(doc.archive_doc_id) if doc.archive_doc_id else None %}
+        <li class="list-card">
+            <div class="list-card-top">
+                <h4>{{ doc.title }}</h4>
+                {% if st == 'needs_review' %}
+                <a class="status-chip status-chip-warn" href="/review/{{ doc.archive_doc_id }}">Waiting for a check</a>
+                {% elif st %}
+                <span class="status-chip status-chip-{{ status_tone(st) }}">{{ status_label(st) }}</span>
+                {% endif %}
+            </div>
+            <p class="list-card-meta">Added by {{ doc.uploaded_by }} · {{ doc.uploaded_at | local_dt }}{% if doc.archive_doc_id %} · {{ doc.archive_doc_id }}{% endif %}</p>
+            <div class="list-card-actions">
+                <a class="button button-secondary" href="/meetings/{{ meeting.id }}/documents/{{ doc.id }}/view">Open</a>
+                {% if doc.archive_doc_id %}<a class="button button-secondary" href="/documents/{{ doc.archive_doc_id }}/briefing">Briefing</a>{% endif %}
+            </div>
+        </li>
         {% endfor %}
-    </div>
+    </ul>
     {% else %}
-    {{ empty_state("No papers yet", "Upload the pack members will read in the sitting.") }}
+    {{ empty_state("No papers yet", "Add the papers members will read for this meeting.") }}
     {% endif %}
     <details class="soft-details">
-        <summary>Upload a paper</summary>
+        <summary>Add a paper</summary>
         <form action="/meetings/{{ meeting.id }}/documents" method="post" enctype="multipart/form-data" class="form-grid" style="margin-top:1rem;">
             <div class="form-group">
-                <label for="doc_title">Document title</label>
-                <input id="doc_title" type="text" name="title" required placeholder="Meeting pack — confidential" />
+                <label for="doc_title">Title</label>
+                <input id="doc_title" type="text" name="title" required placeholder="For example: Q3 financial results" />
             </div>
             <div class="form-group">
-                <label for="doc_file">PDF file</label>
+                <label for="doc_file">File</label>
                 <input id="doc_file" type="file" name="file" required accept="application/pdf,image/png,image/jpeg,image/tiff,.pdf,.png,.jpg,.jpeg,.tif,.tiff" />
+                <p class="field-hint">A PDF, or a scan saved as PNG, JPG or TIFF.</p>
             </div>
-            <button type="submit">Upload document</button>
+            <div><button type="submit">Add paper</button></div>
         </form>
     </details>
 </section>
 
 <section class="panel" id="invitees">
     <div class="panel-head">
-        <h2>People</h2>
-        <span class="muted">{{ signed_count }} signed in</span>
+        <h3>People invited</h3>
+        <span class="muted">{{ signed_count }} of {{ invite_count }} signed in</span>
     </div>
     {% if invitations %}
-    <table class="data-table table-desktop">
-        <thead>
-            <tr>
-                <th>Name</th>
-                <th>Role</th>
-                <th>Invited</th>
-                <th>Check-in</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for invite in invitations %}
-            <tr>
-                <td>{{ invite.username }}</td>
-                <td>{{ invite.role_label }}</td>
-                <td>{{ invite.invited_at.strftime('%d %b %Y, %H:%M') }}</td>
-                <td>
-                    {% if attendance.get(invite.username) %}
-                    <span class="status-chip status-chip-open">Signed in</span>
-                    <span class="muted"> {{ attendance[invite.username].signed_at.strftime('%H:%M') }}</span>
-                    {% else %}
-                    <span class="status-chip status-chip-closed">Waiting</span>
-                    {% endif %}
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    <div class="mobile-card-list">
+    <ul class="card-list" role="list">
         {% for invite in invitations %}
-        <article class="mobile-card">
-            <h3>{{ invite.username }}</h3>
-            <dl>
-                <div><dt>Role</dt><dd>{{ invite.role_label }}</dd></div>
-                <div><dt>Invited</dt><dd>{{ invite.invited_at.strftime('%d %b %Y, %H:%M') }}</dd></div>
-                <div><dt>Check-in</dt><dd>
-                    {% if attendance.get(invite.username) %}
-                    {{ attendance[invite.username].signed_at.strftime('%d %b %Y, %H:%M') }}
-                    {% else %}
-                    Waiting
-                    {% endif %}
-                </dd></div>
-            </dl>
-        </article>
+        {% set signed = attendance.get(invite.username) %}
+        <li class="list-card">
+            <div class="list-card-top">
+                <h4>{{ invite.username }}</h4>
+                {% if signed %}
+                <span class="status-chip status-chip-ok">Signed in at {{ signed.signed_at | local_dt('%H:%M') }}</span>
+                {% else %}
+                <span class="status-chip status-chip-neutral">Not signed in</span>
+                {% endif %}
+            </div>
+            <p class="list-card-meta">{{ invite.role_label }} · invited {{ invite.invited_at | local_dt }}</p>
+        </li>
         {% endfor %}
+    </ul>
+    {% else %}
+    {{ empty_state("Nobody invited", "No one was invited to this meeting.") }}
+    {% endif %}
+</section>
+
+<section class="panel panel-quiet" id="notifications">
+    <div class="panel-head">
+        <h3>Invitations and reminders</h3>
+        <span class="status-chip status-chip-{{ 'ok' if meeting.notifications_enabled else 'neutral' }}">{% if meeting.notifications_enabled %}On{% else %}Off{% endif %}</span>
+    </div>
+    <p class="muted" style="margin-top:0;">Invited people get an invitation, and a reminder 2 days and 1 day before. This applies to this meeting only.</p>
+    <form action="/meetings/{{ meeting.id }}/notifications" method="post" class="notify-inline">
+        <label class="checkbox-item">
+            <input type="checkbox" name="notifications_enabled" value="1" {% if meeting.notifications_enabled %}checked{% endif %} />
+            Send email and in-app messages
+        </label>
+        <button type="submit" class="button-secondary">Save</button>
+    </form>
+    {% if meeting.notifications_enabled %}
+    <form action="/meetings/{{ meeting.id }}/notifications/resend" method="post" style="margin-top: 0.75rem;"
+          data-confirm="Everyone invited will get the invitation again." data-confirm-title="Send invitations again?" data-confirm-ok="Send again">
+        <button type="submit" class="button-secondary">Send invitations again</button>
+    </form>
+    {% endif %}
+</section>
+</div>
+
+{# ———————————————————— DURING ———————————————————— #}
+<div class="meeting-stage" id="during">
+<header class="meeting-stage-head" id="run-sitting">
+    <p class="briefing-kicker">Step 2</p>
+    <h2>During the meeting</h2>
+    <p class="muted">Let members sign in, and record the meeting if you need minutes. You can use one without the other.</p>
+</header>
+
+<div class="sitting-ops-grid">
+    <article class="sitting-card{% if meeting.attendance_open %} is-active{% endif %}" id="attendance">
+        <p class="sitting-card-kicker">Attendance</p>
+        <h3>Member check-in</h3>
+        <p class="sitting-card-lead">Open check-in when members arrive. They sign in on their own phone or computer.</p>
+        <p class="sitting-card-metric"><strong>{{ signed_count }}</strong><span>of {{ invite_count }} signed in</span></p>
+        {% if meeting.attendance_open %}
+        <p class="sitting-card-state is-on">Check-in is open{% if meeting.attendance_opened_at %} since {{ meeting.attendance_opened_at | local_dt('%H:%M') }}{% endif %}</p>
+        <form action="/meetings/{{ meeting.id }}/attendance/close" method="post"
+              data-confirm="Members who haven't signed in yet won't be able to after this." data-confirm-title="Close check-in?" data-confirm-ok="Close check-in">
+            <button type="submit" class="button-secondary button-block">Close check-in</button>
+        </form>
+        {% else %}
+        <p class="sitting-card-state">Check-in is closed</p>
+        <form action="/meetings/{{ meeting.id }}/attendance/open" method="post">
+            <button type="submit" class="button-block">Open check-in</button>
+        </form>
+        {% endif %}
+    </article>
+
+    <article class="sitting-card sitting-card-transcript{% if tx in ('live', 'processing') %} is-live{% elif tx == 'stopped' %} is-saved{% endif %}" id="transcription" data-meeting-id="{{ meeting.id }}" data-transcription-status="{{ tx }}">
+        <p class="sitting-card-kicker">Optional</p>
+        <h3>Record the meeting</h3>
+        <p class="sitting-card-lead">Uses this device's microphone and shows live captions. When you stop, the AI writes the transcript and a first draft of the minutes. Keep this page open while recording.</p>
+
+        {% if tx == 'live' %}
+        <p class="sitting-card-state is-on" id="transcriptionPulse">
+            <span class="tx-eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+            Recording
+        </p>
+        <p class="muted" id="txMicStatus" role="status">Asking to use the microphone…</p>
+        <button type="button" class="button-secondary" id="txMicRetry" hidden>Try again</button>
+        <p class="muted small" id="txChunkMeta">Parts saved: <span id="txChunkCount">{{ audio_chunk_count | default(0) }}</span></p>
+        <p class="banner error" id="txUploadWarn" role="alert" hidden></p>
+        <button type="button" class="button-secondary" id="txRetryBtn" hidden>Try again</button>
+        <button type="button" class="button-block" id="txStopBtn" data-stop-url="/meetings/{{ meeting.id }}/transcription/stop">Stop and save</button>
+        <ol class="transcription-log" id="transcriptionLog" aria-live="polite"{% if not lines %} hidden{% endif %}>
+            {% for line in lines %}
+            <li>
+                <span class="transcription-speaker">{{ line.speaker }}</span>
+                <span class="transcription-text">{{ line.text }}</span>
+            </li>
+            {% endfor %}
+        </ol>
+        {% elif tx == 'processing' %}
+        <p class="sitting-card-state is-on" id="transcriptionPulse">
+            <span class="tx-eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+            Writing the transcript and minutes…
+        </p>
+        <p class="muted small">This can take a few minutes. This page updates by itself.</p>
+        <ol class="transcription-log" id="transcriptionLog" aria-live="polite">
+            {% for line in lines %}
+            <li>
+                <span class="transcription-speaker">{{ line.speaker }}</span>
+                <span class="transcription-text">{{ line.text }}</span>
+            </li>
+            {% endfor %}
+        </ol>
+        {% elif tx == 'stopped' %}
+        <p class="sitting-card-state">Recording saved{% if meeting.transcription_started_at and meeting.transcription_stopped_at %} · {{ meeting.transcription_started_at | local_dt('%H:%M') }}–{{ meeting.transcription_stopped_at | local_dt('%H:%M') }}{% endif %}</p>
+        {% if minutes_state == 'draft' %}
+        <form action="/meetings/{{ meeting.id }}/transcription/start" method="post"
+              data-confirm="This deletes the current transcript and the draft minutes, then starts a new recording." data-confirm-title="Start a new recording?" data-confirm-ok="Delete and record again" data-confirm-danger>
+            <button type="submit" class="button-secondary button-block">Start a new recording</button>
+        </form>
+        {% endif %}
+        <details class="soft-details">
+            <summary>Show the transcript ({{ lines | length }} lines)</summary>
+            <ol class="transcription-log" id="transcriptionLog">
+                {% for line in lines %}
+                <li>
+                    <span class="transcription-speaker">{{ line.speaker }}</span>
+                    <span class="transcription-text">{{ line.text }}</span>
+                </li>
+                {% endfor %}
+            </ol>
+        </details>
+        {% else %}
+        <p class="sitting-card-state">Not recording</p>
+        <form action="/meetings/{{ meeting.id }}/transcription/start" method="post"
+              data-confirm="This device's microphone will record the meeting. Keep this page open until you press Stop and save." data-confirm-title="Start recording?" data-confirm-ok="Start recording">
+            <button type="submit" class="button-block">Start recording</button>
+        </form>
+        {% endif %}
+
+        {% if tx not in ('live', 'processing') and minutes_state == 'draft' %}
+        <details class="recording-upload">
+            <summary>Recorded on another device? Upload it</summary>
+            <p class="muted">A sound or video file up to {{ recording_max_mb }} MB. It replaces the current transcript and draft minutes.</p>
+            {% if recording_name %}<p class="muted">Last upload: {{ recording_name }}</p>{% endif %}
+            <form action="/meetings/{{ meeting.id }}/recording" method="post" enctype="multipart/form-data" class="form-grid"
+                  {% if lines %}data-confirm="This replaces the current transcript and draft minutes." data-confirm-title="Use this recording instead?" data-confirm-ok="Replace" data-confirm-danger{% endif %}>
+                <div class="form-group">
+                    <label for="recording-file">Recording</label>
+                    <input id="recording-file" type="file" name="file" accept="audio/*,video/*" required>
+                </div>
+                <button type="submit" class="button-secondary button-block">Upload and write transcript</button>
+            </form>
+        </details>
+        {% endif %}
+
+        {% if speakers and tx not in ('live', 'processing') %}
+        <details class="speaker-names"{% if minutes_state == 'draft' %} open{% endif %}>
+            <summary>Who was speaking ({{ speakers | length }})</summary>
+            {% if minutes_state == 'draft' %}
+            <p class="muted small">The AI tells voices apart but doesn't know names. Type each person's name so the minutes use it.</p>
+            <form action="/meetings/{{ meeting.id }}/speakers" method="post" class="form-grid">
+                {% for sp in speakers %}
+                <div class="form-group">
+                    <label for="speaker-{{ loop.index }}">{{ sp.label }} · spoke {{ sp.segments }} time{{ 's' if sp.segments != 1 else '' }}</label>
+                    <input id="speaker-{{ loop.index }}" type="text" name="name_{{ sp.label }}" value="{{ (meeting.speaker_map or {}).get(sp.label, '') }}" placeholder="{{ sp.name }}" maxlength="80">
+                </div>
+                {% endfor %}
+                <div><button type="submit" class="button-secondary">Save names</button></div>
+            </form>
+            {% else %}
+            <ul>{% for sp in speakers %}<li>{{ sp.name }} ({{ sp.label }})</li>{% endfor %}</ul>
+            {% endif %}
+        </details>
+        {% endif %}
+    </article>
+</div>
+</div>
+
+{# ———————————————————— AFTER ———————————————————— #}
+<div class="meeting-stage" id="after">
+<header class="meeting-stage-head">
+    <p class="briefing-kicker">Step 3</p>
+    <h2>After the meeting</h2>
+    <p class="muted">Check the minutes, record the decisions, and send the minutes for approval.</p>
+</header>
+
+<section class="panel" id="minutes" data-meeting-id="{{ meeting.id }}" data-minutes-status="{{ meeting.minutes_status or 'off' }}" data-minutes-state="{{ minutes_state }}">
+    <div class="panel-head">
+        <h3>Minutes</h3>
+        <span class="status-chip status-chip-{{ status_tone(minutes_state, 'minutes') }}">{{ status_label(minutes_state, 'minutes') }}{% if (wf.version or 1) > 1 %} · version {{ wf.version }}{% endif %}</span>
+    </div>
+    {% if wf.review_note %}<div class="alert alert-error" role="note"><strong>Note:</strong> {{ wf.review_note }}</div>{% endif %}
+    {% if minutes_state == 'approved' %}
+    <p class="muted" style="margin-top:0;">Approved by {{ wf.approved_by }}{% if wf.approved_at %} on {{ wf.approved_at | local_dt }}{% endif %}. They can't be changed.{% if wf.doc_id %} <a href="/view/{{ wf.doc_id }}">Open the archived copy</a>.{% endif %}</p>
+    {% elif minutes_state == 'in_review' %}
+    <p class="muted" style="margin-top:0;">Sent for approval by {{ wf.submitted_by }}{% if wf.submitted_at %} on {{ wf.submitted_at | local_dt }}{% endif %}. They can't be changed while they wait.{% if wf.four_eyes %} A different person must approve.{% endif %}</p>
+    {% else %}
+    <p class="muted" style="margin-top:0;">The AI writes a first draft from the recording. Check and correct it, then send it for approval. Only approved minutes go into the archive.</p>
+    {% endif %}
+
+    {% if mv.generating %}
+    <div class="status-line" role="status"><span class="inline-spinner" aria-hidden="true"></span><span>The AI is writing the minutes from the recording. This page updates by itself.</span></div>
+    {% elif mv.body_md and wf.locked %}
+    <pre class="minutes-draft minutes-locked" aria-label="Minutes (can't be changed)">{{ meeting.minutes_draft }}</pre>
+    <div class="form-actions-row" style="margin-top:0.75rem; gap:0.75rem; flex-wrap:wrap;">
+        {% if minutes_state == 'in_review' %}
+        {% if wf.approve_blocker %}
+        <p class="muted">{{ wf.approve_blocker }}</p>
+        {% else %}
+        <form action="/meetings/{{ meeting.id }}/minutes/approve" method="post"
+              data-confirm="The minutes will be locked and saved in the archive as a PDF. People who can see this meeting will be able to read them." data-confirm-title="Approve the minutes?" data-confirm-ok="Approve and lock">
+            <button type="submit">Approve and lock</button>
+        </form>
+        {% endif %}
+        <form action="/meetings/{{ meeting.id }}/minutes/reject" method="post" class="inline-form">
+            <label class="visually-hidden" for="minutesReturnNote">What needs to change</label>
+            <input id="minutesReturnNote" type="text" name="note" required minlength="3" maxlength="1000" placeholder="What needs to change?">
+            <button type="submit" class="button-secondary">Send back as a draft</button>
+        </form>
+        {% elif minutes_state == 'approved' and can_amend %}
+        <form action="/meetings/{{ meeting.id }}/minutes/amend" method="post" class="inline-form"
+              data-confirm="A new draft is opened for the correction. The approved minutes stay in the archive until the corrected version is approved." data-confirm-title="Reopen for a correction?" data-confirm-ok="Reopen" data-confirm-danger>
+            <label class="visually-hidden" for="minutesAmendReason">Why it needs a correction</label>
+            <input id="minutesAmendReason" type="text" name="reason" required minlength="3" maxlength="1000" placeholder="Why does it need a correction?">
+            <button type="submit" class="button-secondary">Reopen for a correction</button>
+        </form>
+        {% endif %}
+    </div>
+    {% elif mv.body_md %}
+    <form action="/meetings/{{ meeting.id }}/minutes" method="post" class="form-grid">
+        <div class="form-group">
+            <label for="minutes-body">Draft minutes</label>
+            <textarea id="minutes-body" name="body_md" rows="16" class="minutes-draft">{{ meeting.minutes_draft }}</textarea>
+            <p class="field-hint">Lines starting with # are headings, and lines starting with - are bullet points.</p>
+        </div>
+        <div class="form-actions-row">
+            <button type="submit">Save changes</button>
+        </div>
+    </form>
+    <div class="form-actions-row" style="margin-top:0.75rem; gap:0.75rem; flex-wrap:wrap;">
+        <form action="/meetings/{{ meeting.id }}/minutes/submit" method="post"
+              data-confirm="Save your changes first. The minutes can't be changed while they wait for approval." data-confirm-title="Send for approval?" data-confirm-ok="Send for approval">
+            <button type="submit">Send for approval</button>
+        </form>
+        <form action="/meetings/{{ meeting.id }}/minutes/regenerate" method="post"
+              data-confirm="The AI will write the draft again from the recording. Your changes to the draft will be lost." data-confirm-title="Write the draft again?" data-confirm-ok="Write again" data-confirm-danger>
+            <button type="submit" class="button-secondary">Write the draft again</button>
+        </form>
     </div>
     {% else %}
-    {{ empty_state("No invitees", "No users were invited to this meeting.") }}
+    {{ empty_state("No minutes yet", "Record the meeting or upload a recording. The AI will write a first draft when the recording is saved.") }}
+    {% if tx == 'stopped' %}
+    <form action="/meetings/{{ meeting.id }}/minutes/regenerate" method="post" style="margin-top:0.75rem;">
+        <button type="submit" class="button-secondary">Write the draft minutes</button>
+    </form>
+    {% endif %}
+    {% endif %}
+</section>
+
+{% set items_open = not wf.locked %}
+<section class="panel" id="decisions">
+    <div class="panel-head">
+        <h3>Decisions and follow-up tasks</h3>
+        <span class="muted">{{ decisions | length }} decision{{ 's' if decisions | length != 1 else '' }} · {{ actions | length }} task{{ 's' if actions | length != 1 else '' }}</span>
+    </div>
+    <p class="muted" style="margin-top:0;">The AI only suggests items it can back with a quote from the recording. {% if not items_open %}Decisions are locked with the minutes, but you can still update each task's progress.{% endif %}</p>
+
+    {% if decisions %}
+    <h4>Decisions</h4>
+    <ul class="card-list" role="list">
+        {% for d in decisions %}
+        <li class="list-card">
+            <div class="list-card-top">
+                <p><strong>{{ d.seq }}.</strong> {{ d.text }}</p>
+                <span class="status-chip status-chip-neutral">{{ status_label(d.source, 'source') }}</span>
+            </div>
+            {% if d.agenda_item %}<p class="list-card-meta">Agenda item: {{ d.agenda_item }}</p>{% endif %}
+            {% if d.evidence %}<details class="more-details"><summary>What was said</summary><blockquote>{{ d.evidence }}</blockquote></details>{% endif %}
+            {% if items_open %}
+            <details class="more-details"><summary>Change</summary>
+                <form action="/meetings/{{ meeting.id }}/decisions/{{ d.id }}/edit" method="post" class="form-grid">
+                    <div class="form-group">
+                        <label for="dec-text-{{ d.id }}">Decision</label>
+                        <textarea id="dec-text-{{ d.id }}" name="text" rows="3" required minlength="3">{{ d.text }}</textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="dec-agenda-{{ d.id }}">Agenda item (optional)</label>
+                        <input id="dec-agenda-{{ d.id }}" type="text" name="agenda_item" value="{{ d.agenda_item or '' }}">
+                    </div>
+                    <div><button type="submit" class="button-secondary">Save</button></div>
+                </form>
+            </details>
+            <div class="list-card-actions">
+                <form action="/meetings/{{ meeting.id }}/decisions/{{ d.id }}/delete" method="post"
+                      data-confirm="This decision will be removed from the minutes." data-confirm-title="Remove this decision?" data-confirm-ok="Remove" data-confirm-danger>
+                    <button type="submit" class="button-ghost">Remove</button>
+                </form>
+            </div>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">No decisions recorded yet.</p>
+    {% endif %}
+
+    {% if actions %}
+    <h4>Follow-up tasks</h4>
+    <ul class="card-list" role="list">
+        {% for a in actions %}
+        <li class="list-card">
+            <div class="list-card-top">
+                <p>{{ a.description }}</p>
+                <span class="status-chip status-chip-{{ status_tone(a.status, 'action') }}">{{ status_label(a.status, 'action') }}</span>
+            </div>
+            <p class="list-card-meta">
+                Who: {{ a.owner or 'not set' }}{% if a.division %} · {{ a.division }}{% endif %} · By: {{ a.due_date.strftime('%d %b %Y') if a.due_date else 'no date' }}
+            </p>
+            {% if a.evidence %}<details class="more-details"><summary>What was said</summary><blockquote>{{ a.evidence }}</blockquote></details>{% endif %}
+            <form action="/meetings/{{ meeting.id }}/actions/{{ a.id }}/status" method="post" class="inline-form">
+                <label for="act-status-{{ a.id }}">Progress</label>
+                <select id="act-status-{{ a.id }}" name="status">
+                    {% for s in action_statuses %}<option value="{{ s }}"{% if a.status == s %} selected{% endif %}>{{ status_label(s, 'action') }}</option>{% endfor %}
+                </select>
+                <button type="submit" class="button-secondary">Update</button>
+            </form>
+            {% if items_open %}
+            <details class="more-details"><summary>Change</summary>
+                <form action="/meetings/{{ meeting.id }}/actions/{{ a.id }}/edit" method="post" class="form-grid">
+                    <div class="form-group">
+                        <label for="act-desc-{{ a.id }}">Task</label>
+                        <textarea id="act-desc-{{ a.id }}" name="description" rows="2" required minlength="3">{{ a.description }}</textarea>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="act-owner-{{ a.id }}">Who will do it</label>
+                            <input id="act-owner-{{ a.id }}" type="text" name="owner" value="{{ a.owner or '' }}">
+                        </div>
+                        <div class="form-group">
+                            <label for="act-div-{{ a.id }}">Division</label>
+                            <input id="act-div-{{ a.id }}" type="text" name="division" value="{{ a.division or '' }}">
+                        </div>
+                        <div class="form-group">
+                            <label for="act-due-{{ a.id }}">By when</label>
+                            <input id="act-due-{{ a.id }}" type="date" name="due_date" value="{{ a.due_date.isoformat() if a.due_date else '' }}">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="act-dec-{{ a.id }}">Linked decision</label>
+                        <select id="act-dec-{{ a.id }}" name="decision_id">
+                            <option value="">None</option>
+                            {% for d in decisions %}<option value="{{ d.id }}"{% if a.decision_id == d.id %} selected{% endif %}>{{ d.seq }}. {{ d.text[:60] }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div><button type="submit" class="button-secondary">Save</button></div>
+                </form>
+            </details>
+            <div class="list-card-actions">
+                <form action="/meetings/{{ meeting.id }}/actions/{{ a.id }}/delete" method="post"
+                      data-confirm="This follow-up task will be removed." data-confirm-title="Remove this task?" data-confirm-ok="Remove" data-confirm-danger>
+                    <button type="submit" class="button-ghost">Remove</button>
+                </form>
+            </div>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+
+    {% if items_open %}
+    <div class="sitting-ops-grid" style="margin-top:1rem;">
+        <details class="soft-details">
+            <summary>Add a decision</summary>
+            <form action="/meetings/{{ meeting.id }}/decisions" method="post" class="form-grid">
+                <div class="form-group">
+                    <label for="new-decision">Decision</label>
+                    <textarea id="new-decision" name="text" rows="3" required minlength="3" placeholder="The Board approved…"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="new-decision-agenda">Agenda item (optional)</label>
+                    <input id="new-decision-agenda" type="text" name="agenda_item">
+                </div>
+                <div><button type="submit" class="button-secondary">Add decision</button></div>
+            </form>
+        </details>
+        <details class="soft-details">
+            <summary>Add a follow-up task</summary>
+            <form action="/meetings/{{ meeting.id }}/actions" method="post" class="form-grid">
+                <div class="form-group">
+                    <label for="new-action">Task</label>
+                    <textarea id="new-action" name="description" rows="2" required minlength="3" placeholder="Prepare a report on…"></textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="new-action-owner">Who will do it</label>
+                        <input id="new-action-owner" type="text" name="owner">
+                    </div>
+                    <div class="form-group">
+                        <label for="new-action-division">Division</label>
+                        <input id="new-action-division" type="text" name="division">
+                    </div>
+                    <div class="form-group">
+                        <label for="new-action-due">By when</label>
+                        <input id="new-action-due" type="date" name="due_date">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="new-action-decision">Linked decision</label>
+                    <select id="new-action-decision" name="decision_id">
+                        <option value="">None</option>
+                        {% for d in decisions %}<option value="{{ d.id }}">{{ d.seq }}. {{ d.text[:60] }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div><button type="submit" class="button-secondary">Add task</button></div>
+            </form>
+        </details>
+    </div>
+    {% if mv.body_md and transcript_segments %}
+    <form action="/meetings/{{ meeting.id }}/minutes/extract" method="post" style="margin-top:0.75rem;"
+          data-confirm="The AI will read the minutes and recording again. Its earlier suggestions are replaced; items you added yourself are kept." data-confirm-title="Ask the AI for suggestions?" data-confirm-ok="Get suggestions">
+        <button type="submit" class="button-secondary">Ask the AI to suggest decisions and tasks</button>
+    </form>
+    {% endif %}
     {% endif %}
 </section>
 
 <section class="panel" id="intelligence">
     <div class="panel-head">
-        <h2>Find in the archive</h2>
+        <h3>Find related documents</h3>
     </div>
-    <p class="muted" style="margin-top:0;">Search stored papers using this sitting’s wording.</p>
+    <p class="muted" style="margin-top:0;">Search the archive using words from this meeting.</p>
     <div class="intel-actions">
         {% for q in intel_queries %}
         <a class="button button-secondary" href="/search?q={{ q | urlencode }}" data-nav>{{ q[:56] }}{% if q|length > 56 %}…{% endif %}</a>
         {% endfor %}
-        <a class="button button-secondary" href="/search?q={{ meeting.title | urlencode }}" data-nav>Related documents</a>
-        <a class="button button-secondary" href="/archive/map" data-nav>Mind map</a>
+        <a class="button button-secondary" href="/search?q={{ meeting.title | urlencode }}" data-nav>Documents like this meeting</a>
+        <a class="button button-secondary" href="/archive/map" data-nav>Map of connected documents</a>
     </div>
     {% if related_meetings %}
-    <p class="form-section-label" style="margin-top:1.25rem;">Other sittings</p>
+    <p class="form-section-label" style="margin-top:1.25rem;">Other meetings</p>
     <div class="meeting-list">
         {% for other in related_meetings %}
-        <a class="meeting-brief" href="/meetings/{{ other.id }}" data-nav>
+        <a class="meeting-brief" href="/meetings/{{ other.id }}">
             <time class="meeting-dateblock" datetime="{{ other.scheduled_at.isoformat() }}">
                 <span class="meeting-dateblock-day">{{ other.scheduled_at.strftime('%d') }}</span>
                 <span class="meeting-dateblock-month">{{ other.scheduled_at.strftime('%b') }}</span>
             </time>
             <div class="meeting-brief-body">
                 <h3>{{ other.title }}</h3>
-                <p class="meeting-brief-meta">{{ other.scheduled_at.strftime('%d %b %Y, %H:%M') }}{% if other.location %} · {{ other.location }}{% endif %}</p>
+                <p class="meeting-brief-meta">{{ other.scheduled_at | wall_dt }}{% if other.location %} · {{ other.location }}{% endif %}</p>
             </div>
         </a>
         {% endfor %}
     </div>
     {% endif %}
 </section>
-
-<section class="panel panel-quiet" id="notifications">
-    <div class="panel-head">
-        <h2>Notifications</h2>
-        <span class="muted">{% if meeting.notifications_enabled %}On{% else %}Off{% endif %}</span>
-    </div>
-    <p class="muted" style="margin-top:0;">Invites and 48h / 24h reminders for this meeting only.</p>
-    <form action="/meetings/{{ meeting.id }}/notifications" method="post" class="notify-inline">
-        <label class="checkbox-item">
-            <input type="checkbox" name="notifications_enabled" value="1" {% if meeting.notifications_enabled %}checked{% endif %} />
-            Send email and in-app notifications
-        </label>
-        <button type="submit" class="button-secondary">Save</button>
-    </form>
-    {% if meeting.notifications_enabled %}
-    <form action="/meetings/{{ meeting.id }}/notifications/resend" method="post" style="margin-top: 0.75rem;">
-        <button type="submit" class="button-secondary">Resend invitations</button>
-    </form>
-    {% endif %}
-</section>
+</div>
 </div>
 {% endblock %}
 

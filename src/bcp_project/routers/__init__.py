@@ -11,7 +11,6 @@ from . import (
     admin_retention,
     admin_security,
     api_v1,
-    app_shell,
     ask,
     auth,
     board,
@@ -47,4 +46,3 @@ def include_routers(app: FastAPI) -> None:
     app.include_router(notifications.router)
     app.include_router(ask.router)
     app.include_router(api_v1.router)
-    app.include_router(app_shell.router)

@@ -7,12 +7,14 @@ import uuid
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Form, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..access_control import viewable_doc_ids
 from ..brand import BRAND
+from ..ui import local_dt
 from ..deps import (
     MEETING_UPLOAD_DIR,
     UPLOAD_DIR,
@@ -22,6 +24,7 @@ from ..deps import (
 )
 from ..models import BoardBriefing, BoardMeeting, MeetingAttendance, MeetingDocument, MeetingInvitation, User
 from ..services.briefing import STATE_APPROVED
+from ..services.minutes import list_items as list_minutes_items
 from .meeting_common import (
     _load_meeting_document_or_404,
     _meeting_workspace_extras,
@@ -92,6 +95,10 @@ async def board_meeting_detail(
             ).scalars()
         )
 
+    minutes_doc_id = meeting.minutes_doc_id if meeting.minutes_state == "approved" else None
+    minutes_viewable = bool(minutes_doc_id) and minutes_doc_id in await viewable_doc_ids(db, current_user, [minutes_doc_id])
+    decisions = (await list_minutes_items(db, meeting_id))["decisions"] if minutes_viewable else []
+
     return templates.TemplateResponse(
         request,
         "board_meeting_detail.html",
@@ -102,6 +109,9 @@ async def board_meeting_detail(
             "briefed_doc_ids": briefed,
             "my_attendance": my_attendance,
             "status": status,
+            "minutes_doc_id": minutes_doc_id,
+            "minutes_viewable": minutes_viewable,
+            "decisions": decisions,
             **extras,
         },
     )
@@ -116,8 +126,13 @@ async def sign_meeting_attendance(
 ) -> RedirectResponse:
     meeting = await _require_invited_or_404(meeting_id, current_user, db)
 
+    def back(code: str) -> RedirectResponse:
+        return RedirectResponse(
+            url=f"/board/meetings/{meeting_id}?status={code}#attendance", status_code=status.HTTP_303_SEE_OTHER
+        )
+
     if not meeting.attendance_open:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Attendance is not open for this meeting")
+        return back("attendance_locked")
 
     existing_statement = select(MeetingAttendance).where(
         MeetingAttendance.meeting_id == meeting_id,
@@ -125,13 +140,15 @@ async def sign_meeting_attendance(
     )
     existing_result = await db.execute(existing_statement)
     if existing_result.scalar_one_or_none() is not None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Attendance already recorded")
+        return back("already_signed")
 
     try:
         _, _, b64data = signature.partition(",")
-        image_bytes = base64.b64decode(b64data)
+        image_bytes = base64.b64decode(b64data, validate=True)
     except (ValueError, TypeError):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid signature data")
+        image_bytes = b""
+    if not image_bytes.startswith(b"\x89PNG"):
+        return back("signature_invalid")
 
     sig_dir = MEETING_UPLOAD_DIR / str(meeting_id) / "signatures"
     sig_dir.mkdir(parents=True, exist_ok=True)
@@ -179,7 +196,7 @@ async def board_meeting_document_view(
         {
             "user": current_user,
             "page_title": document.title,
-            "page_subtitle": f"{meeting.title} · Uploaded {document.uploaded_at.strftime('%Y-%m-%d %H:%M')}",
+            "page_subtitle": f"{meeting.title} · added {local_dt(document.uploaded_at)}",
             "file_url": f"/board/meetings/{meeting_id}/documents/{document_id}/file",
             "back_url": f"/board/meetings/{meeting_id}",
             "back_label": "Back to meeting",

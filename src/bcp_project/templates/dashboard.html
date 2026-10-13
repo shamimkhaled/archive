@@ -1,126 +1,93 @@
 {% extends "base.html" %}
-{% from "macros/ui.html" import dest_card %}
+{% from "macros/ui.html" import dest_card, meeting_tile %}
 
-{% block title %}Dashboard | Sonali Bank Archive System{% endblock %}
+{% block title %}Home | Sonali Bank Archive System{% endblock %}
 {% block body_class %}home{% endblock %}
 
 {% block content %}
-{% set is_director = user.role.value == 'board_member' %}
-{% set is_uploader = user.role.value == 'uploader' %}
-{% set role_label = 'Board Member' if is_director else user.role.value | replace('_', ' ') | title %}
+{% set role = user.role.value %}
+{% set meetings_href = '/meetings' if is_organizer else '/board/meetings' %}
+{% set meeting_base = '/meetings/' if is_organizer else '/board/meetings/' %}
+{% set open_todo = todo | selectattr('count') | list %}
 
 <div class="page-header">
     <div class="title-group">
-        <h1>{% if is_director %}Board briefing{% elif is_uploader %}Document desk{% else %}Board operations{% endif %}</h1>
+        <h1>Welcome, {{ user.username }}</h1>
         <p>
-            {% if is_director %}
-            Your next sitting, the archive, and watermarked papers — in one place.
-            {% elif is_uploader %}
-            Send a PDF to parse, summarize, and index in the archive.
+            {% if role == 'board_member' %}
+            Your next Board meeting, its papers, and past decisions.
+            {% elif role == 'uploader' %}
+            Add documents to the archive and see how they are doing.
             {% else %}
-            Meetings, archive, and the documents the board will read.
+            What needs your attention today.
             {% endif %}
         </p>
     </div>
 </div>
 
-{% if is_director %}
-<section class="briefing-hero">
-    <p class="briefing-kicker">Board member</p>
-    <h2>Your meetings</h2>
-    <p>Open the sitting for agenda, papers, and digital check-in. Archive search remains watermarked and view-only.</p>
-    <div class="briefing-actions">
-        <a class="button" href="/board/meetings">Open meetings</a>
-        <a class="button button-secondary" href="/search">Search archive</a>
-    </div>
-</section>
-
-<section class="stats-grid stats-compact">
-    <article class="stat-card">
-        <strong>{{ document_count }}</strong>
-        <span>Documents in the archive</span>
-    </article>
-</section>
-
-<div class="dest-grid">
-    {{ dest_card('/board/meetings', 'Meetings', 'Agendas, attendance, and papers', 'calendar') }}
-    {{ dest_card('/search', 'Archive', 'Search minutes and circulars', 'search') }}
-    {{ dest_card('/archive/map', 'Mind Map', 'See how documents connect', 'map') }}
-    {{ dest_card('/access-requests', 'Access', 'Request view when you need a paper', 'access') }}
-</div>
-
-{% elif is_uploader %}
-<section class="briefing-hero">
-    <p class="briefing-kicker">Upload</p>
-    <h2>Send a document</h2>
-    <p>PDFs are parsed, summarized, and indexed for the board archive.</p>
-    <div class="briefing-actions">
-        <a class="button" href="/upload">Upload PDF</a>
-        <a class="button button-secondary" href="/board/meetings">My meetings</a>
-    </div>
-</section>
-
-<div class="dest-grid">
-    {{ dest_card('/upload', 'Upload document', 'Parse, summarize, and index a PDF', 'upload') }}
-    {{ dest_card('/board/meetings', 'My meetings', 'Sittings you were invited to', 'calendar') }}
-</div>
-
-{% else %}
-{% if next_meeting %}
-<section class="briefing-hero">
-    <p class="briefing-kicker">Next board meeting</p>
-    <h2>{{ next_meeting.title }}</h2>
-    <p>{{ next_meeting.scheduled_at.strftime('%d %b %Y, %H:%M') }}{% if next_meeting.location %} · {{ next_meeting.location }}{% endif %}</p>
-    <div class="briefing-actions">
-        <a class="button" href="/meetings/{{ next_meeting.id }}">Open meeting</a>
-        <a class="button button-secondary" href="/meetings/new">Schedule another</a>
-    </div>
-</section>
-{% else %}
-<section class="briefing-hero">
-    <p class="briefing-kicker">Board calendar</p>
-    <h2>No upcoming sitting</h2>
-    <p>Schedule the next board meeting to invite members and share the agenda.</p>
-    <div class="briefing-actions">
-        <a class="button" href="/meetings/new">Schedule meeting</a>
-        <a class="button button-secondary" href="/meetings">All meetings</a>
-    </div>
+{% if todo %}
+<section class="panel home-todo" aria-labelledby="todoHead">
+    <h2 id="todoHead">{% if open_todo %}Needs your attention{% else %}You're all caught up{% endif %}</h2>
+    {% if open_todo %}
+    <ul class="todo-list">
+        {% for item in open_todo %}
+        <li>
+            <a href="{{ item.href }}" data-nav>
+                <strong class="todo-count">{{ item.count }}</strong>
+                <span>{{ item.label }}</span>
+                <span class="dest-card-chevron" aria-hidden="true">→</span>
+            </a>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">Nothing is waiting for you right now.</p>
+    {% endif %}
 </section>
 {% endif %}
 
-<section class="stats-grid stats-compact">
-    <article class="stat-card">
-        <strong>{{ document_count }}</strong>
-        <span>Documents archived</span>
-    </article>
-    <article class="stat-card">
-        {% if next_meeting %}
-        <strong>{{ next_meeting.scheduled_at.strftime('%d %b') }}</strong>
-        <span>Next sitting — {{ next_meeting.scheduled_at.strftime('%H:%M') }}</span>
-        {% else %}
-        <strong>—</strong>
-        <span>No upcoming board meetings</span>
-        {% endif %}
-    </article>
+{% if role != 'uploader' or next_meetings %}
+<section class="meeting-group" aria-labelledby="nextHead">
+    <h2 class="meeting-group-label" id="nextHead">{% if next_meetings | length > 1 %}Coming up{% else %}Next meeting{% endif %}</h2>
+    {% if next_meetings %}
+    <div class="meeting-list">
+        {% for m in next_meetings %}
+        {{ meeting_tile(m, meeting_base ~ m.id, 'Sign-in is open now' if m.attendance_open else None) }}
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="panel empty-inline">
+        <p class="muted">{% if is_organizer %}No meetings are set up yet.{% else %}You have no meetings coming up.{% endif %}</p>
+        {% if is_organizer %}<a class="button" href="/meetings/new">Set up a meeting</a>{% endif %}
+    </div>
+    {% endif %}
 </section>
-
-<div class="dest-grid">
-    {% if can_upload %}
-    {{ dest_card('/upload', 'Upload', 'Parse, summarize, and index a PDF', 'upload') }}
-    {% endif %}
-    {% if can_search %}
-    {{ dest_card('/search', 'Archive', 'Find by meaning, keyword, or ID', 'search') }}
-    {{ dest_card('/archive/map', 'Mind Map', 'Document connections', 'map') }}
-    {{ dest_card('/meetings', 'Meetings', 'Agendas, attendance, and papers', 'calendar') }}
-    {{ dest_card('/admin/access-requests', 'Access queue', 'Approve or deny archive requests', 'access') }}
-    {% endif %}
-    {% if user.role.value == 'admin' %}
-    {{ dest_card('/admin/users', 'Users', 'Create accounts and assign roles', 'users') }}
-    {% endif %}
-</div>
 {% endif %}
 
-<p class="trust-line">Watermarked viewing · English &amp; বাংলা · Confidential</p>
+<h2 class="meeting-group-label">Go to</h2>
+<div class="dest-grid">
+    {% if role == 'board_member' %}
+    {{ dest_card('/board/meetings', 'My meetings', 'Agendas, papers and sign-in', 'calendar') }}
+    {{ dest_card('/board/decisions', 'Board decisions', 'Decisions from approved minutes', 'access') }}
+    {{ dest_card('/search', 'Search', 'Find minutes, circulars and papers', 'search') }}
+    {{ dest_card('/access-requests', 'My access requests', 'Ask to read a document you can\'t open', 'access') }}
+    {% elif role == 'uploader' %}
+    {{ dest_card('/upload', 'Upload a document', 'Add a PDF to the archive', 'upload') }}
+    {{ dest_card('/uploads/mine', 'My uploads', 'See how your documents are doing', 'folder') }}
+    {{ dest_card('/board/meetings', 'My meetings', 'Meetings you are invited to', 'calendar') }}
+    {% else %}
+    {{ dest_card('/meetings', 'Manage meetings', 'Set up meetings, sign-in and minutes', 'calendar') }}
+    {{ dest_card('/review', 'Documents to check', 'Check new documents before they are published', 'access') }}
+    {{ dest_card('/search', 'Search', 'Find any document in the archive', 'search') }}
+    {% if can_upload %}{{ dest_card('/upload', 'Upload a document', 'Add a PDF to the archive', 'upload') }}{% endif %}
+    {{ dest_card('/admin/access-requests', 'Access requests', 'Answer requests to read documents', 'access') }}
+    {% if role == 'admin' %}{{ dest_card('/admin/users', 'People', 'Add people and choose what they can do', 'users') }}{% endif %}
+    {% endif %}
+</div>
+
+{% if can_search %}
+<p class="trust-line">{{ document_count }} document{{ 's' if document_count != 1 else '' }} in the archive · Every copy you open is marked with your name · English and <span lang="bn">বাংলা</span></p>
+{% endif %}
 {% endblock %}
 
 {% block fab %}

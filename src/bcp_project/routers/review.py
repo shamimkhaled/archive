@@ -80,6 +80,7 @@ async def pending_queue(db: AsyncSession, limit: int = 200) -> List[Dict[str, An
             "sensitivity": doc.sensitivity,
             "ocr_confidence": doc.ocr_confidence,
             "review_reasons": review_reason_labels(doc.suggested_metadata),
+            "review_reason_codes": review_reason_codes(doc.suggested_metadata),
             "page_count": doc.page_count,
             "uploaded_by": ver.created_by,
             "uploaded_at": ver.created_at.isoformat() if ver.created_at else None,
@@ -89,9 +90,23 @@ async def pending_queue(db: AsyncSession, limit: int = 200) -> List[Dict[str, An
     ]
 
 
+def review_reason_codes(suggested: Optional[Dict[str, Any]]) -> List[str]:
+    return list((suggested or {}).get("_review_reasons") or [])
+
+
 def review_reason_labels(suggested: Optional[Dict[str, Any]]) -> List[str]:
-    reasons = (suggested or {}).get("_review_reasons") or []
-    return [REASON_LABELS.get(r, r) for r in reasons]
+    return [REASON_LABELS.get(r, r) for r in review_reason_codes(suggested)]
+
+
+def _differing_suggestions(document: DocumentRecord, suggested: Dict[str, Any]) -> Dict[str, str]:
+    """AI suggestions that differ from a value someone already entered, offered as "Use this"."""
+    out: Dict[str, str] = {}
+    for field in METADATA_FIELDS:
+        value = suggested.get(field)
+        current = getattr(document, field)
+        if isinstance(value, str) and value.strip() and current and value.strip() != current.strip():
+            out[field] = value.strip()
+    return out
 
 
 def _source_label(source: Optional[Dict[str, Any]]) -> Optional[str]:
@@ -165,6 +180,8 @@ async def api_review_detail(
         "suggested_source": _source_label(suggested.get("_source")),
         "suggested": {field: suggested.get(field) for field in ("doc_type", "doc_date", "keywords") if suggested.get(field)},
         "review_reasons": review_reason_labels(suggested),
+        "review_reason_codes": review_reason_codes(suggested),
+        "differing_suggestions": _differing_suggestions(document, suggested),
         "pages": [
             {"page": p.page_number, "text": p.text or "", "ocr_confidence": p.ocr_confidence, "source": p.source}
             for p in pages
@@ -223,6 +240,8 @@ async def review_detail_page(
             "suggested_source": (suggested.get("_source") or {}).get("kind"),
             "suggested_type": suggested.get("doc_type") or "",
             "review_reasons": review_reason_labels(suggested),
+            "review_reason_codes": review_reason_codes(suggested),
+            "differing_suggestions": _differing_suggestions(document, suggested),
             "fields": METADATA_FIELDS,
             "four_eyes_problem": _four_eyes_problem(current_user, ver),
             "can_act": ver.status == VERSION_PENDING_REVIEW,

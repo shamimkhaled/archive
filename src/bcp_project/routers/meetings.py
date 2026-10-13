@@ -13,6 +13,7 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from ..access_control import write_audit
 from ..brand import BRAND
+from ..ui import local_dt
 from ..calendar_utils import build_google_calendar_link, build_meeting_ics, new_meeting_uid
 from ..deps import (
     MEETING_INVITEE_ROLES,
@@ -932,7 +933,7 @@ async def meeting_document_view(
         {
             "user": current_user,
             "page_title": document.title,
-            "page_subtitle": f"{meeting.title} · Uploaded {document.uploaded_at.strftime('%Y-%m-%d %H:%M')}",
+            "page_subtitle": f"{meeting.title} · added {local_dt(document.uploaded_at)}",
             "file_url": f"/meetings/{meeting_id}/documents/{document_id}/file",
             "back_url": f"/meetings/{meeting_id}",
             "back_label": "Back to meeting",

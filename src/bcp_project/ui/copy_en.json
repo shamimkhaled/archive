@@ -1,0 +1,543 @@
+{
+    "app": {
+        "name": "Sonali Bank Archive",
+        "skip_to_content": "Skip to main content",
+        "offline": "You're offline. Pages you open now may not load until the connection is back.",
+        "update_ready": "A new version of the app is ready.",
+        "update_reload": "Update now",
+        "search_placeholder": "Search documents, meetings, decisions…",
+        "notifications": "Notifications",
+        "more": "More",
+        "close": "Close",
+        "cancel": "Cancel",
+        "confirm": "Confirm",
+        "sign_out": "Sign out",
+        "back": "Go back",
+        "loading": "Loading…",
+        "try_again": "Try again"
+    },
+    "nav": {
+        "group_find": "Find",
+        "group_meetings": "Meetings",
+        "group_documents": "Documents",
+        "group_admin": "Administration",
+        "group_account": "Your account",
+        "home": "Home",
+        "search": "Search",
+        "ask": "Ask Sonali",
+        "map": "Related documents",
+        "my_meetings": "My meetings",
+        "manage_meetings": "Manage meetings",
+        "meetings": "Meetings",
+        "decisions": "Decisions",
+        "upload": "Upload",
+        "my_uploads": "My uploads",
+        "review": "Documents to check",
+        "review_short": "To check",
+        "my_access": "My access requests",
+        "access_review": "Access requests",
+        "people": "People",
+        "retention": "Keep & delete rules",
+        "queues": "Background tasks",
+        "ai": "AI settings",
+        "notifications": "Notifications",
+        "appearance": "Appearance",
+        "schedule": "Schedule a meeting",
+        "meeting": "Meeting"
+    },
+    "role": {
+        "admin": "Administrator",
+        "board_secretary": "Board Secretary",
+        "board_member": "Board Member",
+        "uploader": "Uploader"
+    },
+    "status": {
+        "ingest": {
+            "received": {
+                "label": "Received",
+                "tone": "info"
+            },
+            "queued": {
+                "label": "Waiting to start",
+                "tone": "info"
+            },
+            "parsing": {
+                "label": "Reading pages",
+                "tone": "info"
+            },
+            "summarizing": {
+                "label": "Writing a summary",
+                "tone": "info"
+            },
+            "indexing": {
+                "label": "Making it searchable",
+                "tone": "info"
+            },
+            "indexed": {
+                "label": "In the archive",
+                "tone": "ok"
+            },
+            "failed": {
+                "label": "Could not be processed",
+                "tone": "danger"
+            },
+            "needs_review": {
+                "label": "Waiting for a check",
+                "tone": "warn"
+            },
+            "rejected": {
+                "label": "Sent back",
+                "tone": "danger"
+            }
+        },
+        "version": {
+            "processing": {
+                "label": "Being prepared",
+                "tone": "info"
+            },
+            "pending_review": {
+                "label": "Waiting for a check",
+                "tone": "warn"
+            },
+            "reviewed": {
+                "label": "Checked",
+                "tone": "ok"
+            },
+            "approved": {
+                "label": "Current",
+                "tone": "ok"
+            },
+            "superseded": {
+                "label": "Replaced by a newer version",
+                "tone": "neutral"
+            },
+            "rejected": {
+                "label": "Sent back",
+                "tone": "danger"
+            }
+        },
+        "meeting": {
+            "scheduled": {
+                "label": "Coming up",
+                "tone": "info"
+            },
+            "completed": {
+                "label": "Finished",
+                "tone": "ok"
+            },
+            "cancelled": {
+                "label": "Cancelled",
+                "tone": "neutral"
+            }
+        },
+        "access": {
+            "pending": {
+                "label": "Waiting for approval",
+                "tone": "warn"
+            },
+            "approved": {
+                "label": "Approved",
+                "tone": "ok"
+            },
+            "denied": {
+                "label": "Not approved",
+                "tone": "danger"
+            },
+            "revoked": {
+                "label": "Withdrawn",
+                "tone": "neutral"
+            },
+            "expired": {
+                "label": "Expired",
+                "tone": "neutral"
+            }
+        },
+        "minutes": {
+            "draft": {
+                "label": "Draft",
+                "tone": "info"
+            },
+            "in_review": {
+                "label": "Waiting for approval",
+                "tone": "warn"
+            },
+            "approved": {
+                "label": "Approved and locked",
+                "tone": "ok"
+            }
+        },
+        "action": {
+            "open": {
+                "label": "To do",
+                "tone": "info"
+            },
+            "in_progress": {
+                "label": "In progress",
+                "tone": "warn"
+            },
+            "done": {
+                "label": "Done",
+                "tone": "ok"
+            },
+            "blocked": {
+                "label": "Blocked",
+                "tone": "danger"
+            },
+            "cancelled": {
+                "label": "Cancelled",
+                "tone": "neutral"
+            }
+        },
+        "briefing_state": {
+            "ai_draft": {
+                "label": "AI draft — not yet checked",
+                "tone": "warn"
+            },
+            "management_reviewed": {
+                "label": "Checked by management",
+                "tone": "info"
+            },
+            "approved": {
+                "label": "Approved",
+                "tone": "ok"
+            }
+        },
+        "briefing_status": {
+            "pending": {
+                "label": "Waiting to start",
+                "tone": "info"
+            },
+            "generating": {
+                "label": "Being written",
+                "tone": "info"
+            },
+            "ready": {
+                "label": "Ready",
+                "tone": "ok"
+            },
+            "failed": {
+                "label": "Could not be written",
+                "tone": "danger"
+            }
+        },
+        "retention": {
+            "proposed": {
+                "label": "Waiting for second approval",
+                "tone": "warn"
+            },
+            "approved": {
+                "label": "Approved, deletion not finished",
+                "tone": "warn"
+            },
+            "rejected": {
+                "label": "Not approved",
+                "tone": "neutral"
+            },
+            "executed": {
+                "label": "Deleted",
+                "tone": "neutral"
+            },
+            "cancelled": {
+                "label": "Cancelled",
+                "tone": "neutral"
+            }
+        },
+        "page_source": {
+            "text": {
+                "label": "Typed text",
+                "tone": "neutral"
+            },
+            "ocr": {
+                "label": "Read from scan",
+                "tone": "info"
+            },
+            "reviewed": {
+                "label": "Corrected by a person",
+                "tone": "ok"
+            }
+        },
+        "source": {
+            "ai": {
+                "label": "Suggested by AI",
+                "tone": "info"
+            },
+            "llm": {
+                "label": "Drafted by AI",
+                "tone": "info"
+            },
+            "template": {
+                "label": "Drafted from a template",
+                "tone": "neutral"
+            },
+            "manual": {
+                "label": "Added by hand",
+                "tone": "neutral"
+            },
+            "edited": {
+                "label": "Edited by a person",
+                "tone": "ok"
+            },
+            "rules": {
+                "label": "Filled in automatically",
+                "tone": "neutral"
+            }
+        },
+        "sensitivity": {
+            "public": {
+                "label": "Public",
+                "tone": "neutral"
+            },
+            "internal": {
+                "label": "Internal",
+                "tone": "neutral"
+            },
+            "confidential": {
+                "label": "Confidential",
+                "tone": "warn"
+            },
+            "restricted": {
+                "label": "Restricted",
+                "tone": "danger"
+            }
+        },
+        "job": {
+            "queued": {
+                "label": "Waiting",
+                "tone": "info"
+            },
+            "running": {
+                "label": "Running",
+                "tone": "info"
+            },
+            "done": {
+                "label": "Finished",
+                "tone": "ok"
+            },
+            "failed": {
+                "label": "Failed",
+                "tone": "danger"
+            },
+            "succeeded": {
+                "label": "Finished",
+                "tone": "ok"
+            },
+            "retrying": {
+                "label": "Trying again",
+                "tone": "warn"
+            },
+            "dead": {
+                "label": "Stopped after several tries",
+                "tone": "danger"
+            }
+        },
+        "notification": {
+            "invitation": {
+                "label": "Meeting invitation",
+                "tone": "info"
+            },
+            "meeting_invite": {
+                "label": "Meeting invitation",
+                "tone": "info"
+            },
+            "agenda_updated": {
+                "label": "Agenda changed",
+                "tone": "info"
+            },
+            "reminder": {
+                "label": "Reminder",
+                "tone": "info"
+            },
+            "meeting_reminder": {
+                "label": "Meeting reminder",
+                "tone": "info"
+            },
+            "access_approved": {
+                "label": "Access approved",
+                "tone": "ok"
+            },
+            "access_denied": {
+                "label": "Access not approved",
+                "tone": "danger"
+            },
+            "review_needed": {
+                "label": "Document to check",
+                "tone": "warn"
+            }
+        },
+        "job_type": {
+            "document_ingest": {
+                "label": "Reading an uploaded document"
+            },
+            "chunk_index": {
+                "label": "Making a document searchable"
+            },
+            "connector_pull": {
+                "label": "Fetching documents from another system"
+            },
+            "board_briefing": {
+                "label": "Writing a Board briefing"
+            },
+            "meeting_transcribe": {
+                "label": "Writing a meeting transcript"
+            },
+            "meeting_chunk_stt": {
+                "label": "Turning recorded speech into text"
+            },
+            "meeting_minutes": {
+                "label": "Writing meeting minutes"
+            },
+            "meeting_recording_ingest": {
+                "label": "Saving a meeting recording"
+            },
+            "webhook_dispatch": {
+                "label": "Sending an update to another system"
+            },
+            "audit_export": {
+                "label": "Exporting the activity log"
+            },
+            "siem_forward": {
+                "label": "Sending the activity log to IT security"
+            },
+            "invalid": {
+                "label": "Unreadable task"
+            },
+            "unknown": {
+                "label": "Other task"
+            }
+        },
+        "queue": {
+            "bcp:stream:ingest": {
+                "label": "Documents"
+            },
+            "bcp:stream:meeting": {
+                "label": "Meetings"
+            },
+            "bcp:stream:notify": {
+                "label": "Messages and logs"
+            },
+            "bcp:stream:default": {
+                "label": "Other"
+            }
+        },
+        "ai_task": {
+            "chat.summary": {
+                "label": "Writing document summaries"
+            },
+            "chat.minutes": {
+                "label": "Writing meeting minutes"
+            },
+            "chat.ask": {
+                "label": "Answering questions in Ask Sonali"
+            },
+            "chat.board_brief": {
+                "label": "Writing Board briefings"
+            },
+            "chat.metadata": {
+                "label": "Suggesting document details"
+            },
+            "rerank": {
+                "label": "Putting search results in order"
+            },
+            "stt": {
+                "label": "Turning recorded speech into text"
+            },
+            "embed": {
+                "label": "Making documents searchable by meaning"
+            },
+            "embedding": {
+                "label": "Making documents searchable by meaning"
+            }
+        },
+        "egress": {
+            "cloud_allowed": {
+                "label": "Outside AI services may be used, except for Restricted documents",
+                "tone": "warn"
+            },
+            "restricted_local_only": {
+                "label": "Confidential and Restricted documents stay inside the bank",
+                "tone": "ok"
+            },
+            "internal_only": {
+                "label": "No document leaves the bank",
+                "tone": "ok"
+            }
+        },
+        "route_change": {
+            "pending": {
+                "label": "Waiting for a second administrator",
+                "tone": "warn"
+            },
+            "approved": {
+                "label": "Approved",
+                "tone": "ok"
+            },
+            "applied": {
+                "label": "Applied",
+                "tone": "ok"
+            },
+            "rejected": {
+                "label": "Not approved",
+                "tone": "danger"
+            },
+            "cancelled": {
+                "label": "Cancelled",
+                "tone": "neutral"
+            }
+        }
+    },
+    "reason": {
+        "low_ocr_confidence": {
+            "label": "Some text may have been misread from the scan",
+            "fix": "Compare each page with the scan and correct any wrong words."
+        },
+        "bangla_ocr_suspect": {
+            "label": "Bangla text may be garbled",
+            "fix": "Check Bangla words on each page and correct any that look wrong."
+        },
+        "ai_unavailable": {
+            "label": "The details could not be filled in automatically",
+            "fix": "Check the title, type and date, and fill in anything missing."
+        },
+        "missing_title": {
+            "label": "The document has no title",
+            "fix": "Add a title so people can find it in Search."
+        },
+        "doc_type_mismatch": {
+            "label": "The system thinks this is a different type of document",
+            "fix": "Check the document type and choose the right one."
+        },
+        "doc_date_mismatch": {
+            "label": "The date in the document doesn't match the date entered",
+            "fix": "Check the document date and correct it if needed."
+        }
+    },
+    "upload": {
+        "step_upload": "Uploading the file",
+        "step_read": "Reading pages",
+        "step_summary": "Writing a summary",
+        "step_search": "Making it searchable",
+        "done_title": "Done — the document is in the archive",
+        "done_body": "People with access can now find it in Search.",
+        "check_title": "Uploaded — a colleague needs to check it first",
+        "check_body": "It will appear in Search once someone else has checked it. You can follow it in My uploads.",
+        "failed_title": "We couldn't process this file",
+        "rejected_title": "The document was sent back",
+        "background_title": "Uploaded — still being prepared",
+        "background_body": "You can leave this page. Follow its progress in My uploads.",
+        "duplicate": "This file looks the same as a document already in the archive"
+    },
+    "error": {
+        "generic": "Something went wrong. Please try again.",
+        "network": "We lost contact with the server. Check your connection and try again.",
+        "forbidden": "You don't have access to this yet.",
+        "not_found": "We couldn't find that.",
+        "too_large": "The file is too large to upload.",
+        "unreadable_pdf": "This PDF could not be read. Try saving it again or scanning it more clearly.",
+        "unsupported_file": "This type of file can't be uploaded. Please upload a PDF or a scanned image.",
+        "duplicate_id": "A document with this ID already exists. Choose a different ID.",
+        "processing_failed": "The document could not be processed. Please try again, or contact the archive administrator if it keeps happening.",
+        "ai_unavailable": "The assistant is unavailable right now. Please try again later.",
+        "search_unavailable": "Search is unavailable right now. Please try again in a moment.",
+        "session_expired": "Your session has ended. Please sign in again."
+    }
+}

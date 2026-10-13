@@ -1,50 +1,86 @@
 {% extends "base.html" %}
+{% from "macros/ui.html" import breadcrumbs, empty_state %}
 
-{% block title %}Decision register | {{ brand.product_name }}{% endblock %}
+{% block title %}Board decisions | {{ brand.product_name }}{% endblock %}
 
 {% block content %}
+{{ breadcrumbs([{'href': '/', 'label': 'Home'}, {'label': 'Board decisions'}]) }}
 <div class="page-header">
     <div class="title-group">
-        <h1>Decision register</h1>
-        <p>Decisions recorded in approved Board minutes that you have access to.</p>
+        <h1>Board decisions</h1>
+        <p>Every decision from approved Board minutes that you are allowed to read, with the follow-up tasks.</p>
     </div>
 </div>
 
 <section class="panel">
-    <form method="get" action="/board/decisions" class="inline-form" role="search">
-        <input type="search" name="q" value="{{ q }}" maxlength="200" placeholder="Search decisions" aria-label="Search decisions">
-        <button type="submit" class="button-secondary">Search</button>
+    <form method="get" action="/board/decisions" class="filter-bar" role="search" aria-label="Find decisions">
+        <div class="form-group filter-bar-grow">
+            <label for="decisionQ">Words to look for</label>
+            <input id="decisionQ" type="search" name="q" value="{{ q }}" maxlength="200" placeholder="For example: loan policy">
+        </div>
+        <div class="form-group">
+            <label for="decisionYear">Year</label>
+            <select id="decisionYear" name="year">
+                <option value="">Any year</option>
+                {% for y in years %}<option value="{{ y }}"{% if y == year %} selected{% endif %}>{{ y }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="decisionTasks">Follow-up tasks</label>
+            <select id="decisionTasks" name="tasks">
+                <option value="">Any</option>
+                <option value="open"{% if tasks == 'open' %} selected{% endif %}>Some still to do</option>
+                <option value="done"{% if tasks == 'done' %} selected{% endif %}>All finished</option>
+                <option value="none"{% if tasks == 'none' %} selected{% endif %}>No tasks</option>
+            </select>
+        </div>
+        <div class="filter-bar-actions">
+            <button type="submit">Show decisions</button>
+            {% if q or year or tasks %}<a class="button button-secondary" href="/board/decisions" data-nav>Clear</a>{% endif %}
+        </div>
     </form>
 </section>
 
-<section class="panel">
+<section class="panel" aria-live="polite">
     {% if entries %}
-    <div class="table-wrap">
-        <table class="data-table">
-            <thead>
-                <tr><th>Meeting</th><th>Decision</th><th>Actions</th><th></th></tr>
-            </thead>
-            <tbody>
-                {% for e in entries %}
-                <tr>
-                    <td>{{ e.meeting_title }}<br><span class="muted">{{ e.meeting_date }}</span></td>
-                    <td>
-                        {% if e.agenda_item %}<span class="muted">{{ e.agenda_item }}</span><br>{% endif %}
-                        {{ e.text }}
-                    </td>
-                    <td>
-                        {% for a in e.actions %}
-                        <div>{{ a.description }}{% if a.owner %} <span class="muted">· {{ a.owner }}</span>{% endif %}{% if a.division %} <span class="muted">· {{ a.division }}</span>{% endif %}{% if a.due_date %} <span class="muted">· due {{ a.due_date }}</span>{% endif %} <span class="badge{% if a.status == 'done' %} badge-accent{% elif a.status == 'open' %} badge-warn{% endif %}">{{ a.status|replace('_', ' ') }}</span></div>
-                        {% else %}<span class="muted">—</span>{% endfor %}
-                    </td>
-                    <td><a class="button button-secondary" href="{{ e.minutes_url }}">Minutes</a></td>
-                </tr>
+    <p class="muted" style="margin-top:0;">{{ entries | length }} decision{{ 's' if entries | length != 1 else '' }}</p>
+    <div class="card-list">
+        {% for e in entries %}
+        <article class="list-card decision-card">
+            <div class="list-card-top">
+                <div>
+                    <h3>{{ e.text }}</h3>
+                    <p class="list-card-meta">
+                        {{ e.meeting_title }}{% if e.meeting_date %} · {{ e.meeting_date | local_date }}{% endif %}
+                        {% if e.agenda_item %} · Agenda: {{ e.agenda_item }}{% endif %}
+                    </p>
+                </div>
+            </div>
+            {% if e.actions %}
+            <ul class="decision-tasks">
+                {% for a in e.actions %}
+                <li>
+                    <span>{{ a.description }}</span>
+                    <span class="muted">
+                        {% if a.owner %}{{ a.owner }}{% endif %}{% if a.division %}{% if a.owner %} · {% endif %}{{ a.division }}{% endif %}{% if a.due_date %}{% if a.owner or a.division %} · {% endif %}due {{ a.due_date | local_date }}{% endif %}
+                    </span>
+                    <span class="status-chip status-chip-{{ status_tone(a.status, 'action') }}">{{ status_label(a.status, 'action') }}</span>
+                </li>
                 {% endfor %}
-            </tbody>
-        </table>
+            </ul>
+            {% else %}
+            <p class="muted">No follow-up tasks.</p>
+            {% endif %}
+            <div class="list-card-actions">
+                <a class="button button-secondary" href="{{ e.minutes_url }}">Read the minutes</a>
+            </div>
+        </article>
+        {% endfor %}
     </div>
+    {% elif q or year or tasks %}
+    {{ empty_state("No decisions found", "Try fewer words or a different year.", "/board/decisions", "Show all decisions") }}
     {% else %}
-    <p class="muted">{% if q %}No decisions match “{{ q }}”.{% else %}No decisions from approved minutes you can access yet. Ask the Board secretariat for access to past minutes if you need them.{% endif %}</p>
+    {{ empty_state("No decisions yet", "Decisions appear here once Board minutes are approved. If you need older minutes, ask the Board secretariat for access.") }}
     {% endif %}
 </section>
 {% endblock %}

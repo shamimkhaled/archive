@@ -1,92 +1,160 @@
 {% extends "base.html" %}
 
-{% block title %}Verify {{ document.doc_id }} | {{ brand.product_name }}{% endblock %}
+{% block title %}Check {{ document.doc_id }} | {{ brand.product_name }}{% endblock %}
 
 {% block content %}
+{% set editable = can_act and not four_eyes_problem %}
+{% set field_labels = {'title': 'Title', 'reference_number': 'Reference number', 'department': 'Department', 'subject': 'Subject', 'category': 'Category'} %}
 <div class="page-header">
     <div class="title-group">
-        <h1>Verify {{ document.doc_id }}{% if version.version > 1 %} — version {{ version.version }}{% endif %}</h1>
-        <p>
-            {{ document.doc_type }} · <span class="badge">{{ document.sensitivity }}</span>
-            · uploaded by {{ version.created_by }}
-            {% if document.ocr_confidence is not none %} · OCR confidence {{ '%.0f'|format(document.ocr_confidence) }}%{% endif %}
+        <h1>Check {{ metadata.title or document.doc_id }}</h1>
+        <p class="muted">
+            {{ document.doc_id }}{% if version.version > 1 %} · new version {{ version.version }}{% endif %}
+            · {{ document.sensitivity|status_label('sensitivity') }}
+            · uploaded by {{ version.created_by }}{% if version.created_at %} on {{ version.created_at|local_dt }}{% endif %}
         </p>
     </div>
-    <div><a class="button button-secondary" href="/review">Back to queue</a></div>
+    <a class="button button-secondary" href="/review" data-nav>Back to the list</a>
 </div>
 
 {% if error %}
-<div class="alert alert-error" role="alert">{{ error }}</div>
+<div class="alert alert-error" role="alert"><span>{{ error }}</span></div>
 {% endif %}
 {% if four_eyes_problem %}
-<div class="alert alert-error" role="alert">{{ four_eyes_problem }}</div>
-{% endif %}
-{% if not can_act %}
-<div class="alert" role="status">This version is {{ version.status }}; it is shown read-only.</div>
-{% endif %}
-{% if review_reasons %}
-<div class="alert" role="status">Sent for verification: {{ review_reasons|join('; ') }}.</div>
+<div class="alert alert-info" role="status"><span><strong>You uploaded this, so someone else must check it.</strong> You can look through it, but you can't publish it or send it back.</span></div>
+{% elif not can_act %}
+<div class="alert alert-info" role="status"><span>This version is <strong>{{ version.status|status_label('version') }}</strong>. There is nothing left to do here.</span></div>
 {% endif %}
 
-<form action="/review/{{ document.doc_id }}/v/{{ version.version }}/approve" method="post" id="approveForm">
+{% if review_reason_codes %}
+<section class="panel" aria-labelledby="whyHeading">
+    <h2 id="whyHeading">Why it needs a check</h2>
+    <ul class="reason-fix-list">
+        {% for code in review_reason_codes %}
+        <li><strong>{{ code|reason_label }}</strong>{% if reason_fix(code) %}<span>{{ reason_fix(code) }}</span>{% endif %}</li>
+        {% endfor %}
+    </ul>
+</section>
+{% endif %}
+
+<form action="/review/{{ document.doc_id }}/v/{{ version.version }}/approve" method="post" id="approveForm"
+      data-confirm-title="Publish this document?"
+      data-confirm="It will become searchable for everyone who is allowed to see {{ document.sensitivity|status_label('sensitivity')|lower }} documents."
+      data-confirm-ok="Publish">
     <section class="panel">
-        <h2>Archive metadata</h2>
-        <p class="muted">
-            Prefilled from the uploader's entries, then
-            {% if suggested_source == 'ai' %}AI suggestions{% elif suggested_source == 'rules' %}pattern matching{% else %}suggestions{% endif %}
-            from the text. Correct anything wrong; these fields drive search filters.
-        </p>
+        <h2>Details</h2>
+        <p class="muted">These help people find the document. Correct anything that's wrong.</p>
         <div class="form-grid">
             <div class="form-group">
-                <label for="meta_doc_type">Document type{% if suggested_type and suggested_type|lower != document.doc_type|lower %} (AI suggests {{ suggested_type }}){% endif %}</label>
-                <input id="meta_doc_type" type="text" name="doc_type" value="{{ document.doc_type }}" maxlength="64" {% if not can_act %}disabled{% endif %} />
+                <label for="meta_doc_type">Type of document</label>
+                <input id="meta_doc_type" type="text" name="doc_type" value="{{ document.doc_type }}" maxlength="64" {% if not editable %}disabled{% endif %} />
+                {% if suggested_type and suggested_type|lower != document.doc_type|lower %}
+                <p class="field-hint suggestion">
+                    The archive thinks this is: <strong>{{ suggested_type }}</strong>
+                    {% if editable %}<button type="button" class="button-link" data-use-suggestion="meta_doc_type" data-value="{{ suggested_type }}">Use this</button>{% endif %}
+                </p>
+                {% endif %}
             </div>
             {% for f in fields %}
             <div class="form-group">
-                <label for="meta_{{ f }}">{{ f|replace('_', ' ')|capitalize }}</label>
-                <input id="meta_{{ f }}" type="text" name="{{ f }}" value="{{ metadata[f] }}" maxlength="500" {% if not can_act %}disabled{% endif %} />
+                <label for="meta_{{ f }}">{{ field_labels.get(f, f|replace('_', ' ')|capitalize) }}</label>
+                <input id="meta_{{ f }}" type="text" name="{{ f }}" value="{{ metadata[f] }}" maxlength="500" {% if not editable %}disabled{% endif %} />
+                {% if differing_suggestions.get(f) %}
+                <p class="field-hint suggestion">
+                    Suggested: <strong>{{ differing_suggestions[f] }}</strong>
+                    {% if editable %}<button type="button" class="button-link" data-use-suggestion="meta_{{ f }}" data-value="{{ differing_suggestions[f] }}">Use this</button>{% endif %}
+                </p>
+                {% endif %}
             </div>
             {% endfor %}
         </div>
     </section>
 
     {% for page in pages %}
-    <section class="panel review-page">
-        <h2>
-            Page {{ page.page_number }}
-            {% if page.ocr_confidence is not none %}<span class="badge{% if page.ocr_confidence < 60 %} badge-warn{% endif %}">{{ '%.0f'|format(page.ocr_confidence) }}%</span>{% endif %}
-            <span class="badge">{{ page.source }}</span>
+    <section class="panel review-page" aria-labelledby="pageHeading{{ page.page_number }}">
+        <h2 id="pageHeading{{ page.page_number }}">
+            Page {{ page.page_number }} of {{ pages|length }}
+            {% if page.ocr_confidence is not none and page.ocr_confidence < 60 %}<span class="status-chip status-chip-warn">Check carefully</span>{% endif %}
         </h2>
         <div class="review-grid">
             <figure class="review-image">
-                <img src="/review/{{ document.doc_id }}/v/{{ version.version }}/page/{{ page.page_number }}.png"
-                     alt="Scan of page {{ page.page_number }}" loading="lazy" />
+                <button type="button" class="review-zoom" aria-pressed="false" aria-label="Zoom in on the scan of page {{ page.page_number }}">
+                    <img src="/review/{{ document.doc_id }}/v/{{ version.version }}/page/{{ page.page_number }}.png"
+                         alt="Scan of page {{ page.page_number }}" loading="lazy" />
+                </button>
+                <figcaption class="muted small">Tap the scan to zoom.</figcaption>
+                <p class="review-image-fallback banner info" hidden>The scan of this page couldn't be shown. You can still check the text.</p>
             </figure>
             <div class="form-group">
-                <label for="page_{{ page.page_number }}">Extracted text</label>
-                <textarea id="page_{{ page.page_number }}" name="page_{{ page.page_number }}" rows="22" spellcheck="false" {% if not can_act %}disabled{% endif %}>{{ page.text }}</textarea>
+                <label for="page_{{ page.page_number }}">Text read from the page</label>
+                <textarea id="page_{{ page.page_number }}" name="page_{{ page.page_number }}" rows="22" spellcheck="false" {% if not editable %}disabled{% endif %}>{{ page.text }}</textarea>
             </div>
         </div>
     </section>
     {% endfor %}
 
-    {% if can_act and not four_eyes_problem %}
-    <div class="form-actions-sticky">
-        <button type="submit" class="button">Approve and index</button>
+    {% if editable %}
+    <div class="action-bar">
+        <p class="action-bar-note">Publishing makes it searchable. Sending it back keeps it out of Search.</p>
+        <a class="button button-secondary" href="#rejectPanel" id="sendBackLink">Send back…</a>
+        <button type="submit" class="button">Confirm and publish</button>
     </div>
     {% endif %}
 </form>
 
-{% if can_act and not four_eyes_problem %}
-<section class="panel">
-    <h2>Reject</h2>
-    <form action="/review/{{ document.doc_id }}/v/{{ version.version }}/reject" method="post" class="form-grid">
+{% if editable %}
+<section class="panel" id="rejectPanel" aria-labelledby="rejectHeading" tabindex="-1">
+    <h2 id="rejectHeading">Send it back</h2>
+    <p class="muted">Use this if the scan is unreadable or it's the wrong document. The uploader will see your note.</p>
+    <form action="/review/{{ document.doc_id }}/v/{{ version.version }}/reject" method="post" class="form-grid"
+          data-confirm-title="Send this document back?"
+          data-confirm="It won't appear in Search. The uploader can upload a better copy."
+          data-confirm-ok="Send back" data-confirm-danger>
         <div class="form-group">
-            <label for="reason">Reason (recorded in the audit log)</label>
-            <input id="reason" type="text" name="reason" maxlength="500" required placeholder="e.g. Illegible scan, re-scan at 300 DPI" />
+            <label for="reason">What's wrong?</label>
+            <input id="reason" type="text" name="reason" maxlength="500" required placeholder="For example: pages 3 and 4 are blurred — please scan again" />
         </div>
-        <div><button type="submit" class="button button-secondary">Reject version</button></div>
+        <div><button type="submit" class="button button-danger">Send back</button></div>
     </form>
 </section>
 {% endif %}
+
+<script>
+(function () {
+    document.querySelectorAll('[data-use-suggestion]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var input = document.getElementById(btn.getAttribute('data-use-suggestion'));
+            if (!input) return;
+            input.value = btn.getAttribute('data-value') || '';
+            input.focus();
+            btn.textContent = 'Used';
+            btn.disabled = true;
+        });
+    });
+    document.querySelectorAll('.review-image').forEach(function (fig) {
+        var img = fig.querySelector('img');
+        var zoom = fig.querySelector('.review-zoom');
+        var fallback = fig.querySelector('.review-image-fallback');
+        if (img) img.addEventListener('error', function () {
+            if (zoom) zoom.hidden = true;
+            var cap = fig.querySelector('figcaption');
+            if (cap) cap.hidden = true;
+            if (fallback) fallback.hidden = false;
+        });
+        if (zoom) zoom.addEventListener('click', function () {
+            var on = !fig.classList.contains('is-zoomed');
+            fig.classList.toggle('is-zoomed', on);
+            zoom.setAttribute('aria-pressed', on ? 'true' : 'false');
+        });
+    });
+    var sendBack = document.getElementById('sendBackLink');
+    if (sendBack) sendBack.addEventListener('click', function (e) {
+        e.preventDefault();
+        var panel = document.getElementById('rejectPanel');
+        panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        var reason = document.getElementById('reason');
+        if (reason) setTimeout(function () { reason.focus({ preventScroll: true }); }, 300);
+    });
+})();
+</script>
 {% endblock %}

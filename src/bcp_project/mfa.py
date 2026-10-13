@@ -130,6 +130,15 @@ def provisioning_uri(secret: str, username: str) -> str:
     )
 
 
+def qr_data_uri(uri: str) -> Optional[str]:
+    """Scannable QR code for the setup link as an inline SVG, rendered on the server so the secret never leaves it."""
+    try:
+        import segno
+    except ImportError:
+        return None
+    return segno.make(uri, error="m").svg_data_uri(scale=5, border=2, dark="#111111", light="#ffffff")
+
+
 def _hash_recovery(code: str) -> str:
     return hashlib.sha256(code.strip().lower().replace("-", "").encode()).hexdigest()
 

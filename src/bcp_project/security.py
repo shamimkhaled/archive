@@ -72,21 +72,26 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         allow_mic = bool(re.match(r"^/meetings/\d+/?$", path))
         mic_policy = "microphone=(self)" if allow_mic else "microphone=()"
         response.headers["Permissions-Policy"] = f"camera=(), {mic_policy}, geolocation=()"
-        # Allow pdf.js CDN + fonts used by the PWA shell.
+        # pdf.js and the fonts are served from /static; pdf.js decodes some images with WebAssembly.
         csp = (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; "
-            "worker-src 'self' blob: https://cdnjs.cloudflare.com; "
-            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-            "font-src 'self' https://fonts.gstatic.com data:; "
+            "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; "
+            "worker-src 'self' blob:; "
+            "style-src 'self' 'unsafe-inline'; "
+            "font-src 'self' data:; "
             "img-src 'self' data: blob:; "
-            "connect-src 'self' https://cdnjs.cloudflare.com; "
+            "connect-src 'self'; "
             "media-src 'self' blob:; "
+            "manifest-src 'self'; "
+            "object-src 'none'; "
             "frame-ancestors 'none'; "
             "base-uri 'self'; "
             "form-action 'self'"
         )
         response.headers.setdefault("Content-Security-Policy", csp)
+        # Pages and API answers can hold confidential text, so browsers and proxies must not keep them.
+        if not path.startswith("/static/"):
+            response.headers.setdefault("Cache-Control", "no-store")
         if self.is_production:
             response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
         return response
@@ -138,6 +143,14 @@ class CsrfMiddleware(BaseHTTPMiddleware):
         if request.cookies.get("access_token") and not request.cookies.get(CSRF_COOKIE):
             set_csrf_cookie(response, new_csrf_token(), secure=request.url.scheme == "https")
         return response
+
+
+def safe_next(value: Optional[str]) -> Optional[str]:
+    """Same-site path to return to after sign-in; rejects absolute and protocol-relative URLs."""
+    value = (value or "").strip()
+    if not value.startswith("/") or value.startswith("//") or "\\" in value or any(ord(c) < 32 for c in value):
+        return None
+    return value[:500]
 
 
 def client_ip(request: Request) -> Optional[str]:

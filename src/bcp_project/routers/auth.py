@@ -28,6 +28,7 @@ from ..mfa import (
     decrypt_secret,
     get_enrollment,
     provisioning_uri,
+    qr_data_uri,
     role_requires_mfa,
     start_enrollment,
     verify_login_code,
@@ -51,9 +52,8 @@ from ..ports.identity import (
     oidc_enabled,
     pkce_pair,
 )
-from ..security import login_rate_limiter, new_csrf_token, set_csrf_cookie
+from ..security import login_rate_limiter, new_csrf_token, safe_next, set_csrf_cookie
 from ..services.external_identity import resolve_external_user
-from ..spa import safe_next
 
 logger = logging.getLogger("bcp_project.routers.auth")
 router = APIRouter()
@@ -271,6 +271,7 @@ async def mfa_setup_page(request: Request, db: AsyncSession = Depends(get_db)) -
             "username": user.username,
             "secret": secret,
             "otpauth_uri": provisioning_uri(secret, user.username),
+            "qr_data_uri": qr_data_uri(provisioning_uri(secret, user.username)),
         },
     )
 
@@ -297,6 +298,7 @@ async def mfa_setup_confirm(request: Request, code: str = Form(...), db: AsyncSe
                 "username": user.username,
                 "secret": secret,
                 "otpauth_uri": provisioning_uri(secret, user.username),
+                "qr_data_uri": qr_data_uri(provisioning_uri(secret, user.username)),
                 "error": "invalid",
             },
             status_code=400,
@@ -340,6 +342,8 @@ async def logout(request: Request, current_user: Optional[User] = Depends(get_op
     response.delete_cookie("access_token", path="/")
     response.delete_cookie("csrf_token", path="/")
     response.delete_cookie(MFA_PENDING_COOKIE, path="/login")
+    # Storage is kept: it only holds the offline app shell and appearance choices, never documents.
+    response.headers["Clear-Site-Data"] = '"cache"'
     return response
 
 

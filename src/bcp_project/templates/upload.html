@@ -1,212 +1,191 @@
 {% extends "base.html" %}
+{% from "macros/icons.html" import icon %}
 
-{% block title %}Upload Document | Sonali Bank Archive System{% endblock %}
+{% block title %}Upload a document | {{ brand.product_name }}{% endblock %}
 
 {% block content %}
 <div class="page-header">
     <div class="title-group">
-        <h1>Upload document</h1>
-        <p>Submit a PDF or scanned image to OCR, summarize, and index in the archive. Low-confidence scans go to the verification queue first.</p>
+        <h1>Upload a document</h1>
+        <p>Add a PDF or a scanned page. The archive reads it, writes a short summary and makes it searchable.</p>
     </div>
+    <a class="button button-secondary" href="/uploads/mine" data-nav>{{ t('nav.my_uploads') }}</a>
 </div>
 
-<section class="panel">
-    {% if status == 'success' %}
-    <div class="alert alert-success" role="status">
-      Searchable now. Deeper text indexing continues in the background for a few moments.
-    </div>
-    {% elif status == 'queued' %}
-    <div class="alert alert-success" role="status">
-      Received. The document is being processed and appears in search when indexing finishes.
-    </div>
-    {% elif status == 'review' %}
-    <div class="alert alert-success" role="status">
-      Received. OCR confidence was low, so a reviewer must confirm the text in the <a href="/review">verification queue</a> before it becomes searchable.
-    </div>
-    {% endif %}
+{% if status == 'success' %}
+<div class="alert alert-success" role="status">{{ t('upload.done_title') }}. {{ t('upload.done_body') }}</div>
+{% elif status == 'queued' %}
+<div class="alert alert-info" role="status">{{ t('upload.background_title') }}. {{ t('upload.background_body') }}</div>
+{% elif status == 'review' %}
+<div class="alert alert-warn" role="status">{{ t('upload.check_title') }}. {{ t('upload.check_body') }}</div>
+{% endif %}
 
-    <div class="upload-split">
-    <div id="uploadState" class="upload-flow{% if status == 'success' %} is-complete{% endif %}" aria-live="polite">
-        <div class="upload-flow-header">
-            <h2 class="upload-flow-title">{% if status == 'success' %}Searchable now{% else %}Ingestion pipeline{% endif %}</h2>
-            <p id="uploadMessage" class="upload-message">
-                {% if status == 'success' %}
-                Document uploaded, parsed, summarized, and indexed.
-                {% else %}
-                Waiting for document upload…
-                {% endif %}
-            </p>
-        </div>
+<div class="upload-layout">
+<form id="uploadForm" action="/upload" method="post" enctype="multipart/form-data" class="panel upload-form" data-ingest-mode="{{ ingest_mode|default('stream') }}" data-can-view="{{ 'false' if user.role.value == 'uploader' else 'true' }}" data-no-busy>
+    <section class="form-section" aria-labelledby="fileHeading">
+        <h2 class="form-section-label" id="fileHeading">1. Choose the file</h2>
+        <label class="file-drop" for="file" id="fileDrop">
+            <span class="file-drop-icon" aria-hidden="true">{{ icon('upload', 28, 2) }}</span>
+            <span class="file-drop-label" id="fileDropLabel">Drag the file here, or tap to choose it</span>
+            <span class="file-drop-hint" id="fileDropHint">PDF or scanned image (PNG, JPEG, TIFF)</span>
+            <input id="file" type="file" name="file" accept="application/pdf,image/png,image/jpeg,image/tiff,.pdf,.png,.jpg,.jpeg,.tif,.tiff" required aria-describedby="fileDropHint" />
+        </label>
+    </section>
 
-        <ol class="upload-steps" id="uploadSteps">
-            <li class="upload-step{% if status == 'success' %} is-done{% else %} is-pending{% endif %}" data-step="upload">
-                <span class="upload-step-index" aria-hidden="true">1</span>
-                <span class="upload-step-body">
-                    <strong>Upload</strong>
-                    <span>Send PDF to the server</span>
-                </span>
-            </li>
-            <li class="upload-step{% if status == 'success' %} is-done{% else %} is-pending{% endif %}" data-step="parse">
-                <span class="upload-step-index" aria-hidden="true">2</span>
-                <span class="upload-step-body">
-                    <strong>Parse</strong>
-                    <span>Extract text from the PDF</span>
-                </span>
-            </li>
-            <li class="upload-step{% if status == 'success' %} is-done{% else %} is-pending{% endif %}" data-step="summarize">
-                <span class="upload-step-index" aria-hidden="true">3</span>
-                <span class="upload-step-body">
-                    <strong>Summarize</strong>
-                    <span>Build summary &amp; keywords</span>
-                </span>
-            </li>
-            <li class="upload-step{% if status == 'success' %} is-done{% else %} is-pending{% endif %}" data-step="index">
-                <span class="upload-step-index" aria-hidden="true">4</span>
-                <span class="upload-step-body">
-                    <strong>Index</strong>
-                    <span>Store in search archive</span>
-                </span>
-            </li>
-        </ol>
-
-        <div class="progress-wrap">
-            <div class="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{% if status == 'success' %}100{% else %}0{% endif %}" id="progressBar">
-                <div class="progress-fill{% if status == 'success' %} is-complete{% endif %}" id="progressFill" style="width: {% if status == 'success' %}100%{% else %}0%{% endif %};">
-                    <span id="progressLabel">{% if status == 'success' %}100%{% endif %}</span>
-                </div>
+    <section class="form-section" aria-labelledby="aboutHeading">
+        <h2 class="form-section-label" id="aboutHeading">2. About the document</h2>
+        <div class="form-grid">
+            <div class="form-group">
+                <label for="doc_type">Type of document</label>
+                <input
+                    id="doc_type"
+                    name="doc_type"
+                    list="docTypeOptions"
+                    required
+                    maxlength="64"
+                    autocomplete="off"
+                    placeholder="For example: Board minutes"
+                    aria-describedby="docTypeHelp"
+                />
+                <datalist id="docTypeOptions">
+                    {% for dt in document_types %}
+                    <option value="{{ dt }}"></option>
+                    {% endfor %}
+                </datalist>
+                <p class="field-hint" id="docTypeHelp">Pick from the list, or type a new type.</p>
             </div>
-            <p id="progressHint" class="progress-hint muted">
-                {% if status == 'success' %}
-                Ready for another upload below.
-                {% else %}
-                Progress updates while the document is processed.
-                {% endif %}
-            </p>
-        </div>
-    </div>
-
-    <form id="uploadForm" action="/upload" method="post" enctype="multipart/form-data" class="form-grid" data-ingest-mode="{{ ingest_mode|default('stream') }}">
-        <div class="form-section">
-            <div class="form-section-label">Document details</div>
-            <div class="form-grid">
-                <div class="form-group">
-                    <label for="doc_date">Document date</label>
-                    <input id="doc_date" type="date" name="doc_date" required value="{{ default_doc_date }}" />
-                </div>
-                <div class="form-group">
-                    <label for="doc_id">Document ID</label>
-                    <input id="doc_id" type="text" name="doc_id" required
-                           value="{{ suggested_doc_id }}"
-                           placeholder="SB-2026-001" autocomplete="off"
-                           aria-describedby="docIdHelp" />
-                    <p class="field-hint" id="docIdHelp">Suggested automatically. Edit if you need a different ID.</p>
-                </div>
-                <div class="form-group">
-                    <label for="doc_type">Document type</label>
-                    <input
-                        id="doc_type"
-                        name="doc_type"
-                        list="docTypeOptions"
-                        required
-                        maxlength="64"
-                        autocomplete="off"
-                        placeholder="Select or type a new type…"
-                        value="Meeting Minutes"
-                        aria-describedby="docTypeHelp"
-                    />
-                    <datalist id="docTypeOptions">
-                        {% for t in document_types %}
-                        <option value="{{ t }}"></option>
-                        {% endfor %}
-                    </datalist>
-                    <p class="field-hint" id="docTypeHelp">
-                        Pick a suggestion (e.g. Bank Statement) or type any new document type — it is saved with the upload and shown next time.
-                    </p>
-                </div>
+            <div class="form-group">
+                <label for="doc_date">Date on the document</label>
+                <input id="doc_date" type="date" name="doc_date" required value="{{ default_doc_date }}" />
+            </div>
+            <div class="form-group">
+                <label for="sensitivity">Who can see it</label>
+                <select id="sensitivity" name="sensitivity" aria-describedby="sensitivityHelp">
+                    <option value="public">{{ status_label('public', 'sensitivity') }}</option>
+                    <option value="internal" selected>{{ status_label('internal', 'sensitivity') }}</option>
+                    <option value="confidential">{{ status_label('confidential', 'sensitivity') }}</option>
+                    <option value="restricted">{{ status_label('restricted', 'sensitivity') }}</option>
+                </select>
+                <p class="field-hint" id="sensitivityHelp">Restricted documents are only shown to people who have been given access, and are never sent to outside AI services.</p>
+            </div>
+            <div class="form-group">
+                <label for="doc_id">Archive number</label>
+                <input id="doc_id" type="text" name="doc_id" required
+                       value="{{ suggested_doc_id }}"
+                       placeholder="SB-2026-001" autocomplete="off" autocapitalize="characters"
+                       aria-describedby="docIdHelp" />
+                <p class="field-hint" id="docIdHelp">Filled in for you. Change it only if this document already has a number.</p>
             </div>
         </div>
+    </section>
 
-        <div class="form-section">
-            <div class="form-section-label">Archive metadata</div>
-            <p class="field-hint">Optional. Blank fields are suggested from the document text and confirmed by a reviewer.</p>
-            <div class="form-grid">
-                <div class="form-group">
-                    <label for="title">Title</label>
-                    <input id="title" type="text" name="title" maxlength="500" autocomplete="off" />
-                </div>
-                <div class="form-group">
-                    <label for="reference_number">Reference number</label>
-                    <input id="reference_number" type="text" name="reference_number" maxlength="128" autocomplete="off" placeholder="e.g. SB/HO/2026/114" />
-                </div>
-                <div class="form-group">
-                    <label for="department">Department</label>
-                    <input id="department" type="text" name="department" maxlength="128" autocomplete="off" />
-                </div>
-                <div class="form-group">
-                    <label for="category">Category</label>
-                    <input id="category" type="text" name="category" maxlength="128" autocomplete="off" />
-                </div>
-                <div class="form-group">
-                    <label for="subject">Subject</label>
-                    <input id="subject" type="text" name="subject" maxlength="500" autocomplete="off" />
-                </div>
+    <details class="form-section more-details">
+        <summary><span class="form-section-label">3. More details (optional)</span></summary>
+        <p class="field-hint">Leave these blank and the archive will suggest them from the document. Someone will confirm them.</p>
+        <div class="form-grid">
+            <div class="form-group">
+                <label for="title">Title</label>
+                <input id="title" type="text" name="title" maxlength="500" autocomplete="off" />
             </div>
-        </div>
-
-        <div class="form-section">
-            <div class="form-section-label">Indexing</div>
+            <div class="form-group">
+                <label for="reference_number">Reference number</label>
+                <input id="reference_number" type="text" name="reference_number" maxlength="128" autocomplete="off" placeholder="For example: SB/HO/2026/114" />
+            </div>
+            <div class="form-group">
+                <label for="department">Department</label>
+                <input id="department" type="text" name="department" maxlength="128" autocomplete="off" />
+            </div>
+            <div class="form-group">
+                <label for="category">Category</label>
+                <input id="category" type="text" name="category" maxlength="128" autocomplete="off" />
+            </div>
+            <div class="form-group">
+                <label for="subject">Subject</label>
+                <input id="subject" type="text" name="subject" maxlength="500" autocomplete="off" />
+            </div>
             <div class="form-group">
                 <label for="keywords">Keywords</label>
-                <textarea id="keywords" name="keywords" rows="3" placeholder="Optional keywords or JSON list"></textarea>
-            </div>
-            <div class="form-group">
-                <label for="sensitivity">Classification</label>
-                <select id="sensitivity" name="sensitivity" aria-describedby="sensitivityHelp">
-                    <option value="public">Public</option>
-                    <option value="internal" selected>Internal</option>
-                    <option value="confidential">Confidential</option>
-                    <option value="restricted">Restricted</option>
-                </select>
-                <p class="field-hint" id="sensitivityHelp">Restricted documents never appear in search for people without approved access, and stay on bank-hosted AI only.</p>
+                <textarea id="keywords" name="keywords" rows="2" placeholder="Words people might search for, separated by commas"></textarea>
             </div>
         </div>
+    </details>
 
-        <div class="form-section">
-            <div class="form-section-label">File</div>
-            <label class="file-drop" for="file">
-                <span class="file-drop-label">Drop or choose a PDF or scanned image (PNG, JPEG, TIFF)</span>
-                <input id="file" type="file" name="file" accept="application/pdf,image/png,image/jpeg,image/tiff,.pdf,.png,.jpg,.jpeg,.tif,.tiff" required />
-            </label>
-        </div>
-
-        <div class="form-actions-sticky">
-            <button id="submitButton" type="submit" class="button-block">Upload document</button>
-        </div>
-    </form>
+    <div class="form-actions-sticky">
+        <button id="submitButton" type="submit" class="button-block">Upload document</button>
     </div>
-</section>
+</form>
 
+<section id="uploadProgress" class="panel upload-progress" aria-labelledby="uploadProgressTitle" hidden>
+    <h2 id="uploadProgressTitle">Uploading <span id="uploadDocName"></span></h2>
+    <ol class="ui-steps" id="uploadSteps">
+        <li data-step="upload">{{ t('upload.step_upload') }}</li>
+        <li data-step="parse">{{ t('upload.step_read') }}</li>
+        <li data-step="summarize">{{ t('upload.step_summary') }}</li>
+        <li data-step="index">{{ t('upload.step_search') }}</li>
+    </ol>
+    <p id="uploadMessage" class="muted" role="status" aria-live="polite"></p>
+    <div id="uploadDuplicate" class="banner warn" hidden></div>
+    <div id="uploadOutcome" aria-live="polite"></div>
+</section>
+</div>
+
+<script type="application/json" id="uploadCopy">{{ {'upload': copy_section('upload'), 'reason': copy_section('reason')}|tojson }}</script>
 <script>
 (function () {
-    const uploadForm = document.getElementById('uploadForm');
+    const form = document.getElementById('uploadForm');
+    if (!form) return;
+    const COPY = JSON.parse(document.getElementById('uploadCopy').textContent || '{}');
+    const UP = COPY.upload || {};
+    const REASONS = COPY.reason || {};
+    const ui = window.BCPUI || {};
+    const esc = ui.escapeHtml || function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; }); };
+    const friendly = ui.friendlyError || function (raw) { return raw || 'Something went wrong. Please try again.'; };
+
     const submitButton = document.getElementById('submitButton');
-    const uploadMessage = document.getElementById('uploadMessage');
-    const progressFill = document.getElementById('progressFill');
-    const progressBar = document.getElementById('progressBar');
-    const progressLabel = document.getElementById('progressLabel');
-    const progressHint = document.getElementById('progressHint');
-    const uploadState = document.getElementById('uploadState');
-    const steps = Array.from(document.querySelectorAll('.upload-step'));
+    const panel = document.getElementById('uploadProgress');
+    const message = document.getElementById('uploadMessage');
+    const outcome = document.getElementById('uploadOutcome');
+    const duplicateBox = document.getElementById('uploadDuplicate');
+    const steps = Array.from(document.querySelectorAll('#uploadSteps li'));
+    const fileInput = document.getElementById('file');
+    const drop = document.getElementById('fileDrop');
+    const dropLabel = document.getElementById('fileDropLabel');
+    const dropHint = document.getElementById('fileDropHint');
     const docIdInput = document.getElementById('doc_id');
     const docDateInput = document.getElementById('doc_date');
     let docIdManual = false;
     let lastAutoId = docIdInput ? docIdInput.value : '';
 
-    function yearFromDate() {
-        if (!docDateInput || !docDateInput.value) {
-            return new Date().getFullYear();
+    function sizeText(bytes) {
+        if (!bytes) return '';
+        if (bytes < 1024 * 1024) return Math.max(1, Math.round(bytes / 1024)) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    }
+
+    function showChosenFile() {
+        const f = fileInput.files && fileInput.files[0];
+        drop.classList.toggle('has-file', !!f);
+        dropLabel.textContent = f ? f.name : 'Drag the file here, or tap to choose it';
+        dropHint.textContent = f ? sizeText(f.size) + ' · tap to choose a different file' : 'PDF or scanned image (PNG, JPEG, TIFF)';
+    }
+
+    fileInput.addEventListener('change', showChosenFile);
+    ['dragenter', 'dragover'].forEach(function (name) {
+        drop.addEventListener(name, function (e) { e.preventDefault(); drop.classList.add('is-dragover'); });
+    });
+    ['dragleave', 'drop'].forEach(function (name) {
+        drop.addEventListener(name, function () { drop.classList.remove('is-dragover'); });
+    });
+    drop.addEventListener('drop', function (e) {
+        e.preventDefault();
+        if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
+            fileInput.files = e.dataTransfer.files;
+            showChosenFile();
         }
-        const y = Number(docDateInput.value.slice(0, 4));
+    });
+
+    function yearFromDate() {
+        const y = docDateInput && docDateInput.value ? Number(docDateInput.value.slice(0, 4)) : 0;
         return y >= 1990 && y <= 2100 ? y : new Date().getFullYear();
     }
 
@@ -223,237 +202,197 @@
                 lastAutoId = data.doc_id;
                 docIdInput.value = data.doc_id;
             }
-        } catch (err) {
-            // Keep current value if suggestion fails.
-        }
+        } catch (err) { /* keep the current value */ }
     }
+    if (docIdInput) docIdInput.addEventListener('input', function () { docIdManual = docIdInput.value.trim() !== lastAutoId; });
+    if (docDateInput) docDateInput.addEventListener('change', refreshSuggestedId);
 
-    if (docIdInput) {
-        docIdInput.addEventListener('input', function () {
-            docIdManual = docIdInput.value.trim() !== lastAutoId;
+    function setStep(name) {
+        let reached = false;
+        steps.forEach(function (el) {
+            el.classList.remove('is-active', 'is-done', 'is-failed');
+            if (el.dataset.step === name) { el.classList.add('is-active'); reached = true; }
+            else if (!reached) el.classList.add('is-done');
         });
     }
-    if (docDateInput) {
-        docDateInput.addEventListener('change', refreshSuggestedId);
+    function allDone() { steps.forEach(function (el) { el.classList.remove('is-active', 'is-failed'); el.classList.add('is-done'); }); }
+    function failStep() {
+        const active = steps.find(function (el) { return el.classList.contains('is-active'); });
+        if (active) { active.classList.remove('is-active'); active.classList.add('is-failed'); }
     }
 
-    function setProgress(pct) {
-        const value = Math.max(0, Math.min(100, Math.round(Number(pct) || 0)));
-        progressFill.style.width = value + '%';
-        progressFill.classList.remove('indeterminate');
-        progressLabel.textContent = value + '%';
-        progressBar.setAttribute('aria-valuenow', String(value));
+    function actions(links) {
+        return '<div class="list-card-actions">' + links.map(function (l) {
+            return '<a class="button' + (l.secondary ? ' button-secondary' : '') + '" href="' + esc(l.href) + '"' + (l.nav === false ? '' : ' data-nav') + '>' + esc(l.label) + '</a>';
+        }).join('') + '</div>';
     }
 
-    function setActiveStep(stepName) {
-        let found = false;
-        steps.forEach((el) => {
-            const name = el.getAttribute('data-step');
-            el.classList.remove('is-pending', 'is-active', 'is-done');
-            if (name === stepName) {
-                el.classList.add('is-active');
-                found = true;
-            } else if (!found) {
-                el.classList.add('is-done');
-            } else {
-                el.classList.add('is-pending');
-            }
-        });
+    function finish(html, tone) {
+        message.textContent = '';
+        outcome.innerHTML = '<div class="banner stack ' + tone + '">' + html + '</div>';
+        const heading = outcome.querySelector('strong');
+        if (heading && ui.toast) ui.toast(heading.textContent);
     }
 
-    function markComplete() {
-        steps.forEach((el) => {
-            el.classList.remove('is-pending', 'is-active');
-            el.classList.add('is-done');
-        });
-        setProgress(100);
-        progressFill.classList.add('is-complete');
-        uploadState.classList.remove('is-running');
-        uploadState.classList.add('is-complete');
+    const canView = form.dataset.canView === 'true';
+
+    function showDone(docId) {
+        allDone();
+        const open = canView
+            ? { href: '/view/' + encodeURIComponent(docId), label: 'Open the document' }
+            : { href: '/uploads/mine', label: 'Go to My uploads' };
+        finish('<strong>' + esc(UP.done_title) + '</strong><p>' + esc(UP.done_body) + '</p>' +
+            actions([open, { href: '/upload', label: 'Upload another', secondary: true }]), 'success');
     }
 
-    function failUpload(message) {
-        uploadState.classList.remove('is-running');
-        uploadMessage.textContent = message || 'Upload failed';
-        progressHint.textContent = 'Fix the issue and try again.';
+    function showCheck(docId, codes) {
+        allDone();
+        const items = (codes || []).map(function (c) { return '<li>' + esc((REASONS[c] && REASONS[c].label) || c.replace(/_/g, ' ')) + '</li>'; }).join('');
+        finish('<strong>' + esc(UP.check_title) + '</strong>' +
+            (items ? '<p>Why:</p><ul class="reason-list">' + items + '</ul>' : '') +
+            '<p>' + esc(UP.check_body) + '</p>' +
+            actions([{ href: '/uploads/mine', label: 'Go to My uploads' }, { href: '/upload', label: 'Upload another', secondary: true }]), 'warn');
+    }
+
+    function showBackground() {
+        finish('<strong>' + esc(UP.background_title) + '</strong><p>' + esc(UP.background_body) + '</p>' +
+            actions([{ href: '/uploads/mine', label: 'Go to My uploads' }, { href: '/upload', label: 'Upload another', secondary: true }]), 'info');
+    }
+
+    function showFailed(raw, fallbackKey) {
+        failStep();
+        finish('<strong>' + esc(UP.failed_title) + '</strong><p>' + esc(friendly(raw, fallbackKey)) + '</p>', 'error');
+        form.hidden = false;
         submitButton.disabled = false;
-        submitButton.textContent = 'Upload document';
+        submitButton.removeAttribute('aria-busy');
+        submitButton.textContent = 'Try again';
     }
 
-    function applyEvent(evt) {
-        if (evt.step) setActiveStep(evt.step);
-        if (typeof evt.pct === 'number') setProgress(evt.pct);
-        if (evt.title) uploadMessage.textContent = evt.title;
-        if (evt.hint) progressHint.textContent = evt.hint;
-        if (evt.error) {
-            failUpload(evt.error);
-            return false;
-        }
-        if (evt.done) {
-            markComplete();
-            submitButton.textContent = 'Complete';
-            window.location.href = evt.redirect || '/upload?status=success';
-            return false;
-        }
-        return true;
+    function showDuplicates(list) {
+        if (!list || !list.length) return;
+        duplicateBox.innerHTML = '<span><strong>' + esc(UP.duplicate) + ':</strong> ' + list.map(function (d) {
+            return canView ? '<a href="/view/' + encodeURIComponent(d.doc_id) + '" data-nav>' + esc(d.doc_id) + '</a>' : esc(d.doc_id);
+        }).join(', ') + '</span>';
+        duplicateBox.hidden = false;
     }
 
-    const INGEST_STEPS = {
-        received: ['upload', 'File received', 'Waiting for a processing worker.'],
-        queued: ['upload', 'Queued for processing', 'You can leave this page; processing continues on the server.'],
-        parsing: ['parse', 'Reading pages…', 'Extracting text (OCR for scanned pages).'],
-        summarizing: ['summarize', 'Summarizing…', 'Building bilingual keywords and an executive summary.'],
-        indexing: ['index', 'Indexing…', 'Making the document searchable.'],
-    };
+    function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
 
-    function sleep(ms) {
-        return new Promise(function (resolve) { setTimeout(resolve, ms); });
-    }
-
-    async function uploadAsync(headers) {
-        let accepted;
+    async function readStatus(docId) {
         try {
-            const response = await fetch('/api/documents/ingest', {
-                method: 'POST',
-                body: new FormData(uploadForm),
-                headers: headers,
-                credentials: 'same-origin',
-            });
-            accepted = await response.json().catch(function () { return {}; });
-            if (response.status !== 202) {
-                failUpload((accepted && accepted.detail) || ('Upload failed (' + response.status + ').'));
-                return;
-            }
-        } catch (err) {
-            failUpload((err && err.message) || 'Network error during upload.');
-            return;
-        }
-        setActiveStep('upload');
-        setProgress(20);
-        uploadMessage.textContent = 'Uploaded — processing on the server';
-        const statusUrl = accepted.status_url;
+            const res = await fetch('/api/documents/' + encodeURIComponent(docId) + '/status', { credentials: 'same-origin', headers: { Accept: 'application/json' } });
+            return res.ok ? await res.json() : null;
+        } catch (err) { return null; }
+    }
+
+    const STATUS_STEP = { received: 'upload', queued: 'upload', parsing: 'parse', summarizing: 'summarize', indexing: 'index' };
+
+    async function followStatus(docId) {
         let delay = 1200;
-        for (let i = 0; i < 600; i += 1) {
+        for (let i = 0; i < 150; i += 1) {
             await sleep(delay);
             delay = Math.min(delay + 300, 4000);
-            let state;
-            try {
-                const res = await fetch(statusUrl, { credentials: 'same-origin', headers: { Accept: 'application/json' } });
-                if (!res.ok) continue;
-                state = await res.json();
-            } catch (err) {
-                continue;
-            }
-            if (state.status === 'indexed') {
-                markComplete();
-                submitButton.textContent = 'Complete';
-                window.location.href = '/upload?status=success';
-                return;
-            }
-            if (state.status === 'failed') {
-                failUpload(state.error || 'Processing failed. An administrator can retry it from Job queues.');
-                return;
-            }
-            if (state.status === 'needs_review') {
-                markComplete();
-                submitButton.textContent = 'Sent for verification';
-                uploadMessage.textContent = 'OCR confidence is low — sent to the verification queue';
-                progressHint.textContent = 'A reviewer must confirm the text and metadata before the document becomes searchable.';
-                return;
-            }
-            if (state.status === 'rejected') {
-                failUpload('The document was rejected at verification.');
-                return;
-            }
-            const step = INGEST_STEPS[state.status];
-            if (step) {
-                setActiveStep(step[0]);
-                uploadMessage.textContent = step[1];
-                progressHint.textContent = step[2];
-            }
-            if (typeof state.progress === 'number') setProgress(state.progress);
+            const state = await readStatus(docId);
+            if (!state) continue;
+            if (state.status === 'indexed') return showDone(docId);
+            if (state.status === 'needs_review') return showCheck(docId, state.review_reasons);
+            if (state.status === 'failed') return showFailed(state.error);
+            if (state.status === 'rejected') { failStep(); return finish('<strong>' + esc(UP.rejected_title) + '</strong>', 'error'); }
+            if (STATUS_STEP[state.status]) setStep(STATUS_STEP[state.status]);
         }
-        failUpload('Still processing. Check the document later from Search; it will appear when indexed.');
+        showBackground();
     }
 
-    uploadForm.addEventListener('submit', async function (event) {
+    async function uploadAsync(docId, headers) {
+        let accepted;
+        try {
+            const response = await fetch('/api/documents/ingest', { method: 'POST', body: new FormData(form), headers: headers, credentials: 'same-origin' });
+            accepted = await response.json().catch(function () { return {}; });
+            if (response.status !== 202) return showFailed(accepted && accepted.detail, response.status === 413 ? 'too_large' : 'generic');
+        } catch (err) {
+            return showFailed('', 'network');
+        }
+        showDuplicates(accepted.duplicate_of);
+        setStep('parse');
+        message.textContent = UP.background_body || '';
+        await followStatus(docId);
+    }
+
+    async function uploadStream(docId, headers) {
+        let response;
+        try {
+            response = await fetch('/api/upload/stream', { method: 'POST', body: new FormData(form), headers: headers, credentials: 'same-origin' });
+        } catch (err) {
+            return showFailed('', 'network');
+        }
+        if (!response.ok || !response.body || !response.body.getReader) {
+            return showFailed('', response.status === 413 ? 'too_large' : 'generic');
+        }
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        async function handle(evt) {
+            if (evt.error) { showFailed(evt.error); return false; }
+            if (evt.step) setStep(evt.step);
+            if (evt.done) {
+                if (String(evt.redirect || '').indexOf('status=review') !== -1) {
+                    const state = await readStatus(docId);
+                    showCheck(docId, state && state.review_reasons);
+                } else {
+                    showDone(docId);
+                }
+                return false;
+            }
+            return true;
+        }
+        while (true) {
+            const chunk = await reader.read().catch(function () { return { done: true, failed: true }; });
+            if (chunk.failed) return showFailed('', 'network');
+            if (chunk.done) break;
+            buffer += decoder.decode(chunk.value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+            for (const line of lines) {
+                if (!line.trim()) continue;
+                let evt;
+                try { evt = JSON.parse(line); } catch (err) { continue; }
+                if (!(await handle(evt))) return;
+            }
+        }
+        if (buffer.trim()) {
+            try { if (!(await handle(JSON.parse(buffer.trim())))) return; } catch (err) { /* partial line */ }
+        }
+        // The connection ended without a result; the server may still be working.
+        await followStatus(docId);
+    }
+
+    form.addEventListener('submit', async function (event) {
         event.preventDefault();
         if (submitButton.disabled) return;
+        if (!form.reportValidity()) return;
+        const chosen = fileInput.files[0];
+        const docId = docIdInput.value.trim();
 
         submitButton.disabled = true;
-        submitButton.textContent = 'Processing…';
-        uploadState.classList.add('is-running');
-        uploadState.classList.remove('is-complete');
-        progressFill.classList.remove('is-complete');
-        setProgress(2);
-        setActiveStep('upload');
-        uploadMessage.textContent = 'Starting upload…';
-        progressHint.textContent = 'Connecting to the server.';
+        submitButton.setAttribute('aria-busy', 'true');
+        submitButton.textContent = 'Uploading…';
+        outcome.innerHTML = '';
+        duplicateBox.hidden = true;
+        document.getElementById('uploadDocName').textContent = chosen ? chosen.name : docId;
+        panel.hidden = false;
+        form.hidden = true;
+        setStep('upload');
+        message.textContent = 'Please keep this page open until the file has been sent.';
+        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
-        const headers = (window.BCPCsrf && window.BCPCsrf.headers)
-            ? window.BCPCsrf.headers()
-            : {};
-
-        const chosen = document.getElementById('file').files[0];
+        const headers = (window.BCPCsrf && window.BCPCsrf.headers) ? window.BCPCsrf.headers() : {};
         const isPdf = !chosen || chosen.type === 'application/pdf' || /\.pdf$/i.test(chosen.name);
-        if (uploadForm.dataset.ingestMode === 'async' || !isPdf) {
+        if (form.dataset.ingestMode === 'async' || !isPdf) {
             headers['Accept'] = 'application/json';
-            await uploadAsync(headers);
-            return;
-        }
-        headers['Accept'] = 'application/x-ndjson';
-
-        try {
-            const response = await fetch('/api/upload/stream', {
-                method: 'POST',
-                body: new FormData(uploadForm),
-                headers: headers,
-                credentials: 'same-origin',
-            });
-
-            if (!response.ok && !response.body) {
-                failUpload('Upload failed (' + response.status + ').');
-                return;
-            }
-
-            const reader = response.body && response.body.getReader
-                ? response.body.getReader()
-                : null;
-
-            if (!reader) {
-                failUpload('Live progress is unavailable in this browser. Use a modern browser, or disable JavaScript to use classic upload.');
-                return;
-            }
-
-            const decoder = new TextDecoder();
-            let buffer = '';
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                buffer += decoder.decode(value, { stream: true });
-                const lines = buffer.split('\n');
-                buffer = lines.pop() || '';
-                for (let i = 0; i < lines.length; i += 1) {
-                    const line = lines[i].trim();
-                    if (!line) continue;
-                    let evt;
-                    try {
-                        evt = JSON.parse(line);
-                    } catch (err) {
-                        continue;
-                    }
-                    if (!applyEvent(evt)) return;
-                }
-            }
-            if (buffer.trim()) {
-                try {
-                    const evt = JSON.parse(buffer.trim());
-                    if (!applyEvent(evt)) return;
-                } catch (err) { /* ignore trailing partial */ }
-            }
-            failUpload('Upload ended without a completion signal. Check the server logs.');
-        } catch (err) {
-            failUpload((err && err.message) || 'Network error during upload.');
+            await uploadAsync(docId, headers);
+        } else {
+            headers['Accept'] = 'application/x-ndjson';
+            await uploadStream(docId, headers);
         }
     });
 })();

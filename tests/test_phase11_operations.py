@@ -376,8 +376,13 @@ async def test_retention_page_renders_and_enforces_roles(maker):
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://t") as client:
         page = await client.get("/admin/retention")
         assert page.status_code == 200
-        assert "RM 4.2" in page.text and "Approve and dispose" in page.text
+        assert "RM 4.2" in page.text and "Approve and delete" in page.text
+        assert 'data-confirm-type="L1"' in page.text
+        found = await client.get("/api/admin/retention/lookup", params={"doc_id": "L1"})
+        assert found.status_code == 200 and found.json()["doc_id"] == "L1"
+        assert (await client.get("/api/admin/retention/lookup", params={"doc_id": "nope"})).status_code == 404
         user.role = Role.uploader
+        assert (await client.get("/api/admin/retention/lookup", params={"doc_id": "L1"})).status_code == 403
         assert (await client.get("/api/admin/retention")).status_code == 403
         user.role = Role.board_secretary
         denied = await client.post("/admin/retention/rules", data={"doc_type": "Memo", "retain_years": "3"})

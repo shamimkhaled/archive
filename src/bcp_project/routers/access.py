@@ -23,9 +23,17 @@ from ..deps import (
     require_role,
     templates,
 )
-from ..models import AccessMode, AccessRequestStatus, DocumentAccessRequest, Role, User
+from ..models import AccessMode, AccessRequestStatus, DocumentAccessRequest, DocumentRecord, Role, User
 
 router = APIRouter()
+
+
+async def _titles(db: AsyncSession, rows) -> dict:
+    ids = {row.doc_id for row in rows}
+    if not ids:
+        return {}
+    result = await db.execute(select(DocumentRecord.doc_id, DocumentRecord.title).where(DocumentRecord.doc_id.in_(ids)))
+    return {doc_id: title for doc_id, title in result.all() if title}
 
 @router.get("/access-requests", response_class=HTMLResponse)
 async def my_access_requests_page(
@@ -55,6 +63,9 @@ async def my_access_requests_page(
             "modes": [AccessMode.view_only],
             "can_create_requests": not is_archive_privileged(current_user),
             "is_reviewer": current_user.role in (Role.admin, Role.board_secretary),
+            "titles": await _titles(db, rows),
+            "now": datetime.utcnow(),
+            "page_title": "My access requests",
         },
     )
 
@@ -183,6 +194,9 @@ async def review_access_requests_page(
             "requests": rows,
             "status_filter": status_filter or AccessRequestStatus.pending.value,
             "statuses": list(AccessRequestStatus),
+            "titles": await _titles(db, rows),
+            "now": datetime.utcnow(),
+            "page_title": "Access requests",
         },
     )
 

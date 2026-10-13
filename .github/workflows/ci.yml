@@ -44,50 +44,6 @@ jobs:
           path: eval-report.json
           if-no-files-found: ignore
 
-  frontend:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-      - run: npm ci --no-audit --no-fund
-      - name: Generated API client matches the FastAPI schema
-        env:
-          APP_ENV: test
-          JWT_SECRET_KEY: ci-only-secret-key-not-for-production-use
-          PYTHONPATH: ../src
-        run: |
-          pip install -r ../requirements.txt
-          python ../scripts/export_openapi.py
-          npm run gen:api
-          git diff --exit-code -- openapi.json src/api/schema.d.ts
-      - name: Typecheck and build
-        run: npm run build
-      - name: Unit tests
-        run: npm test
-      - name: Dependency audit (production dependencies)
-        run: npm audit --omit=dev --audit-level=high
-      - name: Service worker caches only the static shell
-        run: |
-          # One route (the /app navigation fallback, /api denied); no runtime caching of API, PDFs, or page images.
-          test "$(grep -oF 'registerRoute(' dist/sw.js | wc -l)" -eq 1
-          grep -q 'NavigationRoute' dist/sw.js
-          grep -qF 'denylist:[/^\/api\//]' dist/sw.js
-      - uses: actions/upload-artifact@v4
-        with:
-          name: frontend-dist
-          path: frontend/dist
-
   migrations:
     runs-on: ubuntu-latest
     services:

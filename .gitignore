@@ -32,35 +32,21 @@ env/
 coverage.xml
 htmlcov/
 junit*.xml
+.scratch/
+.dmypy.json
+*.prof
+*.pstats
+.ipynb_checkpoints/
 
-# ---------------------------------------------------------------------------
-# Frontend (React PWA — built in the Docker frontend stage)
-# openapi.json, src/api/schema.d.ts and package-lock.json ARE tracked (CI diffs them)
-# ---------------------------------------------------------------------------
+# Node tooling (only the Railway CLI uses npm; there is no JavaScript build)
 node_modules/
-frontend/dist/
-frontend/dist-ssr/
-frontend/dev-dist/
-frontend/public/pdfjs/
-frontend/coverage/
-frontend/.vite/
-frontend/.vitest/
-frontend/.cache/
-frontend/.ruff_cache/
-frontend/uploaded_pdfs/
-frontend/stats.html
-frontend/vite.config.*.timestamp-*
-frontend/*.local
-*.tsbuildinfo
 npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-.pnpm-store/
-.yarn/
 .npm/
-.eslintcache
-.stylelintcache
+
+# Internal documents and evidence pack (kept locally, not published)
+docs/
+
+
 
 # ---------------------------------------------------------------------------
 # Secrets and environment
@@ -89,6 +75,8 @@ BCP01.pdf
 audit_exports/
 inbox_drop/
 .qdrant/
+
+
 
 # DR backups and drill scratch space (encrypted backups belong in the bank's backup store)
 var/
@@ -122,7 +110,11 @@ FLY_DEPLOY.md.bak
 .cursor/
 .claude/
 claude.md
+CLAUDE.md
 cursor.md
+.cursorignore
+.mcp.json
+.ignore
 .idea/
 .vscode/
 *.swp
@@ -134,3 +126,33 @@ desktop.ini
 
 # graft's local graph cache — regenerable, not committed (run `graft build`).
 graft/
+.ignore
+
+
+claude.md
+CLAUDE.md
+cursor.md
+.cursorignore
+.mcp.json
+.ignore
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+build/
+
+.cursor/
+.claude/
+claude.md
+CLAUDE.md
+cursor.md
+.cursorignore
+.mcp.json
+.ignore
+.idea/
+.vscode/
+*.swp
+*.swo
+*~

@@ -6,7 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..deps import get_current_user, get_db, templates
@@ -18,11 +18,20 @@ router = APIRouter()
 async def notifications_page(
     request: Request,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> Any:
+    rows = (
+        await db.execute(
+            select(NotificationEvent)
+            .where(NotificationEvent.username == current_user.username)
+            .order_by(NotificationEvent.created_at.desc())
+            .limit(50)
+        )
+    ).scalars().all()
     return templates.TemplateResponse(
         request,
         "notifications.html",
-        {"user": current_user},
+        {"user": current_user, "items": rows, "page_title": "Notifications"},
     )
 
 
@@ -57,17 +66,41 @@ async def list_notifications(
     }
 
 
-@router.post("/api/notifications/read")
-async def mark_notifications_read(
+@router.get("/api/notifications/unread-count")
+async def unread_notification_count(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
-    result = await db.execute(
-        select(NotificationEvent).where(
+    count = await db.scalar(
+        select(func.count(NotificationEvent.id)).where(
             NotificationEvent.username == current_user.username,
             NotificationEvent.read_at.is_(None),
         )
     )
+    return {"unread": int(count or 0)}
+
+
+@router.post("/api/notifications/read")
+async def mark_notifications_read(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """Mark all unread notifications read, or only ``{"ids": [...]}`` when a JSON body names them."""
+    ids: list = []
+    if "application/json" in (request.headers.get("content-type") or ""):
+        try:
+            payload = await request.json()
+            ids = [int(i) for i in (payload or {}).get("ids") or []]
+        except (ValueError, TypeError, AttributeError):
+            ids = []
+    query = select(NotificationEvent).where(
+        NotificationEvent.username == current_user.username,
+        NotificationEvent.read_at.is_(None),
+    )
+    if ids:
+        query = query.where(NotificationEvent.id.in_(ids))
+    result = await db.execute(query)
     now = datetime.utcnow()
     for row in result.scalars().all():
         row.read_at = now

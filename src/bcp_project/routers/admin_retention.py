@@ -6,10 +6,11 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..deps import _client_ip, get_current_user, get_db, require_role, templates
-from ..models import Role, User
+from ..models import DocumentRecord, Role, User
 from ..services import retention
 
 router = APIRouter()
@@ -31,6 +32,28 @@ async def api_admin_retention(
     return await retention.retention_overview(db)
 
 
+@router.get("/api/admin/retention/lookup")
+async def api_admin_retention_lookup(
+    doc_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Dict[str, Any]:
+    """Name and hold state of one document, so a hold is placed on the right record."""
+    require_role(current_user, RECORDS_ROLES)
+    document = (
+        await db.execute(select(DocumentRecord).where(DocumentRecord.doc_id == doc_id.strip()))
+    ).scalar_one_or_none()
+    if document is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return {
+        "doc_id": document.doc_id,
+        "title": document.title,
+        "doc_type": document.doc_type,
+        "doc_date": document.doc_date.isoformat() if document.doc_date else None,
+        "legal_hold": bool(document.legal_hold),
+    }
+
+
 @router.get("/admin/retention", response_class=HTMLResponse)
 async def admin_retention_page(
     request: Request,
@@ -43,7 +66,7 @@ async def admin_retention_page(
         "admin_retention.html",
         {
             "user": current_user,
-            "page_title": "Records retention",
+            "page_title": "Keep and delete rules",
             "overview": await retention.retention_overview(db),
             "status": request.query_params.get("status"),
             "error": request.query_params.get("error"),
