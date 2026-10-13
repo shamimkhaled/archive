@@ -13,7 +13,7 @@
 #   docker build --build-arg SERVICE_ROLE=worker --build-arg WITH_DIARIZATION=1 -t sonali-archive-worker-dz .
 
 # React PWA served by FastAPI under /app (see src/bcp_project/spa.py and docs/FRONTEND.md).
-FROM node:22-bookworm-slim AS frontend
+FROM node:26-bookworm-slim AS frontend
 WORKDIR /frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci --no-audit --no-fund
