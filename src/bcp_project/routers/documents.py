@@ -9,7 +9,8 @@ from typing import Any, Dict, List, Optional, Set
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile, status
 from fastapi.responses import HTMLResponse, RedirectResponse, Response, StreamingResponse
-from sqlalchemy import and_, cast, func, or_, select, String
+from sqlalchemy import and_, cast, func, inspect, or_, select, String
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..access_control import (
@@ -52,7 +53,7 @@ from ..graph_builder import (
     related_documents_payload,
     summary_entities,
 )
-from ..models import DocumentRecord, Role, User, parse_sensitivity
+from ..models import DocumentDisposal, DocumentRecord, Role, User, parse_sensitivity
 from .ingest import dispatch_after_commit, ingest_mode, read_validated
 from ..pdf_watermark import stamp_pdf_bytes
 from ..qdrant_store import make_qdrant_indexer
@@ -148,6 +149,7 @@ async def my_uploads_page(
             "total": len(rows),
             "show": filter_status if filter_status in groups else "",
             "can_view": current_user.role == Role.admin,
+            "can_retry": current_user.role == Role.admin,
         },
     )
 
@@ -192,13 +194,14 @@ async def api_next_document_id(
 
 
 async def suggest_next_doc_id(db: AsyncSession, year: int) -> str:
-    """Next free SB-{year}-{NNN} ID based on existing archive documents."""
+    """Next free SB-{year}-{NNN} ID; IDs of disposed records stay reserved, so they count too."""
     prefix = BRAND.doc_id_prefix_for_year(year)
-    result = await db.execute(
-        select(DocumentRecord.doc_id).where(DocumentRecord.doc_id.like(f"{prefix}%"))
+    live = await db.execute(select(DocumentRecord.doc_id).where(DocumentRecord.doc_id.like(f"{prefix}%")))
+    disposed = await db.execute(
+        select(DocumentDisposal.doc_id).where(DocumentDisposal.doc_id.like(f"{prefix}%"))
     )
     max_n = 0
-    for (existing_id,) in result.all():
+    for (existing_id,) in [*live.all(), *disposed.all()]:
         suffix = (existing_id or "")[len(prefix) :]
         if suffix.isdigit():
             max_n = max(max_n, int(suffix))
@@ -465,7 +468,7 @@ async def _find_entity_related_doc_ids(
     skip.add(center.doc_id)
     matched: List[str] = []
 
-    contains_filters = [DocumentRecord.keywords.contains([term]) for term in terms[:6]]
+    contains_filters = [cast(DocumentRecord.keywords, JSONB).contains([term]) for term in terms[:6]]
     if contains_filters:
         try:
             statement = (
@@ -546,6 +549,9 @@ async def _semantic_neighbors_safe(
 
 async def _filter_graph_for_user(db: AsyncSession, user: User, payload: Dict[str, Any]) -> Dict[str, Any]:
     """Drop nodes (and their edges) the user may not view; graph labels come from summaries."""
+    # A rollback while assembling the graph expires the user; a lazy reload here would fail under asyncio.
+    if inspect(user).expired_attributes:
+        await db.refresh(user)
     if is_archive_view_privileged(user):
         return payload
     node_ids = [node.get("id") for node in payload.get("nodes") or [] if node.get("id")]
@@ -1059,23 +1065,23 @@ async def upload_document_stream(
 
     async def generate():
         if not doc_type or not doc_id:
-            yield _event(0, "upload", "Upload failed", error="Document ID and type are required")
+            yield _event(0, "upload", "Upload failed", error="Document ID and type are required", plain=True)
             return
         yield _event(5, "upload", "Starting upload…", "Checking the file and saving it.")
         try:
             parsed_date = datetime.fromisoformat(doc_date).date()
         except ValueError:
-            yield _event(0, "upload", "Upload failed", error="Invalid document date")
+            yield _event(0, "upload", "Upload failed", error="Invalid document date", plain=True)
             return
         conflict = await doc_id_conflict(db, doc_id)
         if conflict:
-            yield _event(0, "upload", "Upload failed", error=conflict)
+            yield _event(0, "upload", "Upload failed", error=conflict, plain=True)
             return
         yield _event(12, "upload", "Receiving file…", "Transferring file to the server.")
         try:
             upload = validate_upload(await file.read())
         except IntakeRejected as exc:
-            yield _event(0, "upload", "Upload failed", error=str(exc))
+            yield _event(0, "upload", "Upload failed", error=str(exc), plain=True)
             return
         try:
             result = await intake_new_document(

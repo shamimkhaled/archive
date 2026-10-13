@@ -2,12 +2,12 @@
   "use strict";
 
   var BRANCH_META = {
-    semantic: { label: "Similar subject", short: "Similar subject", color: "#dc2626" },
-    project: { label: "Same project", short: "Same project", color: "#16a34a" },
-    person: { label: "Same people", short: "Same people", color: "#2563eb" },
-    organization: { label: "Same organisation", short: "Same organisation", color: "#9333ea" },
-    keyword: { label: "Same words", short: "Same words", color: "#d97706" },
-    type: { label: "Same kind of document", short: "Same kind", color: "#64748b" },
+    semantic: { label: "Similar subject", short: "Similar subject", color: "var(--edge-semantic)" },
+    project: { label: "Same project", short: "Same project", color: "var(--edge-project)" },
+    person: { label: "Same people", short: "Same people", color: "var(--edge-person)" },
+    organization: { label: "Same organisation", short: "Same organisation", color: "var(--edge-organization)" },
+    keyword: { label: "Same words", short: "Same words", color: "var(--edge-keyword)" },
+    type: { label: "Same kind of document", short: "Same kind", color: "var(--edge-type)" },
   };
 
   var BRANCH_ORDER = ["semantic", "project", "person", "organization", "keyword", "type"];
@@ -314,7 +314,7 @@
           from: model.center.id,
           to: hubId,
           type: branch.type,
-          stroke: "#cbd5e1",
+          stroke: "var(--edge-muted)",
           dashed: true,
         });
       }
@@ -433,7 +433,7 @@
         "class",
         "neural-tree-link neural-link-" + link.type + (link.dashed ? " is-dashed" : " is-solid")
       );
-      path.setAttribute("stroke", link.stroke || "#cbd5e1");
+      path.style.stroke = link.stroke || "var(--edge-muted)";
       if (!skipAnim) path.style.animationDelay = (index * 35) + "ms";
       self.linkLayer.appendChild(path);
     });

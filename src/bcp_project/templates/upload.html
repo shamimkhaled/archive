@@ -259,9 +259,12 @@
             actions([{ href: '/uploads/mine', label: 'Go to My uploads' }, { href: '/upload', label: 'Upload another', secondary: true }]), 'info');
     }
 
-    function showFailed(raw, fallbackKey) {
+    // plain: the server wrote the message for people (a validation check), so show it if no friendlier copy exists.
+    function showFailed(raw, fallbackKey, plain) {
         failStep();
-        finish('<strong>' + esc(UP.failed_title) + '</strong><p>' + esc(friendly(raw, fallbackKey)) + '</p>', 'error');
+        let text = friendly(raw, fallbackKey);
+        if (plain && raw && text === friendly('', fallbackKey)) text = raw;
+        finish('<strong>' + esc(UP.failed_title) + '</strong><p>' + esc(text) + '</p>', 'error');
         form.hidden = false;
         submitButton.disabled = false;
         submitButton.removeAttribute('aria-busy');
@@ -332,7 +335,7 @@
         const decoder = new TextDecoder();
         let buffer = '';
         async function handle(evt) {
-            if (evt.error) { showFailed(evt.error); return false; }
+            if (evt.error) { showFailed(evt.error, null, evt.plain); return false; }
             if (evt.step) setStep(evt.step);
             if (evt.done) {
                 if (String(evt.redirect || '').indexOf('status=review') !== -1) {

@@ -331,6 +331,7 @@
 
   var ERROR_PATTERNS = [
     [/already exists/i, "duplicate_id"],
+    [/disposed record/i, "doc_id_reserved"],
     [/(413|too large|exceeds)/i, "too_large"],
     [/(could not extract|no text|pdf.*(invalid|corrupt|damaged)|EOF marker|PdfReadError|not a pdf)/i, "unreadable_pdf"],
     [/(unsupported|content type|file type)/i, "unsupported_file"],
@@ -645,6 +646,8 @@
     // Snapshot before replaceWith — moving app-shell empties scripts out of `doc`.
     var list = [];
     doc.querySelectorAll("script").forEach(function (oldScript) {
+      var type = (oldScript.getAttribute("type") || "").trim().toLowerCase();
+      if (type && type !== "text/javascript" && type !== "module") return;
       var src = oldScript.getAttribute("src");
       if (src && src.indexOf("/static/js/app.js") !== -1) return;
       list.push({
@@ -992,22 +995,44 @@
       .replace(/'/g, "&#39;");
   }
 
-  function renderAccessActions(result) {
-    var status = result.access_status || "none";
+  function viewerHref(docId, page, q) {
+    return (
+      "/view/" +
+      encodeURIComponent(docId) +
+      "?from=" +
+      encodeURIComponent(location.pathname + location.search) +
+      (page > 0 ? "&page=" + page : "") +
+      (q ? "&hl=" + encodeURIComponent(q.slice(0, 160)) : "")
+    );
+  }
+
+  function renderAccessActions(result, q) {
     if (result.can_view) {
-      var page = parseInt(result.page, 10);
-      var links =
-        '<a class="doc-link" href="/view/' +
-        encodeURIComponent(result.doc_id) +
-        "?from=" +
-        encodeURIComponent(location.pathname + location.search) +
-        (page > 0 ? "&page=" + page : "") +
+      return (
+        '<a class="doc-link" href="' +
+        viewerHref(result.doc_id, parseInt(result.page, 10), q) +
         '" data-nav>' +
         escapeHtml(result.title || result.doc_id) +
-        "</a>";
-      return links;
+        "</a>"
+      );
     }
     return "<span>" + escapeHtml(result.title || result.doc_id) + "</span>";
+  }
+
+  function renderPageLinks(result, q) {
+    var pages = Array.isArray(result.pages) ? result.pages : [];
+    if (!result.can_view || !pages.length) return "";
+    var links = pages.map(function (p) {
+      return '<a href="' + viewerHref(result.doc_id, p, q) + '" data-nav aria-label="Open page ' + p + '">' + p + "</a>";
+    });
+    var more = (result.pages_matched || pages.length) - pages.length;
+    return (
+      '<p class="result-pages">' +
+      (pages.length === 1 ? "Found on page " : "Found on pages ") +
+      links.join(", ") +
+      (more > 0 ? " and " + more + " more" : "") +
+      "</p>"
+    );
   }
 
   var MATCH_LABELS = {
@@ -1044,7 +1069,7 @@
     );
   }
 
-  function renderResults(results) {
+  function renderResults(results, q) {
     return (
       '<ul class="card-list search-result-list" role="list">' +
       results
@@ -1058,9 +1083,15 @@
             .map(function (r) { return MATCH_LABELS[r]; })
             .filter(Boolean);
           var found = "";
+          var pageLinks = renderPageLinks(result, q);
           if (result.can_view !== false && reasons.length) {
-            found = '<p class="list-card-meta">Found in ' + escapeHtml(reasons.join(", ")) + (page > 0 ? " · page " + page : "") + "</p>";
+            found =
+              '<p class="list-card-meta">Found in ' +
+              escapeHtml(reasons.join(", ")) +
+              (page > 0 && !pageLinks ? " · page " + page : "") +
+              "</p>";
           }
+          found += pageLinks;
           var snippet = "";
           if (result.can_view === false) {
             snippet = '<p class="muted">You can see this document exists. Ask for access to read it.</p>';
@@ -1071,7 +1102,7 @@
           return (
             '<li class="list-card search-result">' +
             '<div class="list-card-top"><h3>' +
-            renderAccessActions(result) +
+            renderAccessActions(result, q) +
             '</h3><span class="status-chip status-chip-neutral">' +
             escapeHtml(result.doc_type || "Document") +
             "</span></div>" +
@@ -1263,7 +1294,7 @@
           head += '<p class="banner info">Showing simple word matches for now. Results may be less complete than usual.</p>';
         }
         if (results.dataset.note) head += '<p class="muted small">' + escapeHtml(results.dataset.note) + "</p>";
-        results.innerHTML = head + renderResults(list);
+        results.innerHTML = head + renderResults(list, q);
         announce(list.length + (list.length === 1 ? " document found" : " documents found"));
       })
       .catch(function (err) {
@@ -1344,6 +1375,27 @@
           toast("We couldn't send the request. Please try again.");
         });
     });
+  }
+
+  function onIngestRetryClick(e) {
+    var btn = e.target.closest && e.target.closest("[data-ingest-retry]");
+    if (!btn || btn.disabled) return;
+    e.preventDefault();
+    btn.disabled = true;
+    fetch("/api/documents/" + encodeURIComponent(btn.getAttribute("data-ingest-retry")) + "/ingest/retry", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: window.BCPCsrf ? window.BCPCsrf.headers() : {},
+    })
+      .then(function (response) {
+        if (!response.ok) throw new Error("retry");
+        toast("Trying again. This page will update in a moment.");
+        setTimeout(function () { visit(location.pathname + location.search); }, 2500);
+      })
+      .catch(function () {
+        btn.disabled = false;
+        toast("We couldn't start it again. Please try once more.");
+      });
   }
 
   function onSearchUiClick(e) {
@@ -1491,6 +1543,7 @@
   document.addEventListener("change", onAppearanceChange, true);
   document.addEventListener("click", onSearchLangClick, true);
   document.addEventListener("click", onAdminUsersClick, true);
+  document.addEventListener("click", onIngestRetryClick, true);
   document.addEventListener("keydown", onSearchKeydown, true);
   document.addEventListener("keydown", onSheetKeydown);
   document.addEventListener("click", onClick);

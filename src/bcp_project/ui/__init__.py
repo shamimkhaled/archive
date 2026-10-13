@@ -148,6 +148,7 @@ def file_size(num: Optional[int]) -> str:
 
 _ERROR_PATTERNS = (
     (re.compile(r"already exists", re.I), "error.duplicate_id"),
+    (re.compile(r"disposed record", re.I), "error.doc_id_reserved"),
     (re.compile(r"(413|too large|exceeds)", re.I), "error.too_large"),
     (re.compile(r"(could not extract|no text|pdf.*(invalid|corrupt|damaged)|EOF marker|PdfReadError|not a pdf)", re.I), "error.unreadable_pdf"),
     (re.compile(r"(unsupported|content type|file type)", re.I), "error.unsupported_file"),

@@ -46,6 +46,7 @@ __all__ = [
 
 logger = logging.getLogger("bcp_project.main_api")
 AUDIT_SEAL_INTERVAL_SECONDS = int(os.getenv("AUDIT_SEAL_INTERVAL_SECONDS") or 30)
+VECTOR_BACKFILL_MINUTES = int(os.getenv("VECTOR_BACKFILL_MINUTES") or 10)
 
 _docs_enabled = not is_production()
 app = FastAPI(
@@ -134,6 +135,19 @@ async def _run_audit_maintenance() -> None:
             logger.exception("Audit maintenance failed; it will retry on the next tick")
 
 
+async def _run_vector_backfill() -> None:
+    """Build vectors for documents archived while the embedding provider was unavailable."""
+    from .services.ingest import backfill_pending_vectors
+
+    async with redis_lock("vector_backfill", ttl_seconds=max(300, VECTOR_BACKFILL_MINUTES * 60)) as acquired:
+        if not acquired:
+            return
+        try:
+            await backfill_pending_vectors()
+        except Exception:
+            logger.exception("Vector backfill failed; it will retry on the next tick")
+
+
 async def _run_retention_refresh() -> None:
     """Daily: give new uploads their retention date from the rules; one replica at a time."""
     from .services.retention import refresh_retention_dates
@@ -181,6 +195,10 @@ async def startup_event() -> None:
     if AUDIT_SEAL_INTERVAL_SECONDS > 0:
         scheduler.add_job(
             _run_audit_maintenance, "interval", seconds=AUDIT_SEAL_INTERVAL_SECONDS, max_instances=1, coalesce=True
+        )
+    if VECTOR_BACKFILL_MINUTES > 0:
+        scheduler.add_job(
+            _run_vector_backfill, "interval", minutes=VECTOR_BACKFILL_MINUTES, max_instances=1, coalesce=True
         )
     scheduler.start()
     app.state.scheduler = scheduler

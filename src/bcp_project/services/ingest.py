@@ -75,6 +75,7 @@ VERSION_REJECTED = "rejected"
 
 JOB_DOCUMENT_INGEST = "document_ingest"
 MAX_SUMMARY_CHARS = 60000
+VECTORS_PENDING = "pending"
 
 
 def build_summary_payload(doc_id: str, doc_type: str, doc_date: str, summary: Any) -> Dict[str, Any]:
@@ -362,12 +363,88 @@ async def run_document_ingest(doc_id: str, *, version: Optional[int] = None, ses
     return INGEST_INDEXED
 
 
-async def index_version(db: AsyncSession, document: DocumentRecord, ver: DocumentVersion, pages: List[DocumentPage]) -> None:
-    """Summarize and index ``ver``, then make it the searchable version of the document."""
+async def index_vectors(
+    document: DocumentRecord, version: int, pages: List[DocumentPage], payload: Dict[str, Any]
+) -> str:
+    """Embed the summary and page chunks of ``version`` into Qdrant; returns the provenance value."""
     from ..jobs.handlers import run_chunk_index
     from ..qdrant_store import make_qdrant_indexer
     from ..search_acl import search_payload
 
+    doc_id = document.doc_id
+    sensitivity = document.sensitivity
+    acl = {**search_payload(document), "version": version}
+    qdrant = make_qdrant_indexer()
+    await asyncio.to_thread(qdrant.create_collections)
+    await asyncio.to_thread(qdrant.delete_document_chunks, doc_id)
+    fallback_text = "\n".join(
+        [str(v) for v in (document.title, document.doc_type, document.reference_number, document.doc_date) if v]
+        + [(p.text or "") for p in pages[:2]]
+    )[:4000]
+    if not await asyncio.to_thread(index_summary_vector, qdrant, doc_id, {**payload, **acl}, sensitivity, fallback_text):
+        return "skipped_egress_policy"
+    page_payloads = [
+        {
+            "text": p.text,
+            "metadata": {
+                **acl,
+                "page_number": p.page_number,
+                "text_source": p.source,
+                **({"ocr_confidence": p.ocr_confidence} if p.ocr_confidence is not None else {}),
+            },
+        }
+        for p in pages
+        if (p.text or "").strip()
+    ]
+    await asyncio.to_thread(run_chunk_index, doc_id, page_payloads, sensitivity=sensitivity)
+    return "indexed"
+
+
+async def backfill_pending_vectors(*, limit: int = 10, session_factory=None) -> int:
+    """Build vectors for documents indexed while the embedding provider was down.
+
+    Stops at the first failure: the provider is most likely still unavailable.
+    """
+    from sqlalchemy import String, cast
+
+    from ..cache import bump_search_cache_version
+    from ..db import get_session
+
+    factory = session_factory or get_session
+    done = 0
+    async with factory() as db:
+        documents = (
+            await db.execute(
+                select(DocumentRecord)
+                .where(
+                    DocumentRecord.ingest_status == INGEST_INDEXED,
+                    cast(DocumentRecord.summary_json, String).like(f'%"vectors": "{VECTORS_PENDING}"%'),
+                )
+                .order_by(DocumentRecord.created_at)
+                .limit(limit)
+            )
+        ).scalars().all()
+        for document in documents:
+            summary = dict(document.summary_json or {})
+            provenance = dict(summary.pop("_ai", None) or {})
+            pages = await load_pages(db, document.doc_id, document.current_version)
+            try:
+                provenance["vectors"] = await index_vectors(document, document.current_version, pages, summary)
+            except Exception as exc:
+                logger.info("Vector backfill paused at %s (%s: %s)", document.doc_id, type(exc).__name__, exc)
+                break
+            provenance.pop("vector_error", None)
+            document.summary_json = {**summary, "_ai": provenance}
+            await db.commit()
+            done += 1
+            logger.info("Vectors built for %s v%s", document.doc_id, document.current_version)
+    if done:
+        await bump_search_cache_version()
+    return done
+
+
+async def index_version(db: AsyncSession, document: DocumentRecord, ver: DocumentVersion, pages: List[DocumentPage]) -> None:
+    """Summarize and index ``ver``, then make it the searchable version of the document."""
     doc_id = document.doc_id
     await set_ingest_status(db, document, INGEST_SUMMARIZING)
     sensitivity = document.sensitivity
@@ -380,34 +457,14 @@ async def index_version(db: AsyncSession, document: DocumentRecord, ver: Documen
         provenance["injection_signals"] = signals
 
     await set_ingest_status(db, document, INGEST_INDEXING)
-    acl = {**search_payload(document), "version": ver.version}
-    qdrant = make_qdrant_indexer()
-    await asyncio.to_thread(qdrant.create_collections)
-    await asyncio.to_thread(qdrant.delete_document_chunks, doc_id)
-    fallback_text = "\n".join(
-        [str(v) for v in (document.title, document.doc_type, document.reference_number, document.doc_date) if v]
-        + [(p.text or "") for p in pages[:2]]
-    )[:4000]
-    if await asyncio.to_thread(
-        index_summary_vector, qdrant, doc_id, {**payload, **acl}, sensitivity, fallback_text
-    ):
-        page_payloads = [
-            {
-                "text": p.text,
-                "metadata": {
-                    **acl,
-                    "page_number": p.page_number,
-                    "text_source": p.source,
-                    **({"ocr_confidence": p.ocr_confidence} if p.ocr_confidence is not None else {}),
-                },
-            }
-            for p in pages
-            if (p.text or "").strip()
-        ]
-        await asyncio.to_thread(run_chunk_index, doc_id, page_payloads, sensitivity=sensitivity)
-        provenance["vectors"] = "indexed"
-    else:
-        provenance["vectors"] = "skipped_egress_policy"
+    try:
+        provenance["vectors"] = await index_vectors(document, ver.version, pages, payload)
+    except Exception as exc:
+        # Page text is already in Postgres, so the document stays findable by its words;
+        # backfill_pending_vectors rebuilds the vectors once the provider is reachable.
+        logger.warning("Vectors for %s v%s not built yet (%s: %s)", doc_id, ver.version, type(exc).__name__, exc)
+        provenance["vectors"] = VECTORS_PENDING
+        provenance["vector_error"] = f"{type(exc).__name__}: {exc}"[:300]
 
     await db.execute(
         update(DocumentVersion)

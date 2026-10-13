@@ -247,7 +247,7 @@ async def test_ask_sonali_cites_pages_and_reports_model():
 
     assert result["refused"] is False
     assert result["citations"] == [
-        {"doc_id": "SB-1", "page": 5, "quote": "Tk 12 crore", "url": "/view/SB-1?page=5"}
+        {"doc_id": "SB-1", "page": 5, "quote": "Tk 12 crore", "url": "/view/SB-1?page=5&hl=Tk%2012%20crore"}
     ]
     assert result["evidence"][0]["url"] == "/view/SB-1?page=5"
     assert result["answered_by"] == {"provider": "openrouter", "model": "qwen/qwen3", "route": "task:ask"}

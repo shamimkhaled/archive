@@ -19,13 +19,13 @@ from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional
 from urllib.parse import quote
 
-from sqlalchemy import String, cast, or_, select
+from sqlalchemy import String, and_, cast, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .. import ai
 from ..access_control import UNSEARCHABLE_VERIFICATION
 from ..cache import get_cached_search, set_cached_search
-from ..models import DocumentRecord
+from ..models import DocumentPage, DocumentRecord
 from ..observability import Timer, incr
 from ..search_acl import CHUNK_ID_FIELD, SUMMARY_ID_FIELD, AclScope, SearchFilters, build_filter
 
@@ -36,6 +36,9 @@ VECTOR_TIMEOUT_SECONDS = float(os.getenv("SEARCH_VECTOR_TIMEOUT_SECONDS", "5"))
 RERANK_TIMEOUT_SECONDS = float(os.getenv("SEARCH_RERANK_TIMEOUT_SECONDS", "4"))
 RERANK_CANDIDATES = int(os.getenv("SEARCH_RERANK_CANDIDATES", "30"))
 LEXICAL_LIMIT = 40
+PAGE_TEXT_LIMIT = int(os.getenv("SEARCH_PAGE_TEXT_LIMIT", "400"))
+MAX_PAGES_LISTED = 12
+SNIPPET_CHARS = 220
 QUERY_VECTOR_CACHE_SIZE = int(os.getenv("SEARCH_QUERY_VECTOR_CACHE", "512"))
 
 
@@ -51,9 +54,16 @@ class SearchOutcome:
         return {"results": self.results, "mode": self.mode, "degraded": self.degraded, "reranked": self.reranked}
 
 
-def citation_url(doc_id: str, page: Optional[int]) -> str:
+def citation_url(doc_id: str, page: Optional[int], hl: Optional[str] = None) -> str:
+    """Viewer link; ``hl`` is text the viewer highlights on that page."""
     path = f"/view/{quote(str(doc_id), safe='')}"
-    return f"{path}?page={int(page)}" if page else path
+    params = []
+    if page:
+        params.append(f"page={int(page)}")
+    hl = " ".join((hl or "").split())[:160]
+    if hl:
+        params.append(f"hl={quote(hl, safe='')}")
+    return f"{path}?{'&'.join(params)}" if params else path
 
 
 async def _capped(label: str, coro, timeout: float):
@@ -192,8 +202,119 @@ def _lexical_merge(q: str, results: List[Dict[str, Any]], rows: List[Any]) -> Li
     return sorted(by_id.values(), key=lambda row: (-(row.get("score") or 0), str(row.get("doc_id") or "")))
 
 
+_STOPWORDS = frozenset(
+    "a an and are as at be by did do does for from had has have how in is it its of on or that the this to "
+    "was were what when where which who why will with about any all can our your their there these those".split()
+)
+
+
+def _terms(q: str, *, drop_stopwords: bool = False) -> List[str]:
+    """Distinct query words worth matching on their own (2+ characters), at most eight."""
+    out: List[str] = []
+    seen = set()
+    for word in q.split():
+        word = word.strip(".,;:!?\"'()[]{}“”‘’।")
+        key = word.lower()
+        if len(word) < 2 or key in seen or (drop_stopwords and (key in _STOPWORDS or len(word) < 3)):
+            continue
+        seen.add(key)
+        out.append(word)
+    return out[:8]
+
+
+def _like(value: str) -> str:
+    return "%" + value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+
+
+async def _page_rows(
+    db: AsyncSession,
+    q: str,
+    acl: AclScope,
+    filters: SearchFilters,
+    *,
+    terms: List[str],
+    require_all: bool = True,
+    doc_ids: Optional[List[str]] = None,
+    limit: int = PAGE_TEXT_LIMIT,
+) -> List[Any]:
+    """Pages of each document's current version whose text contains the query words."""
+    if not terms:
+        return []
+    term_match = [DocumentPage.text.ilike(_like(t), escape="\\") for t in terms]
+    words = and_(*term_match) if require_all else or_(*term_match)
+    stmt = (
+        select(DocumentPage.doc_id, DocumentPage.page_number, DocumentPage.text)
+        .join(
+            DocumentRecord,
+            and_(DocumentRecord.doc_id == DocumentPage.doc_id, DocumentRecord.current_version == DocumentPage.version),
+        )
+        .where(or_(DocumentPage.text.ilike(_like(q), escape="\\"), words), *_searchable(acl, filters))
+    )
+    if doc_ids is not None:
+        stmt = stmt.where(DocumentPage.doc_id.in_(doc_ids))
+    stmt = stmt.order_by(DocumentRecord.created_at.desc(), DocumentPage.page_number).limit(limit)
+    return (await db.execute(stmt)).all()
+
+
+def _excerpt(text: str, needles: List[str], size: int) -> str:
+    flat = " ".join((text or "").split())
+    low = flat.lower()
+    idx = next((i for i in (low.find(n.lower()) for n in needles if n) if i >= 0), -1)
+    if idx < 0 or len(flat) <= size:
+        return flat[:size]
+    start = max(0, idx - size // 4)
+    excerpt = flat[start : start + size].strip()
+    return ("…" if start else "") + excerpt + ("…" if start + size < len(flat) else "")
+
+
+def _page_hits(q: str, terms: List[str], rows: List[Any]) -> Dict[str, Dict[str, Any]]:
+    """Per document: every matching page, the best one, and a snippet from it."""
+    phrase = q.lower()
+    lowered = [t.lower() for t in terms]
+    hits: Dict[str, Dict[str, Any]] = {}
+    for doc_id, page_number, text in rows:
+        low = (text or "").lower()
+        score = low.count(phrase) * 3 + sum(min(low.count(t), 5) for t in lowered)
+        hit = hits.setdefault(doc_id, {"pages": set(), "best": page_number, "best_score": -1, "text": "", "phrase": False})
+        hit["pages"].add(page_number)
+        hit["phrase"] = hit["phrase"] or phrase in low
+        if score > hit["best_score"]:
+            hit.update(best=page_number, best_score=score, text=text or "")
+    for hit in hits.values():
+        hit["pages"] = sorted(hit["pages"])
+        hit["snippet"] = _excerpt(hit.pop("text"), [q, *terms], SNIPPET_CHARS)
+    return hits
+
+
+def _page_merge(q: str, terms: List[str], results: List[Dict[str, Any]], rows: List[Any]) -> List[Dict[str, Any]]:
+    """Fold page-text matches in: the page to open, all pages that matched, and a snippet from the page."""
+    hits = _page_hits(q, terms, rows)
+    if not hits:
+        return results
+    by_id = {row["doc_id"]: row for row in results if row.get("doc_id")}
+    for doc_id, hit in hits.items():
+        entry = by_id.get(doc_id)
+        if entry is None:
+            entry = by_id[doc_id] = {
+                "doc_id": doc_id,
+                "score": 0.9 if hit["phrase"] else 0.75,
+                "source": "chunk",
+                "match_reasons": [],
+            }
+        else:
+            entry["score"] = float(entry.get("score") or 0) + (0.3 if hit["phrase"] else 0.15)
+        if "chunk" not in (entry.get("match_reasons") or []):
+            entry["match_reasons"] = [*(entry.get("match_reasons") or []), "chunk"]
+        if entry.get("page") not in hit["pages"]:
+            entry["page"] = hit["best"]
+        entry["pages"] = hit["pages"][:MAX_PAGES_LISTED]
+        entry["pages_matched"] = len(hit["pages"])
+        entry["snippet"] = hit["snippet"] or entry.get("snippet") or ""
+    return sorted(by_id.values(), key=lambda row: (-(row.get("score") or 0), str(row.get("doc_id") or "")))
+
+
 async def _attach_metadata(
-    db: AsyncSession, results: List[Dict[str, Any]], acl: AclScope, filters: SearchFilters
+    db: AsyncSession, results: List[Dict[str, Any]], acl: AclScope, filters: SearchFilters, hl: Optional[str] = None
 ) -> List[Dict[str, Any]]:
     """Drop anything Postgres says the caller may not find; add confirmed metadata and links."""
     ids = [row["doc_id"] for row in results if row.get("doc_id")]
@@ -235,7 +356,7 @@ async def _attach_metadata(
                 "reference_number": meta.reference_number,
                 "sensitivity": meta.sensitivity,
                 "page": page,
-                "view_url": citation_url(meta.doc_id, page),
+                "view_url": citation_url(meta.doc_id, page, hl),
             }
         )
     return out
@@ -299,7 +420,9 @@ async def hybrid_search(
         if qdrant is not None and (summary_rows or chunk_best):
             results = qdrant.fuse_hybrid_results(summary_rows, chunk_best, q, limit=candidates, lang=lang, use_chunks=True)
         results = _lexical_merge(q, results, lexical)
-        results = await _attach_metadata(db, results[:candidates], acl, filters)
+        terms = _terms(q)
+        results = _page_merge(q, terms, results, await _page_rows(db, q, acl, filters, terms=terms))
+        results = await _attach_metadata(db, results[:candidates], acl, filters, hl=q)
         reranked = await _rerank(q, results, _rerank_text)
         outcome = SearchOutcome(results[:limit], "hybrid" if vector_ok else "keyword", not vector_ok, reranked=reranked)
     incr("search.reranked" if reranked else "search.fusion_only")
@@ -308,32 +431,72 @@ async def hybrid_search(
     return outcome
 
 
-async def grounded_passages(
-    acl: AclScope, q: str, doc_ids: Iterable[str], *, k: int = 8, levels: Optional[Dict[str, str]] = None
+async def _page_passages(
+    db: AsyncSession, acl: AclScope, q: str, doc_ids: List[str], limit: int
 ) -> List[Dict[str, Any]]:
-    """Top page-text passages from ``doc_ids`` (already access-checked), reranked, for Ask Sonali."""
+    """Pages containing the question's words, best coverage first; used where vectors are missing."""
+    terms = _terms(q, drop_stopwords=True)
+    rows = await _page_rows(db, q, acl, SearchFilters(), terms=terms, require_all=False, doc_ids=doc_ids, limit=200)
+    lowered = [t.lower() for t in terms]
+    scored = []
+    for doc_id, page_number, text in rows:
+        low = (text or "").lower()
+        found = [t for t in lowered if t in low]
+        if not found:
+            continue
+        scored.append(
+            {
+                "doc_id": str(doc_id),
+                "page": page_number,
+                "text": _excerpt(text, found, 1800),
+                "score": round(len(found) / len(lowered), 4),
+                "_hits": sum(low.count(t) for t in found),
+            }
+        )
+    scored.sort(key=lambda p: (-p["score"], -p.pop("_hits")))
+    return scored[:limit]
+
+
+async def grounded_passages(
+    acl: AclScope,
+    q: str,
+    doc_ids: Iterable[str],
+    *,
+    k: int = 8,
+    levels: Optional[Dict[str, str]] = None,
+    db: Optional[AsyncSession] = None,
+) -> List[Dict[str, Any]]:
+    """Top page-text passages from ``doc_ids`` (already access-checked), reranked, for Ask Sonali.
+
+    With ``db``, documents that have no page vectors (embedding provider down, or vectors not
+    rebuilt yet) are matched on their stored page text instead.
+    """
     from ..qdrant_store import make_qdrant_indexer
 
     ids = [d for d in doc_ids if d]
     if not ids:
         return []
+    passages: List[Dict[str, Any]] = []
     try:
         qdrant = make_qdrant_indexer()
         vector = await embed_query(q)
-        if vector is None:
-            return []
-        passages = await asyncio.wait_for(
-            asyncio.to_thread(
-                qdrant.search_passages,
-                vector,
-                limit=k * 3,
-                query_filter=build_filter(acl, None, CHUNK_ID_FIELD, doc_ids=ids),
-            ),
-            timeout=VECTOR_TIMEOUT_SECONDS,
-        )
+        if vector is not None:
+            passages = await asyncio.wait_for(
+                asyncio.to_thread(
+                    qdrant.search_passages,
+                    vector,
+                    limit=k * 3,
+                    query_filter=build_filter(acl, None, CHUNK_ID_FIELD, doc_ids=ids),
+                ),
+                timeout=VECTOR_TIMEOUT_SECONDS,
+            )
     except Exception as exc:
         logger.warning("Passage retrieval failed (%s: %s)", type(exc).__name__, exc)
-        return []
+    if db is not None:
+        covered = {p["doc_id"] for p in passages}
+        missing = [d for d in ids if d not in covered]
+        if missing:
+            passages += await _page_passages(db, acl, q, missing, k * 2)
     for p in passages:
         p["sensitivity"] = (levels or {}).get(p["doc_id"])
     await _rerank(q, passages, lambda p: p["text"][:1500])

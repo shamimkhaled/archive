@@ -535,6 +535,7 @@
         "unreadable_pdf": "This PDF could not be read. Try saving it again or scanning it more clearly.",
         "unsupported_file": "This type of file can't be uploaded. Please upload a PDF or a scanned image.",
         "duplicate_id": "A document with this ID already exists. Choose a different ID.",
+        "doc_id_reserved": "This Document ID belonged to a record that was deleted under the keep-and-delete rules, so it can't be reused. Choose a different ID.",
         "processing_failed": "The document could not be processed. Please try again, or contact the archive administrator if it keeps happening.",
         "ai_unavailable": "The assistant is unavailable right now. Please try again later.",
         "search_unavailable": "Search is unavailable right now. Please try again in a moment.",

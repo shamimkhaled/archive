@@ -274,6 +274,32 @@
   --neutral-soft: #222838;
 }
 
+/* —— Document map connections (lines, legend dots and counts in static/js/archive-graph.js) —— */
+
+:root {
+  --edge-semantic: #c5922f;
+  --edge-project: #2d9a72;
+  --edge-person: #4f6bd8;
+  --edge-organization: #1a1a54;
+  --edge-keyword: #b4374d;
+  --edge-type: #8a8fa8;
+  --edge-muted: #c2c6da;
+  --map-canvas-bg:
+    radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--bcg-gold) 9%, transparent), transparent 48%),
+    radial-gradient(circle at 12% 10%, color-mix(in srgb, var(--bcg) 6%, transparent), transparent 30%),
+    linear-gradient(180deg, var(--surface), var(--bg));
+}
+
+[data-mode="dark"] {
+  --edge-semantic: #e0b960;
+  --edge-project: #5fd0a5;
+  --edge-person: #9cb0ff;
+  --edge-organization: #c9cde0;
+  --edge-keyword: #ff8a95;
+  --edge-type: #8b93a8;
+  --edge-muted: #3b4357;
+}
+
 /* —— Layout, type and motion —— */
 
 :root {

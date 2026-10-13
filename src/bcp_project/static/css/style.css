@@ -3122,7 +3122,7 @@ body.auth-page .ptr-indicator {
   min-width: 0;
   min-height: 520px;
   border-right: 1px solid var(--border);
-  background: #e2e8f0;
+  background: var(--bcg-soft);
 }
 
 .mind-map-page button.mind-map-view-tab,
@@ -3156,11 +3156,11 @@ body.auth-page .ptr-indicator {
   flex-direction: column;
   position: relative;
   margin: 12px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border);
   border-radius: 16px;
   overflow: hidden;
-  background: #f8fafc;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08);
+  background: var(--map-canvas-bg);
+  box-shadow: var(--shadow-sm);
 }
 
 .nlm-overview-shell .nlm-canvas-header {
@@ -3182,11 +3182,12 @@ body.auth-page .ptr-indicator {
   flex: 1;
   min-height: 520px;
   margin: 12px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--bcg-gold);
   border-radius: 16px;
   overflow: hidden;
-  background: #f8fafc;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -1px rgba(0, 0, 0, 0.04);
+  background: var(--map-canvas-bg);
+  box-shadow: var(--shadow-sm);
 }
 
 .nlm-canvas-header {
@@ -3212,23 +3213,24 @@ body.auth-page .ptr-indicator {
   border-radius: 20px;
   font-size: 12px;
   font-weight: 500;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border);
   background: var(--surface);
-  color: #0f172a;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
   cursor: pointer;
 }
 
 .mind-map-page button.mind-map-view-tab.pill-btn:hover {
-  background: #f1f5f9;
-  color: #0f172a;
+  background: var(--bcg-soft);
+  color: var(--bcg);
 }
 
 .mind-map-page button.mind-map-view-tab.pill-btn.is-active,
 .mind-map-page button.mind-map-view-tab.pill-btn.is-active:hover {
-  background: #0f172a;
-  color: #ffffff;
-  border-color: #0f172a;
+  background: var(--bcg);
+  color: var(--on-primary);
+  border-color: var(--bcg);
+  box-shadow: inset 0 -2px 0 var(--bcg-gold);
 }
 
 .nlm-keyword-tags {
@@ -3249,18 +3251,18 @@ body.auth-page .ptr-indicator {
   gap: 6px;
   padding: 4px 12px;
   border-radius: 16px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border);
   background: var(--surface);
   font-size: 11px;
-  color: #64748b;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  color: var(--muted);
+  box-shadow: var(--shadow-sm);
 }
 
 .nlm-keyword-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--stat-color, #d97706);
+  background: var(--stat-color, var(--edge-keyword));
 }
 
 .nlm-canvas-hint {
@@ -3270,11 +3272,11 @@ body.auth-page .ptr-indicator {
   z-index: 5;
   margin: 0;
   padding: 4px 10px;
-  border: 1px dashed #cbd5e1;
+  border: 1px dashed var(--border-strong);
   border-radius: 12px;
   font-size: 11px;
-  color: #94a3b8;
-  background: rgba(248, 250, 252, 0.92);
+  color: var(--muted);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
 }
 
 .nlm-zoom-toolbar.neural-tree-controls {
@@ -3287,17 +3289,17 @@ body.auth-page .ptr-indicator {
   width: 32px;
   height: 32px;
   border-radius: 8px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border);
   background: var(--surface);
-  color: #0f172a;
+  color: var(--bcg);
   font-size: 14px;
   font-weight: 600;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--shadow-sm);
 }
 
 .mind-map-page .nlm-zoom-toolbar button.zoom-btn:hover {
-  background: #f1f5f9;
-  color: #0f172a;
+  background: var(--bcg-soft);
+  color: var(--bcg);
 }
 
 .nlm-zoom-toolbar button.zoom-btn:last-child {
@@ -3318,12 +3320,12 @@ body.auth-page .ptr-indicator {
   gap: 16px 20px;
   padding: 8px 20px;
   border-radius: 24px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border);
   background: var(--surface);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--shadow-sm);
   font-size: 11px;
   font-weight: 500;
-  color: #64748b;
+  color: var(--text-secondary);
 }
 
 .nlm-legend-bar .legend-item {
@@ -3332,11 +3334,11 @@ body.auth-page .ptr-indicator {
   gap: 6px;
 }
 
-.edge-semantic { background: #dc2626; }
-.edge-project { background: #16a34a; }
-.edge-person { background: #2563eb; }
-.edge-organization { background: #9333ea; }
-.edge-keyword { background: #d97706; }
+.edge-semantic { background: var(--edge-semantic); }
+.edge-project { background: var(--edge-project); }
+.edge-person { background: var(--edge-person); }
+.edge-organization { background: var(--edge-organization); }
+.edge-keyword { background: var(--edge-keyword); }
 
 .mind-map-canvas-head,
 .mind-map-connection-stats,
@@ -3758,7 +3760,7 @@ body.auth-page .ptr-indicator {
 }
 
 .neural-tree-shell.nlm-canvas {
-  background: #f8fafc;
+  background: var(--map-canvas-bg);
 }
 
 .neural-tree-shell-compact {
@@ -3804,7 +3806,7 @@ body.auth-page .ptr-indicator {
 
 .neural-tree-link.is-dashed {
   stroke-dasharray: 4 4;
-  stroke: #cbd5e1;
+  stroke: var(--edge-muted);
   opacity: 1;
 }
 
@@ -3836,10 +3838,10 @@ body.auth-page .ptr-indicator {
   height: 100%;
   padding: 0.85rem 1rem;
   border-radius: 12px;
-  border: 1.5px solid #e2e8f0;
+  border: 1.5px solid var(--border);
   background: var(--surface);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
-  color: #0f172a;
+  box-shadow: var(--shadow-sm);
+  color: var(--text);
   cursor: pointer;
   transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
   animation: neural-node-rise 520ms ease both;
@@ -3859,29 +3861,37 @@ body.auth-page .ptr-indicator {
 .neural-node-card:hover,
 .neural-node-card:focus-visible {
   transform: translateY(-2px);
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  border-color: color-mix(in srgb, var(--bcg-gold) 55%, var(--border));
+  box-shadow: var(--shadow-md);
   outline: none;
 }
 
 .neural-node-card.is-selected {
-  border-color: #0f172a;
-  box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.12), 0 4px 10px rgba(15, 23, 42, 0.08);
+  border-color: var(--bcg-gold);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--bcg-gold) 28%, transparent), var(--shadow-md);
 }
 
 .neural-node-center {
-  background: #0f172a;
-  color: #ffffff;
-  border-color: #0f172a;
-  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.22);
+  background: var(--bcg);
+  color: var(--on-primary);
+  border: 2px solid var(--bcg-gold);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--bcg-gold) 18%, transparent), var(--shadow-md);
 }
 
-.neural-node-center .neural-node-sub,
+.neural-node-center .neural-node-sub {
+  color: color-mix(in srgb, var(--on-primary) 72%, transparent);
+}
+
 .neural-node-center .neural-node-eyebrow {
-  color: #94a3b8;
+  color: var(--bcg-accent-bright);
+}
+
+[data-mode="dark"] .neural-node-center .neural-node-eyebrow {
+  color: color-mix(in srgb, var(--on-primary) 72%, transparent);
 }
 
 .neural-node-center strong {
-  color: #ffffff;
+  color: var(--on-primary);
 }
 
 .neural-node-hub,
@@ -3891,10 +3901,10 @@ body.auth-page .ptr-indicator {
   text-align: center;
   padding: 0.55rem 0.75rem;
   border-radius: 28px;
-  border: 1.5px dashed #cbd5e1;
+  border: 1.5px dashed var(--border-strong);
   background: var(--surface);
   cursor: default;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-sm);
 }
 
 .neural-node-hub .neural-node-eyebrow {
@@ -3917,25 +3927,25 @@ body.auth-page .ptr-indicator {
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: #64748b;
+  color: var(--muted);
 }
 
 .neural-node-card strong {
   font-size: 0.78rem;
   line-height: 1.25;
   word-break: break-word;
-  color: #0f172a;
+  color: var(--text);
 }
 
 .neural-node-sub,
 .neural-node-score {
   font-size: 0.68rem;
-  color: #64748b;
+  color: var(--muted);
   line-height: 1.3;
 }
 
 .neural-node-score {
-  color: #d97706;
+  color: var(--bcg-accent);
   font-weight: 700;
   white-space: nowrap;
 }
@@ -4088,12 +4098,6 @@ body.auth-page .ptr-indicator {
   margin-right: 0.35rem;
   vertical-align: -1px;
 }
-
-.edge-semantic { background: #c5922f; }
-.edge-project { background: #2d9a72; }
-.edge-person { background: #5b7cfa; }
-.edge-organization { background: #1a1a54; }
-.edge-keyword { background: #8a7010; }
 
 .neural-tree-empty {
   position: absolute;

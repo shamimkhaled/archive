@@ -252,6 +252,22 @@ async def test_disposal_needs_two_people_and_leaves_a_tombstone(maker):
 
 
 @pytest.mark.asyncio
+async def test_next_doc_id_skips_ids_reserved_by_disposals(maker):
+    from bcp_project.models import DocumentDisposal
+    from bcp_project.routers.documents import suggest_next_doc_id
+    from bcp_project.services import retention
+
+    async with maker() as db:
+        await _seed(db, "SB-2026-003")
+        for n in (4, 5):
+            db.add(DocumentDisposal(doc_id=f"SB-2026-00{n}", status="executed", reason="r", proposed_by="sec1"))
+        await db.commit()
+        suggested = await suggest_next_doc_id(db, 2026)
+        assert suggested == "SB-2026-006"
+        assert await retention.doc_id_conflict(db, suggested) is None
+
+
+@pytest.mark.asyncio
 async def test_legal_hold_and_board_records_block_disposal(maker):
     from bcp_project.models import MeetingDocument
     from bcp_project.services import retention

@@ -33,6 +33,7 @@
 
     <div class="viewer-body">
     <div class="viewer-main">
+    <p class="viewer-hl-note muted small" id="viewerHlNote" role="status" hidden></p>
     <div class="pdf-viewer-frame" id="pdfFrame">
         <div id="pdf-container" class="pdf-container" tabindex="0" aria-label="Document page">
             <div class="viewer-loading" id="viewerLoading">
@@ -97,6 +98,11 @@
     const prevBtn = document.getElementById("prev-page");
     const nextBtn = document.getElementById("next-page");
 
+    const hlText = (new URLSearchParams(window.location.search).get("hl") || "").trim().slice(0, 160);
+    const hlNote = document.getElementById("viewerHlNote");
+    const HL_STOPWORDS = new Set("the and for with from that this was were are has have had not but into about what when where which who".split(" "));
+    let hlNoteShown = false;
+    let pdfLib = null;
     let pdfDoc = null;
     let currentPage = 1;
     let wantedPage = 1;
@@ -211,6 +217,7 @@
             showError("This file looks damaged or isn't a readable PDF. Contact the archive team if it keeps happening.");
             return;
         }
+        pdfLib = lib;
         const requested = parseInt(new URLSearchParams(window.location.search).get("page") || "1", 10);
         scale = null;
         goToPage(requested >= 1 && requested <= pdfDoc.numPages ? requested : 1);
@@ -265,6 +272,7 @@
                 wrapper.appendChild(mark);
             }
             container.replaceChildren(wrapper);
+            paintHighlights(page, viewport, wrapper);
             if (pageNum !== currentPage) container.scrollTop = 0;
             currentPage = pageNum;
             paintPager();
@@ -276,6 +284,103 @@
             console.error("PDF render error:", error);
             showError("We couldn't show this page. Try again, or go to a different page.");
         }
+    }
+
+    // Lower-cased text without whitespace, so a phrase matches across the pieces pdf.js splits lines into.
+    function compact(text) {
+        let out = "";
+        for (let i = 0; i < text.length; i++) {
+            const ch = text[i];
+            if (/\s/.test(ch)) continue;
+            const lower = ch.toLowerCase();
+            out += lower.length === 1 ? lower : ch;
+        }
+        return out;
+    }
+
+    function findRanges(hay, wanted) {
+        const ranges = [];
+        const findAll = function (needle) {
+            let from = 0;
+            while (needle && ranges.length < 80) {
+                const at = hay.indexOf(needle, from);
+                if (at < 0) break;
+                ranges.push([at, at + needle.length]);
+                from = at + needle.length;
+            }
+        };
+        findAll(compact(wanted));
+        if (!ranges.length) {
+            wanted.split(/\s+/)
+                .map(compact)
+                .filter(function (w) { return w.length >= 3 && !HL_STOPWORDS.has(w); })
+                .forEach(findAll);
+        }
+        return ranges;
+    }
+
+    async function paintHighlights(page, viewport, wrapper) {
+        if (!hlText || !pdfLib) return;
+        let items = [];
+        try {
+            const content = await page.getTextContent();
+            items = content.items.filter(function (it) { return typeof it.str === "string" && it.str.length; });
+        } catch (error) {
+            items = [];
+        }
+        let hay = "";
+        const owner = [];
+        items.forEach(function (it, index) {
+            for (let c = 0; c < it.str.length; c++) {
+                if (/\s/.test(it.str[c])) continue;
+                const lower = it.str[c].toLowerCase();
+                hay += lower.length === 1 ? lower : it.str[c];
+                owner.push([index, c]);
+            }
+        });
+        const spans = {};
+        findRanges(hay, hlText).forEach(function (range) {
+            for (let k = range[0]; k < range[1]; k++) {
+                const [index, c] = owner[k];
+                const key = index + ":" + range[0];
+                const span = spans[key] || (spans[key] = { index: index, from: c, to: c });
+                span.from = Math.min(span.from, c);
+                span.to = Math.max(span.to, c);
+            }
+        });
+        const layer = document.createElement("div");
+        layer.className = "pdf-highlights";
+        layer.setAttribute("aria-hidden", "true");
+        let first = null;
+        Object.keys(spans).forEach(function (key) {
+            const span = spans[key];
+            const it = items[span.index];
+            const tx = pdfLib.Util.transform(viewport.transform, it.transform);
+            const height = Math.hypot(tx[2], tx[3]);
+            const width = it.width * viewport.scale;
+            if (!height || !width) return;
+            const charWidth = width / it.str.length;
+            const mark = document.createElement("div");
+            mark.className = "pdf-highlight";
+            mark.style.left = tx[4] + span.from * charWidth + "px";
+            mark.style.top = tx[5] - height + "px";
+            mark.style.width = Math.max(4, (span.to - span.from + 1) * charWidth) + "px";
+            mark.style.height = height * 1.15 + "px";
+            layer.appendChild(mark);
+            if (!first || tx[5] - height < first) first = tx[5] - height;
+        });
+        if (!wrapper.isConnected) return;
+        if (layer.childElementCount) {
+            wrapper.appendChild(layer);
+            hlNote.hidden = true;
+            if (first != null) container.scrollTop = Math.max(0, first - 80);
+        } else if (!hlNoteShown) {
+            hlNote.textContent = items.length
+                ? "“" + hlText + "” isn't written exactly like that on this page. Check the page for related wording."
+                : "This page is a scanned image, so “" + hlText + "” can't be marked on it. Read the page for the words.";
+            hlNote.hidden = false;
+        }
+        hlNoteShown = true;
     }
 
     function zoomBy(delta) {

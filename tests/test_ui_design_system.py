@@ -115,3 +115,5 @@ def test_friendly_error_hides_exception_text():
     assert "ValueError" not in message
     assert message == ui.t("error.unreadable_pdf")
     assert ui.friendly_error("RuntimeError: boom") == ui.t("error.processing_failed")
+    reserved = ui.friendly_error("This Document ID belonged to a disposed record and cannot be reused")
+    assert reserved == ui.t("error.doc_id_reserved")

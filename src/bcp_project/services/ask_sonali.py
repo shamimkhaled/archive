@@ -58,6 +58,18 @@ def _evidence_rows(search_payload: Dict[str, Any]) -> List[Dict[str, Any]]:
     return rows
 
 
+def _page_for_quote(sources: List[Dict[str, Any]], doc_id: str, quote: str) -> Optional[int]:
+    """Page of the source passage holding ``quote``, else the document's only cited page."""
+    pages = [s for s in sources if str(s.get("doc_id")) == doc_id and s.get("page")]
+    needle = " ".join(quote.lower().split())
+    if needle:
+        for source in pages:
+            if needle in " ".join(str(source.get("text") or "").lower().split()):
+                return int(source["page"])
+    distinct = {int(s["page"]) for s in pages}
+    return distinct.pop() if len(distinct) == 1 else None
+
+
 async def ask_sonali_for_principal(
     db: AsyncSession,
     principal: Principal,
@@ -118,7 +130,7 @@ async def ask_sonali_for_principal(
 
         acl = await document_query.acl_scope_for_principal(db, principal)
         passages = await grounded_passages(
-            acl, q, [str(r["doc_id"]) for r in evidence if r.get("doc_id")], k=PASSAGES, levels=levels
+            acl, q, [str(r["doc_id"]) for r in evidence if r.get("doc_id")], k=PASSAGES, levels=levels, db=db
         )
         types = {str(r.get("doc_id")): r.get("doc_type") for r in evidence}
         sources = (
@@ -173,12 +185,15 @@ async def ask_sonali_for_principal(
                 page_val = int(page) if page is not None and str(page).strip() != "" else None
             except (TypeError, ValueError):
                 page_val = None
+            quote = str(cite.get("quote") or "")[:160]
+            if page_val is None:
+                page_val = _page_for_quote(sources, doc_id, quote)
             citations.append(
                 {
                     "doc_id": doc_id,
                     "page": page_val,
-                    "quote": str(cite.get("quote") or "")[:160],
-                    "url": citation_url(doc_id, page_val),
+                    "quote": quote,
+                    "url": citation_url(doc_id, page_val, quote),
                 }
             )
 

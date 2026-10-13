@@ -1022,6 +1022,40 @@ dialog.ui-dialog::backdrop {
   line-height: var(--lh-relaxed, 1.6);
 }
 
+.result-pages {
+  margin: 0;
+  font-size: var(--fs-sm, 0.875rem);
+  color: var(--text-secondary);
+}
+
+.result-pages a {
+  display: inline-block;
+  min-width: 2ch;
+  padding: 0 var(--space-1, 4px);
+  font-weight: 600;
+}
+
+/* —— Viewer: highlighted search words. Pages are always paper-white, so the colour is fixed. —— */
+
+.pdf-highlights {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.pdf-highlight {
+  position: absolute;
+  background: rgba(255, 214, 0, 0.42);
+  mix-blend-mode: multiply;
+  border-radius: 2px;
+}
+
+.viewer-hl-note {
+  margin: 0 0 var(--space-2, 8px);
+  text-align: center;
+}
+
 /* —— Ask —— */
 
 .ask-examples {

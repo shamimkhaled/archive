@@ -63,7 +63,11 @@
         <div class="banner {{ 'error' if item.status == 'failed' else 'warn' }} stack">
             {% if item.status == 'failed' %}
             <p>{{ friendly_error(item.error) }}</p>
-            <p class="muted">An administrator can try again from Background tasks, or you can upload it again with a different archive number.</p>
+            {% if can_retry %}
+            <p class="muted">The file is already saved, so you can try again without uploading it.</p>
+            {% else %}
+            <p class="muted">Ask an administrator to try again, or upload it again with a different archive number.</p>
+            {% endif %}
             {% else %}
             <p><strong>Sent back by the reviewer.</strong>{% if item.error %} Their note: “{{ item.error }}”{% endif %}</p>
             {% endif %}
@@ -74,6 +78,9 @@
         <div class="list-card-actions">
             {% if can_view and item.group == 'done' %}
             <a class="button button-secondary" href="/view/{{ item.doc_id }}" data-nav>Open</a>
+            {% endif %}
+            {% if can_retry and item.status == 'failed' %}
+            <button type="button" class="button" data-ingest-retry="{{ item.doc_id }}">Try again</button>
             {% endif %}
             <a class="button button-secondary" href="/documents/{{ item.doc_id }}/versions" data-nav>Versions</a>
         </div>

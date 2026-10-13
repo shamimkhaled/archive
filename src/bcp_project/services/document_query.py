@@ -43,6 +43,7 @@ def _public_result_row(row: dict) -> dict:
         "access_status": row.get("access_status"),
         "source": row.get("source") if can_view else None,
         "page": row.get("page") if can_view else None,
+        "pages": row.get("pages") if can_view else None,
         "view_url": row.get("view_url") if can_view else None,
         "title": row.get("title") if can_view else None,
     }
