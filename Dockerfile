@@ -12,7 +12,7 @@
 #   docker build --build-arg SERVICE_ROLE=worker -t sonali-archive-worker .
 #   docker build --build-arg SERVICE_ROLE=worker --build-arg WITH_DIARIZATION=1 -t sonali-archive-worker-dz .
 
-FROM python:3.12-slim-bookworm AS deps
+FROM python:3.14-slim-bookworm AS deps
 
 ARG SERVICE_ROLE=web
 ARG WITH_DIARIZATION=0
@@ -26,7 +26,7 @@ RUN pip install --upgrade pip \
     && if [ "$SERVICE_ROLE" = "worker" ] && [ "$WITH_DIARIZATION" = "1" ]; then \
          pip install --prefix=/install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements-diarization.txt; fi
 
-FROM python:3.12-slim-bookworm
+FROM python:3.14-slim-bookworm
 
 ARG SERVICE_ROLE=web
 ENV PYTHONDONTWRITEBYTECODE=1 \
