@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from bcp_project.search_acl import AclScope
 from bcp_project.services import search as search_service
-from bcp_project.services.ask_sonali import _page_for_quote
+from bcp_project.services.ask_sonali import _extractive_answer, _page_for_quote
 
 ADMIN = AclScope(unrestricted=True, role="admin")
 MEMBER = AclScope(unrestricted=False, role="board_member")
@@ -134,6 +134,36 @@ def test_citation_page_is_filled_from_the_passage_holding_the_quote():
     assert _page_for_quote(sources, "SB-1", "crop loan interest rate") == 2
     assert _page_for_quote(sources, "SB-1", "not in any passage") is None
     assert _page_for_quote(sources, "SB-2", "") == 7
+
+
+def test_unreadable_model_reply_falls_back_to_quoted_passages():
+    sources = [
+        {"doc_id": "SB-1", "page": 2, "text": "Introduction. The crop loan interest rate is 8 percent for farmers."},
+        {"doc_id": "SB-1", "page": 4, "text": "Repayment of a crop loan is due after harvest."},
+        {"doc_id": "SB-2", "page": 1, "text": "Unrelated circular about branch timings."},
+    ]
+    out = _extractive_answer(sources, "What is the crop loan interest rate?")
+    assert [(c["doc_id"], c["page"]) for c in out["citations"]] == [("SB-1", 2), ("SB-1", 4)]
+    assert "crop loan interest rate is 8 percent" in out["citations"][0]["quote"]
+    assert _extractive_answer(sources, "zebra migration") is None
+
+
+def test_chat_json_reads_cut_off_replies_and_retries_empty_ones(monkeypatch):
+    from bcp_project import ai
+    from bcp_project.ports.adapters import OpenAILlmAdapter, _parse_json_object
+
+    assert _parse_json_object('```json\n{"answer": "x", "citations": [{"doc_id": "SB-1", "page": 2') == {
+        "answer": "x",
+        "citations": [{"doc_id": "SB-1", "page": 2}],
+    }
+    with pytest.raises(ValueError):
+        _parse_json_object("I cannot answer that.")
+
+    replies = iter(["", '{"answer": "ok", "citations": []}'])
+    budgets = []
+    monkeypatch.setattr(ai, "chat", lambda *a, max_tokens, **kw: budgets.append(max_tokens) or next(replies))
+    assert OpenAILlmAdapter().chat_json(system="s", user="u") == {"answer": "ok", "citations": []}
+    assert budgets == [4000, 4000]
 
 
 def test_citation_url_carries_highlight():

@@ -15,7 +15,7 @@ from ..observability import Timer, incr
 from ..policy import Principal, Scope, require_scope
 from ..ports.adapters import get_llm_client
 from . import document_query
-from .search import citation_url, grounded_passages
+from .search import _excerpt, _terms, citation_url, grounded_passages
 
 logger = logging.getLogger("bcp_project.services.ask_sonali")
 
@@ -68,6 +68,38 @@ def _page_for_quote(sources: List[Dict[str, Any]], doc_id: str, quote: str) -> O
                 return int(source["page"])
     distinct = {int(s["page"]) for s in pages}
     return distinct.pop() if len(distinct) == 1 else None
+
+
+def _extractive_answer(sources: List[Dict[str, Any]], q: str, limit: int = 3) -> Optional[Dict[str, Any]]:
+    """Quote the best-matching passages when the model can't answer; never generates text of its own."""
+    terms = [t.lower() for t in _terms(q, drop_stopwords=True)] or [q.lower()]
+    scored = []
+    for idx, source in enumerate(sources):
+        low = (source.get("text") or "").lower()
+        hits = sum(1 for t in terms if t in low)
+        if source.get("doc_id") and hits:
+            scored.append((-hits, idx, source))
+    seen = set()
+    citations = []
+    for _, _, source in sorted(scored, key=lambda item: item[:2]):
+        key = (source["doc_id"], source.get("page"))
+        if key in seen:
+            continue
+        seen.add(key)
+        quote = _excerpt(source.get("text") or "", terms, 160).strip("…").strip()
+        citations.append({"doc_id": source["doc_id"], "page": source.get("page"), "quote": quote})
+        if len(citations) >= limit:
+            break
+    if not citations:
+        return None
+    return {
+        "refused": False,
+        "answer": (
+            "The assistant couldn't write a summary just now, so here are the passages that best match "
+            "your question. Open each one to read it in context."
+        ),
+        "citations": citations,
+    }
 
 
 async def ask_sonali_for_principal(
@@ -153,6 +185,7 @@ async def ask_sonali_for_principal(
             + "\n\nRespond with JSON only."
         )
 
+        fallback = False
         try:
             llm = get_llm_client()
             model_out = llm.chat_json(
@@ -164,11 +197,17 @@ async def ask_sonali_for_principal(
             )
             call = ai.last_call() or {}
         except Exception as exc:
-            logger.exception("Ask Sonali LLM failed")
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"Ask Sonali model unavailable: {str(exc)[:160]}",
-            ) from exc
+            model_out = _extractive_answer(sources, q)
+            if model_out is None:
+                logger.exception("Ask Sonali LLM failed")
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=f"Ask Sonali model unavailable: {str(exc)[:160]}",
+                ) from exc
+            logger.warning("Ask Sonali model failed (%s); answering with matching passages", type(exc).__name__)
+            incr("ask_sonali.extractive_fallback")
+            fallback = True
+            call = {"source": "extractive"}
 
         refused = bool(model_out.get("refused"))
         citations_raw = model_out.get("citations") or []
@@ -224,11 +263,13 @@ async def ask_sonali_for_principal(
                 for r in sources
             ],
             "answered_by": {"provider": call.get("provider"), "model": call.get("model"), "route": call.get("source")},
+            "fallback": fallback,
             "source_titles": {str(r["doc_id"]): r.get("title") for r in evidence if r.get("doc_id") and r.get("title")},
             "query": q,
             "human_in_the_loop": True,
             "disclaimer": "AI support only — humans retain final decision authority.",
         }
+        answered_by = "extractive" if fallback else f"{call.get('provider')}/{call.get('model')}"
         await write_audit(
             db,
             username=principal.username_for_grants or principal.actor_id,
@@ -236,7 +277,7 @@ async def ask_sonali_for_principal(
             resource_type="ai",
             detail=(
                 f"refused={refused} cites={len(citations)} sources={len(sources)} "
-                f"model={call.get('provider')}/{call.get('model')} q={q[:120]}"
+                f"model={answered_by} q={q[:120]}"
             ),
             ip_address=ip_address,
             actor_type=principal.actor_type,

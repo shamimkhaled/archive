@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+import logging
+import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -10,6 +13,29 @@ from ..notifications import send_meeting_email as _send_meeting_email
 from ..qdrant_store import embed_texts as _embed_texts
 from ..qdrant_store import make_qdrant_indexer
 from ..summary_extractor import DocumentSummary, extract_document_summary as _extract_document_summary
+from ..summary_extractor import _remove_trailing_commas, _repair_incomplete_json, _strip_code_fence
+
+logger = logging.getLogger("bcp_project.ports.adapters")
+
+
+def _parse_json_object(raw: str) -> Dict[str, Any]:
+    """The JSON object in a model reply, closing it when the reply was cut off mid-object."""
+    text = _strip_code_fence(raw or "")
+    start = text.find("{")
+    if start < 0:
+        raise ValueError("Could not extract JSON object from model output")
+    end = text.rfind("}")
+    candidate = text[start : end + 1] if end > start else text[start:]
+    try:
+        parsed = json.loads(_remove_trailing_commas(candidate))
+    except json.JSONDecodeError:
+        try:
+            parsed = json.loads(_repair_incomplete_json(text[start:]))
+        except json.JSONDecodeError as exc:
+            raise ValueError("Could not parse JSON object from model output") from exc
+    if not isinstance(parsed, dict):
+        raise ValueError("Model did not return a JSON object")
+    return parsed
 
 
 class OpenAILlmAdapter:
@@ -32,30 +58,23 @@ class OpenAILlmAdapter:
         task: str = "ask",
         sensitivity: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Chat completion that must return a JSON object."""
-        import json
-
+        """Chat completion that must return a JSON object; one retry when the reply is unreadable."""
         from .. import ai
-        from ..summary_extractor import _extract_json
 
-        raw = ai.chat(
-            task,
-            [{"role": "system", "content": system}, {"role": "user", "content": user}],
-            sensitivity=sensitivity,
-            temperature=temperature,
-            max_tokens=1200,
-            json_mode=True,
-        )
-        payload = _extract_json(raw)
-        try:
-            parsed = json.loads(payload)
-        except json.JSONDecodeError:
-            from ..summary_extractor import _repair_incomplete_json
-
-            parsed = json.loads(_repair_incomplete_json(payload))
-        if not isinstance(parsed, dict):
-            raise ValueError("Model did not return a JSON object")
-        return parsed
+        # Reasoning models spend part of the budget thinking; too small a cap leaves the JSON empty or cut off.
+        max_tokens = int(os.getenv("AI_JSON_MAX_TOKENS") or 4000)
+        messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
+        error: Exception = ValueError("Model did not return a JSON object")
+        for _ in range(2):
+            raw = ai.chat(
+                task, messages, sensitivity=sensitivity, temperature=temperature, max_tokens=max_tokens, json_mode=True
+            )
+            try:
+                return _parse_json_object(raw)
+            except ValueError as exc:
+                error = exc
+                logger.warning("Unreadable JSON from the %s model (%d chars); retrying once", task, len(raw or ""))
+        raise error
 
 
 

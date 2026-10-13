@@ -11,11 +11,14 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import math
 import os
 import re
 import threading
 from typing import Any, Dict, List, Optional, Protocol, Tuple
+
+logger = logging.getLogger("bcp_project.ai.providers")
 
 CLOUD_PROVIDERS = frozenset({"openai", "openrouter"})
 LOCAL_PROVIDERS = frozenset({"local", "stub"})
@@ -148,7 +151,19 @@ class OpenAICompatibleChat:
                 response = client.chat.completions.create(**kwargs)
             else:
                 raise
-        return response.choices[0].message.content or ""
+        choice = response.choices[0]
+        content = choice.message.content or ""
+        if not content.strip() or choice.finish_reason == "length":
+            logger.warning(
+                "Chat reply from %s/%s is %s (finish_reason=%s, %d chars, max_tokens=%d)",
+                self.name,
+                model,
+                "empty" if not content.strip() else "cut off",
+                choice.finish_reason,
+                len(content),
+                max_tokens,
+            )
+        return content
 
 
 class OpenAICompatibleEmbedding:
