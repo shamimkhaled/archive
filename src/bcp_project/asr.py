@@ -5,8 +5,9 @@ from __future__ import annotations
 import logging
 import os
 from datetime import datetime, timedelta
+from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("bcp_project.asr")
 
@@ -41,12 +42,21 @@ def whisper_available() -> bool:
             return False
 
 
-def _segments_from_faster_whisper(path: Path) -> List[Dict[str, Any]]:
+def _language(language: Optional[str]) -> Optional[str]:
+    return (language or os.getenv("WHISPER_LANGUAGE") or "").strip() or None
+
+
+@lru_cache(maxsize=2)
+def _faster_whisper_model(name: str, device: str, compute: str):
     from faster_whisper import WhisperModel
 
+    return WhisperModel(name, device=device, compute_type=compute)
+
+
+def _segments_from_faster_whisper(path: Path, language: Optional[str] = None, model_name: Optional[str] = None) -> List[Dict[str, Any]]:
     compute = (os.getenv("WHISPER_COMPUTE_TYPE") or "int8").strip() or "int8"
-    model = WhisperModel(_model_name(), device=_device(), compute_type=compute)
-    language = (os.getenv("WHISPER_LANGUAGE") or "").strip() or None
+    model = _faster_whisper_model(model_name or _model_name(), _device(), compute)
+    language = _language(language)
     segments_iter, _info = model.transcribe(
         str(path),
         language=language,
@@ -71,11 +81,11 @@ def _segments_from_faster_whisper(path: Path) -> List[Dict[str, Any]]:
     return out
 
 
-def _segments_from_openai_whisper(path: Path) -> List[Dict[str, Any]]:
+def _segments_from_openai_whisper(path: Path, language: Optional[str] = None, model_name: Optional[str] = None) -> List[Dict[str, Any]]:
     import whisper
 
-    model = whisper.load_model(_model_name(), device=_device())
-    language = (os.getenv("WHISPER_LANGUAGE") or "").strip() or None
+    model = whisper.load_model(model_name or _model_name(), device=_device())
+    language = _language(language)
     kwargs = {"fp16": False}
     if language:
         kwargs["language"] = language
@@ -139,13 +149,15 @@ def transcribe_audio_file(path: Path) -> List[Dict[str, Any]]:
     return segments
 
 
-def transcribe_local(path: Path) -> List[Dict[str, Any]]:
-    """faster-whisper, then openai-whisper, on this machine."""
+def transcribe_local(path: Path, *, language: Optional[str] = None, model: Optional[str] = None) -> List[Dict[str, Any]]:
+    """faster-whisper, then openai-whisper, on this machine. ``language`` and ``model`` override
+    WHISPER_LANGUAGE and WHISPER_MODEL."""
+    name = model or _model_name()
     try:
         import faster_whisper  # noqa: F401
 
-        logger.info("Transcribing %s with faster-whisper model=%s", path.name, _model_name())
-        return _segments_from_faster_whisper(path)
+        logger.info("Transcribing %s with faster-whisper model=%s", path.name, name)
+        return _segments_from_faster_whisper(path, language, name)
     except ImportError:
         pass
     except Exception:
@@ -154,8 +166,8 @@ def transcribe_local(path: Path) -> List[Dict[str, Any]]:
     try:
         import whisper  # noqa: F401
 
-        logger.info("Transcribing %s with openai-whisper model=%s", path.name, _model_name())
-        return _segments_from_openai_whisper(path)
+        logger.info("Transcribing %s with openai-whisper model=%s", path.name, name)
+        return _segments_from_openai_whisper(path, language, name)
     except ImportError:
         return [
             {

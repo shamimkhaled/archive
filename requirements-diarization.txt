@@ -1,0 +1,6 @@
+# Optional speaker diarization on the meeting worker (DIARIZATION_PROVIDER=pyannote).
+# Installed on top of requirements-worker.txt when the image is built with
+#   --build-arg SERVICE_ROLE=worker --build-arg WITH_DIARIZATION=1
+# Pulls in PyTorch (CPU wheels unless the base image provides CUDA): about 1-2 GB more image.
+# pyannote.audio 4 renamed Pipeline.from_pretrained(use_auth_token=) to token=; diarization.py uses the 3.x API.
+pyannote.audio>=3.1,<4

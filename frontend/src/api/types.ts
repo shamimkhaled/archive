@@ -61,6 +61,7 @@ export interface DocumentInfo {
   page_count: number | null;
   current_version: number;
   provenance: string | null;
+  metadata_status: "confirmed" | "ai_unconfirmed" | null;
   seal_text: string;
   file_url: string;
   download_url: string | null;
@@ -107,6 +108,23 @@ export interface MeetingDetail {
     file_url: string;
   }[];
   minutes: (MinutesView & { workflow?: MinutesWorkflow["workflow"]; generating?: boolean }) | { state: string; doc_id: string | null };
+  records: MeetingRecordItem[];
+}
+
+export interface MeetingRecordItem {
+  id: number;
+  kind: "recording" | "transcript" | "minutes_draft" | "minutes_approved" | string;
+  label: string;
+  version: number;
+  sha256: string;
+  size_bytes: number | null;
+  content_type: string | null;
+  filename: string | null;
+  archive_doc_id: string | null;
+  created_by: string | null;
+  created_at: string | null;
+  download_url: string;
+  view_url: string | null;
 }
 
 export interface ReviewItem {
@@ -116,6 +134,7 @@ export interface ReviewItem {
   title: string | null;
   sensitivity: string;
   ocr_confidence: number | null;
+  review_reasons: string[];
   page_count: number | null;
   uploaded_by: string | null;
   uploaded_at: string | null;
@@ -133,6 +152,8 @@ export interface ReviewDetail {
   fields: string[];
   metadata: Record<string, string>;
   suggested_source?: string | null;
+  suggested: { doc_type?: string; doc_date?: string; keywords?: string[] };
+  review_reasons: string[];
   pages: { page: number; text: string; ocr_confidence: number | null; source: string }[];
   four_eyes_problem: string | null;
   can_act: boolean;
@@ -167,6 +188,7 @@ export interface MinutesWorkflow {
     decision_id: number | null;
     description: string;
     owner: string | null;
+    division: string | null;
     due_date: string | null;
     status: string;
     source: string | null;
@@ -229,7 +251,7 @@ export interface BriefingPayload {
     agenda_item: string | null;
     text: string;
     minutes_doc_id: string | null;
-    actions: { description: string; owner: string | null; due_date: string | null; status: string }[];
+    actions: { description: string; owner: string | null; division?: string | null; due_date: string | null; status: string }[];
   }[];
 }
 
@@ -293,6 +315,7 @@ export interface AiOverview {
   tasks: string[];
   providers: Record<string, string[]>;
   configured: Record<string, boolean>;
+  diarization: { provider: string; enabled: boolean; detail: string | null; ready: boolean; issues: string[] };
   history: {
     id: number;
     task: string;

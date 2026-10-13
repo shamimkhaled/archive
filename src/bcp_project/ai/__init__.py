@@ -152,6 +152,8 @@ def embed(inputs: List[str], *, sensitivity: Optional[str] = None, route: Option
     if not egress.allows(route.provider, sensitivity):
         incr("ai_egress_blocked", labels={"task": "embed", "action": "blocked"})
         raise EgressBlocked("embed", route.provider, egress.max_sensitivity([sensitivity]))
+    # Hosted embedding APIs reject empty strings; keep positions aligned with a placeholder.
+    inputs = [text if (text or "").strip() else "(empty)" for text in inputs]
     started = time.perf_counter()
     provider = embedding_provider(route.provider)
     size = embed_batch_size()

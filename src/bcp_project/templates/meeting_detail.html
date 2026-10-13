@@ -341,7 +341,7 @@
     {% if actions %}
     <h3>Actions</h3>
     <table class="data-table">
-        <thead><tr><th>Action</th><th>Owner</th><th>Due</th><th>Status</th>{% if items_open %}<th></th>{% endif %}</tr></thead>
+        <thead><tr><th>Action</th><th>Owner</th><th>Responsible division</th><th>Due</th><th>Status</th>{% if items_open %}<th></th>{% endif %}</tr></thead>
         <tbody>
         {% for a in actions %}
         <tr>
@@ -353,6 +353,7 @@
                     <form action="/meetings/{{ meeting.id }}/actions/{{ a.id }}/edit" method="post" class="form-grid">
                         <textarea name="description" rows="2" required minlength="3" aria-label="Action">{{ a.description }}</textarea>
                         <input type="text" name="owner" value="{{ a.owner or '' }}" placeholder="Owner" aria-label="Owner">
+                        <input type="text" name="division" value="{{ a.division or '' }}" placeholder="Responsible division" aria-label="Responsible division">
                         <input type="date" name="due_date" value="{{ a.due_date.isoformat() if a.due_date else '' }}" aria-label="Due date">
                         <select name="decision_id" aria-label="Linked decision">
                             <option value="">No linked decision</option>
@@ -364,6 +365,7 @@
                 {% endif %}
             </td>
             <td>{{ a.owner or '—' }}</td>
+            <td>{{ a.division or '—' }}</td>
             <td>{{ a.due_date.isoformat() if a.due_date else '—' }}</td>
             <td>
                 <form action="/meetings/{{ meeting.id }}/actions/{{ a.id }}/status" method="post" class="inline-form">
@@ -398,6 +400,7 @@
             <h3>Add action</h3>
             <textarea name="description" rows="2" required minlength="3" placeholder="Prepare…" aria-label="Action"></textarea>
             <input type="text" name="owner" placeholder="Owner" aria-label="Owner">
+            <input type="text" name="division" placeholder="Responsible division" aria-label="Responsible division">
             <input type="date" name="due_date" aria-label="Due date">
             <select name="decision_id" aria-label="Linked decision">
                 <option value="">No linked decision</option>

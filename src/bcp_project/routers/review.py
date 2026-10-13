@@ -21,11 +21,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..access_control import assert_can_view, write_audit
 from ..brand import BRAND
 from ..config import is_production
+from ..document_types import normalize_document_type
 from ..deps import _client_ip, _load_document_or_404, _load_stored_pdf_bytes, get_current_user, get_db, require_role, templates
 from ..jobs.outbox import notify_outbox
 from ..models import DocumentRecord, DocumentVersion, Role, User
 from ..pdf_delivery import is_initial_request, pdf_response, stamped_pdf
 from ..services.document_versions import METADATA_FIELDS, list_versions, version_payload
+from ..services.metadata_suggest import REASON_LABELS
 from ..services.ingest import (
     INGEST_INDEXED,
     INGEST_QUEUED,
@@ -77,6 +79,7 @@ async def pending_queue(db: AsyncSession, limit: int = 200) -> List[Dict[str, An
             "title": doc.title or (doc.suggested_metadata or {}).get("title"),
             "sensitivity": doc.sensitivity,
             "ocr_confidence": doc.ocr_confidence,
+            "review_reasons": review_reason_labels(doc.suggested_metadata),
             "page_count": doc.page_count,
             "uploaded_by": ver.created_by,
             "uploaded_at": ver.created_at.isoformat() if ver.created_at else None,
@@ -84,6 +87,19 @@ async def pending_queue(db: AsyncSession, limit: int = 200) -> List[Dict[str, An
         }
         for ver, doc in rows
     ]
+
+
+def review_reason_labels(suggested: Optional[Dict[str, Any]]) -> List[str]:
+    reasons = (suggested or {}).get("_review_reasons") or []
+    return [REASON_LABELS.get(r, r) for r in reasons]
+
+
+def _source_label(source: Optional[Dict[str, Any]]) -> Optional[str]:
+    if not source:
+        return None
+    if source.get("kind") == "ai":
+        return f"AI ({source.get('provider') or '?'} / {source.get('model') or '?'})"
+    return "rules (AI unavailable)"
 
 
 async def _pending_version(db: AsyncSession, doc_id: str, version: Optional[int]) -> DocumentVersion:
@@ -146,7 +162,9 @@ async def api_review_detail(
         "uploaded_by": ver.created_by,
         "fields": list(METADATA_FIELDS),
         "metadata": {field: getattr(document, field) or suggested.get(field) or "" for field in METADATA_FIELDS},
-        "suggested_source": suggested.get("_source"),
+        "suggested_source": _source_label(suggested.get("_source")),
+        "suggested": {field: suggested.get(field) for field in ("doc_type", "doc_date", "keywords") if suggested.get(field)},
+        "review_reasons": review_reason_labels(suggested),
         "pages": [
             {"page": p.page_number, "text": p.text or "", "ocr_confidence": p.ocr_confidence, "source": p.source}
             for p in pages
@@ -202,7 +220,9 @@ async def review_detail_page(
             "version": ver,
             "pages": pages,
             "metadata": metadata,
-            "suggested_source": suggested.get("_source"),
+            "suggested_source": (suggested.get("_source") or {}).get("kind"),
+            "suggested_type": suggested.get("doc_type") or "",
+            "review_reasons": review_reason_labels(suggested),
             "fields": METADATA_FIELDS,
             "four_eyes_problem": _four_eyes_problem(current_user, ver),
             "can_act": ver.status == VERSION_PENDING_REVIEW,
@@ -274,6 +294,10 @@ async def review_approve(
         if value != getattr(document, field):
             changed.append(field)
         setattr(document, field, value)
+    new_type = normalize_document_type(str(form.get("doc_type") or ""))
+    if new_type and new_type != document.doc_type:
+        changed.append("doc_type")
+        document.doc_type = new_type
     document.metadata_confirmed_by = current_user.username
     document.metadata_confirmed_at = now
     document.reviewed_by = current_user.username

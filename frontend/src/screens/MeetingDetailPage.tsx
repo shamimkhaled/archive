@@ -191,11 +191,21 @@ export function MeetingDetailPage() {
 
           <h2>Actions</h2>
           <table className="table">
+            <thead>
+              <tr>
+                <th>Action</th>
+                <th>Owner</th>
+                <th>Responsible division</th>
+                <th>Due</th>
+                <th>Status</th>
+              </tr>
+            </thead>
             <tbody>
               {workflow.data.actions.map((action) => (
                 <tr key={action.id}>
                   <td>{action.description}</td>
                   <td>{action.owner ?? "—"}</td>
+                  <td>{action.division ?? "—"}</td>
                   <td>{action.due_date ?? "—"}</td>
                   <td>
                     <select
@@ -218,9 +228,55 @@ export function MeetingDetailPage() {
             <form className="inline-form" onSubmit={(event) => act.mutate({ path: "/actions", fields: formFields(event) })}>
               <input name="description" placeholder="Action" required minLength={3} />
               <input name="owner" placeholder="Owner" />
+              <input name="division" placeholder="Responsible division" />
               <input name="due_date" type="date" />
               <button type="submit">Add action</button>
             </form>
+          )}
+        </div>
+      )}
+
+      {m.is_organizer && (
+        <div className="card">
+          <h2>Archive records</h2>
+          {m.records.length === 0 ? (
+            <p className="muted">The recording, transcript, and each minutes version are sealed here as they are produced.</p>
+          ) : (
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Record</th>
+                  <th>Version</th>
+                  <th>Sealed</th>
+                  <th>SHA-256</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {m.records.map((record) => (
+                  <tr key={record.id}>
+                    <td>{record.label}</td>
+                    <td>v{record.version}</td>
+                    <td>
+                      {record.created_at?.slice(0, 16).replace("T", " ")}
+                      {record.created_by ? ` · ${record.created_by}` : ""}
+                    </td>
+                    <td className="mono small" title={record.sha256}>
+                      {record.sha256.slice(0, 16)}…
+                    </td>
+                    <td>
+                      <a href={record.download_url}>Download</a>
+                      {record.view_url && (
+                        <>
+                          {" · "}
+                          <Link to={record.view_url}>View</Link>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
         </div>
       )}

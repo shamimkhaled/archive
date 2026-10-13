@@ -14,6 +14,7 @@ from ..deps import _client_ip, _load_document_or_404, get_current_user, get_db, 
 from ..models import BoardBriefing, DocumentRecord, MeetingDocument, Role, User
 from ..services.briefing import STATE_APPROVED
 from ..services.ingest import ai_provenance_label
+from ..services.meeting_records import list_records, record_payload
 from ..spa import enabled_screens, serve_spa
 from .meeting_common import _load_meeting_or_404, _minutes_view, _parse_agenda_items, _require_invited_or_404
 
@@ -71,6 +72,11 @@ async def app_document(
         "page_count": document.page_count,
         "current_version": document.current_version,
         "provenance": ai_provenance_label(document.summary_json),
+        "metadata_status": (
+            "confirmed"
+            if document.metadata_confirmed_by
+            else "ai_unconfirmed" if (document.suggested_metadata or {}).get("_applied") else None
+        ),
         "seal_text": BRAND.seal(current_user.username),
         "file_url": f"/view/{doc_id}/file",
         "download_url": f"/download/{doc_id}" if can_download else None,
@@ -142,6 +148,7 @@ async def app_meeting(
             for d in documents
         ],
         "minutes": minutes,
+        "records": [record_payload(r) for r in await list_records(db, meeting_id)] if organizer else [],
     }
 
 

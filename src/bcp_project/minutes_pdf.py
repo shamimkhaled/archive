@@ -172,7 +172,7 @@ def render_minutes_pdf(**kwargs) -> Tuple[bytes, List[str]]:
     """Return (pdf_bytes, page_texts) where ``page_texts[i]`` is the text on page i+1.
 
     Keyword arguments: title, body_md, meeting_date, location, version, approved_by,
-    approved_at, sha256. Shaped Bangla is tried first; if shaping fails on some input the
+    approved_at, sha256, and optionally label (footer wording, e.g. "Meeting transcript"). Shaped Bangla is tried first; if shaping fails on some input the
     PDF is rendered unshaped rather than blocking approval.
     """
     if _can_shape():
@@ -194,6 +194,7 @@ def _render(
     approved_by: str,
     approved_at: datetime,
     sha256: str,
+    label: str = "Approved minutes",
 ) -> Tuple[bytes, List[str]]:
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4
@@ -249,7 +250,7 @@ def _render(
         return Paragraph(markup, style, **kwargs)
 
     footer = (
-        f"Approved minutes v{version} · approved by {approved_by} on {approved_at.strftime('%Y-%m-%d %H:%M')} UTC · "
+        f"{label} v{version} · approved by {approved_by} on {approved_at.strftime('%Y-%m-%d %H:%M')} UTC · "
         f"SHA-256 {sha256[:16]}…"
     )
 
@@ -311,7 +312,7 @@ def _render(
         rightMargin=18 * mm,
         topMargin=18 * mm,
         bottomMargin=18 * mm,
-        title=f"Minutes — {title}",
+        title=f"{'Minutes' if label == 'Approved minutes' else label} — {title}",
         author=approved_by,
     )
     doc.build(story, onFirstPage=on_page, onLaterPages=on_page)

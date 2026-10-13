@@ -243,11 +243,13 @@ async def run_meeting_transcribe(meeting_id: int, source: str | None = None) -> 
     chunks: List[Path] = []
     recording = recording_path(mid) if source != "live" else None
     if recording is not None:
+        original = recording
         audio_path = await asyncio.to_thread(normalize_recording, mid, recording)
     else:
         chunks = list_chunk_paths(mid)
         merged = merge_chunks(mid)
         audio_path = merged or (session_audio_path(mid) if session_audio_path(mid).exists() else None)
+        original = audio_path
 
     if audio_path is None and chunks:
         raw_segments: List[Dict[str, Any]] = []
@@ -303,6 +305,21 @@ async def run_meeting_transcribe(meeting_id: int, source: str | None = None) -> 
         if (meeting.transcription_status or "") == TRANSCRIPTION_PROCESSING:
             meeting.transcription_status = TRANSCRIPTION_STOPPED
         await session.commit()
+        if original is not None and original.exists():
+            from ..services.meeting_records import seal_recording
+
+            try:
+                await seal_recording(
+                    session,
+                    mid,
+                    original,
+                    created_by=meeting.transcription_started_by or "system",
+                    filename=meeting.recording_filename if recording is not None else f"live-session{original.suffix}",
+                )
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                logger.exception("Sealing the recording for meeting %s failed; the transcript is kept", mid)
         logger.info(
             "Meeting %s transcription complete (%s segments, %s chunks)",
             mid,

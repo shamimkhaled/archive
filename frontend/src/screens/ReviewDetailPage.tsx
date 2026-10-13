@@ -61,6 +61,7 @@ export function ReviewDetailPage() {
         {review.ocr_confidence != null ? ` · OCR confidence ${Math.round(review.ocr_confidence)}%` : ""}
       </p>
       {review.four_eyes_problem && <p className="notice warn">{review.four_eyes_problem}</p>}
+      {review.review_reasons.length > 0 && <p className="notice">Sent for verification: {review.review_reasons.join("; ")}.</p>}
       {act.data && !act.data.ok && <p className="error">{act.data.error ?? "The action was not accepted."}</p>}
 
       <form onSubmit={approve} className="review-grid">
@@ -82,6 +83,13 @@ export function ReviewDetailPage() {
         <div className="review-edit">
           <fieldset>
             <legend>Confirmed metadata</legend>
+            <label>
+              Document type
+              {review.suggested.doc_type && review.suggested.doc_type.toLowerCase() !== review.doc_type.toLowerCase()
+                ? ` (AI suggests ${review.suggested.doc_type})`
+                : ""}
+              <input name="doc_type" defaultValue={review.doc_type} disabled={!review.can_act} />
+            </label>
             {review.fields.map((field) => (
               <label key={field}>
                 {FIELD_LABELS[field] ?? field}

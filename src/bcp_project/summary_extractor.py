@@ -1,4 +1,5 @@
 import json
+import os
 import re
 from typing import Any, Dict, List, Optional
 
@@ -102,7 +103,7 @@ def _extract_json(text: str) -> str:
     return candidate
 
 
-def _build_prompt(text: str) -> str:
+def _build_prompt() -> str:
     return (
         "You are building a structured executive summary for a PDF document.\n"
         "Return only valid JSON.\n"
@@ -130,19 +131,22 @@ def _build_prompt(text: str) -> str:
         "  \"finance_and_admin\": [\"\"],\n"
         "  \"searchable_keywords\": [\"\"]\n"
         "}\n"
-        "Document text:\n" + text
     )
 
 
 def extract_document_summary(text: str, *, sensitivity: Optional[str] = None) -> DocumentSummary:
     from . import ai
+    from .ai.guard import with_rules, wrap_untrusted
 
     raw = ai.chat(
         "summary",
-        [{"role": "user", "content": _build_prompt(text)}],
+        [
+            {"role": "system", "content": with_rules(_build_prompt())},
+            {"role": "user", "content": "Document text:\n" + wrap_untrusted(text, "document")},
+        ],
         sensitivity=sensitivity,
         temperature=0,
-        max_tokens=1500,
+        max_tokens=int(os.getenv("SUMMARY_MAX_TOKENS") or 1500),
         json_mode=True,
     )
     payload = _extract_json(raw)

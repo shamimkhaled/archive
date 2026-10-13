@@ -37,6 +37,11 @@ export function ViewerPage() {
           <h1>{doc.title || doc.doc_id}</h1>
           <p className="muted">
             {[doc.doc_type, doc.doc_date, doc.department, doc.reference_number, doc.provenance].filter(Boolean).join(" · ")}
+            {doc.metadata_status === "ai_unconfirmed" && (
+              <span className="chip warn" title="Filled in by AI from the document text; not yet confirmed by a reviewer">
+                AI-extracted metadata, unconfirmed
+              </span>
+            )}
           </p>
         </div>
         <div className="actions">

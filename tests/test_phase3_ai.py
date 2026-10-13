@@ -129,6 +129,20 @@ def test_summary_records_provider_and_skips_when_blocked(monkeypatch, cloud_call
     assert len(cloud_calls) == 1
 
 
+def test_summary_provider_error_indexes_without_summary(monkeypatch, cloud_calls):
+    from bcp_project.ai.providers import OpenAICompatibleChat
+    from bcp_project.services.ingest import ai_provenance_label, summarize_with_provenance
+
+    def out_of_credits(self, **_):
+        raise RuntimeError("Error code: 402 - requires more credits")
+
+    monkeypatch.setattr(OpenAICompatibleChat, "complete", out_of_credits)
+    summary, prov = summarize_with_provenance("Board meeting text", "internal")
+    assert prov["summary"] == "failed" and "402" in prov["error"]
+    assert summary.searchable_keywords == []
+    assert ai_provenance_label({"_ai": prov}) == "AI summary unavailable (model provider error)"
+
+
 def test_stub_embeddings_are_deterministic_and_sized(monkeypatch):
     monkeypatch.setenv("AI_EMBED_PROVIDER", "stub")
     assert routing.embed_dimension() == 256

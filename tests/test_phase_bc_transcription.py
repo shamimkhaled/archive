@@ -45,6 +45,24 @@ def test_generate_minutes_template_fallback(monkeypatch):
     assert "Board sitting" in draft["body_md"]
     assert "The minutes are confirmed." in draft["body_md"]
     assert "Draft minutes" in draft["body_md"]
+    assert "## Discussion points" in draft["body_md"]
+    assert "| Action | Owner | Responsible division | Due |" in draft["body_md"]
+
+
+def test_llm_minutes_prompt_asks_for_discussion_points_and_division(monkeypatch):
+    import bcp_project.ai as ai
+    from bcp_project.minutes_draft import _llm_minutes
+
+    seen = {}
+
+    def fake_chat(task, messages, **kw):
+        seen["system"] = messages[0]["content"]
+        return "## Discussion points\n- ok"
+
+    monkeypatch.setattr(ai, "chat", fake_chat)
+    body = _llm_minutes(title="T", scheduled_at=None, location=None, agenda="", transcript="Chair: hi", sensitivity="internal")
+    assert body.startswith("## Discussion points")
+    assert "Discussion points" in seen["system"] and "Responsible division" in seen["system"]
 
 
 def test_minutes_payload_flags():

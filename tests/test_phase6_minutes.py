@@ -261,15 +261,18 @@ async def test_approval_route_archives_and_indexes_only_approved_minutes(maker, 
     async with maker() as db:
         resp = await routes.approve_minutes(_request(), 12, tasks, current_user=chair, db=db)
         assert "minutes_approved" in resp.headers["location"]
-    assert len(tasks.tasks) == 1 and ("meeting.minutes_approved" in [n for n, _ in offline.published])
+    # Minutes and the transcript (TRN-12) are both archived and dispatched for indexing.
+    assert len(tasks.tasks) == 2 and ("meeting.minutes_approved" in [n for n, _ in offline.published])
 
     # The staged ingest skips OCR (version is reviewed) and indexes the approved text.
     assert await run_document_ingest("MIN-12", version=1, session_factory=maker) == "indexed"
     async with maker() as db:
         meeting = await db.get(BoardMeeting, 12)
-        doc = (await db.execute(select(DocumentRecord))).scalar_one()
-        ver = (await db.execute(select(DocumentVersion))).scalar_one()
-        pages = (await db.execute(select(DocumentPage).order_by(DocumentPage.page_number))).scalars().all()
+        doc = (await db.execute(select(DocumentRecord).where(DocumentRecord.doc_id == "MIN-12"))).scalar_one()
+        ver = (await db.execute(select(DocumentVersion).where(DocumentVersion.doc_id == "MIN-12"))).scalar_one()
+        pages = (
+            await db.execute(select(DocumentPage).where(DocumentPage.doc_id == "MIN-12").order_by(DocumentPage.page_number))
+        ).scalars().all()
         audit = [a.action for a in (await db.execute(select(AuditLog).order_by(AuditLog.id))).scalars()]
     assert meeting.minutes_state == "approved" and meeting.minutes_doc_id == "MIN-12"
     assert meeting.minutes_source == "edited" and meeting.minutes_edited_by == "sec"
@@ -300,9 +303,92 @@ async def test_approval_route_archives_and_indexes_only_approved_minutes(maker, 
         assert (await db.get(DocumentRecord, doc.id)).current_version == 1
     assert await run_document_ingest("MIN-12", version=2, session_factory=maker) == "indexed"
     async with maker() as db:
-        versions = {v.version: v.status for v in (await db.execute(select(DocumentVersion))).scalars()}
+        versions = {
+            v.version: v.status
+            for v in (await db.execute(select(DocumentVersion).where(DocumentVersion.doc_id == "MIN-12"))).scalars()
+        }
         assert versions == {1: "superseded", 2: "approved"}
         assert (await db.get(BoardMeeting, 12)).minutes_version == 2
+
+
+@pytest.mark.asyncio
+async def test_meeting_records_seal_recording_transcript_and_every_minutes_version(maker, offline, tmp_path):
+    import hashlib
+    import os
+    import stat
+    from pathlib import Path
+
+    from fastapi import BackgroundTasks
+
+    from bcp_project.models import AuditLog, BoardMeeting, DocumentRecord, MeetingRecord
+    from bcp_project.routers import meeting_minutes as routes
+    from bcp_project.routers import meetings as meeting_routes
+    from bcp_project.services.meeting_records import seal_recording
+
+    audio = tmp_path / "board-12.wav"
+    audio.write_bytes(b"RIFF" + os.urandom(4096))
+    async with maker() as db:
+        db.add(_meeting())
+        await db.flush()
+        first = await seal_recording(db, 12, audio, created_by="sec", filename="সভা-১২.wav")
+        assert (await seal_recording(db, 12, audio, created_by="sec")).id == first.id
+        await db.commit()
+
+    sec, chair = _user("sec"), _user("chair")
+    async with maker() as db:
+        await meeting_routes.save_meeting_minutes(_request(), 12, current_user=sec, db=db, body_md=APPROVED_BODY)
+    async with maker() as db:
+        await routes.submit_minutes(_request(), 12, current_user=sec, db=db)
+    async with maker() as db:
+        await routes.approve_minutes(_request(), 12, BackgroundTasks(), current_user=chair, db=db)
+
+    async with maker() as db:
+        payload = await routes.api_meeting_records(12, current_user=sec, db=db)
+        rows = (await db.execute(select(MeetingRecord))).scalars().all()
+        transcript_doc = (await db.execute(select(DocumentRecord).where(DocumentRecord.doc_id == "TRN-12"))).scalar_one()
+        saved_draft = (await db.get(BoardMeeting, 12)).minutes_draft
+    kinds = {r["kind"] for r in payload["records"]}
+    assert kinds == {"recording", "transcript", "minutes_draft", "minutes_approved"}
+    assert transcript_doc.meeting_id == 12 and transcript_doc.doc_type == "Meeting Transcript"
+    assert {r["archive_doc_id"] for r in payload["records"] if r["kind"] in ("transcript", "minutes_approved")} == {"TRN-12", "MIN-12"}
+
+    for row in rows:
+        stored = (tmp_path / row.file_location) if not os.path.isabs(row.file_location) else Path(row.file_location)
+        assert hashlib.sha256(stored.read_bytes()).hexdigest() == row.sha256
+        assert not stored.stat().st_mode & stat.S_IWUSR
+    draft = next(r for r in rows if r.kind == "minutes_draft")
+    assert hashlib.sha256(saved_draft.encode()).hexdigest() == draft.sha256 and "revised loan policy" in saved_draft
+
+    from bcp_project.intake import WriteOnceViolation, store_write_once
+
+    with pytest.raises(WriteOnceViolation):
+        store_write_once(b"overwrite", draft.file_location, content_type="text/plain", sha256="0" * 64)
+
+    recording = next(r for r in rows if r.kind == "recording")
+    async with maker() as db:
+        resp = await routes.download_meeting_record(_request(), 12, recording.id, current_user=sec, db=db)
+        audit = (await db.execute(select(AuditLog.action))).scalars().all()
+    assert resp.headers["x-content-sha256"] == hashlib.sha256(audio.read_bytes()).hexdigest()
+    assert 'filename="' in resp.headers["content-disposition"] and "meeting_record_download" in audit
+    with pytest.raises(Exception) as missing:
+        async with maker() as db:
+            await routes.download_meeting_record(_request(), 99, recording.id, current_user=sec, db=db)
+    assert getattr(missing.value, "status_code", None) == 404
+
+    # Unchanged transcript is not re-archived on amendment; the new draft is sealed as v2.
+    async with maker() as db:
+        await routes.amend_minutes(_request(), 12, reason="Fix", current_user=_user("root", "admin"), db=db)
+    async with maker() as db:
+        await meeting_routes.save_meeting_minutes(_request(), 12, current_user=sec, db=db, body_md=APPROVED_BODY + "\nAmended.")
+    async with maker() as db:
+        await routes.submit_minutes(_request(), 12, current_user=sec, db=db)
+    async with maker() as db:
+        await routes.approve_minutes(_request(), 12, BackgroundTasks(), current_user=chair, db=db)
+    async with maker() as db:
+        counts = {}
+        for row in (await db.execute(select(MeetingRecord))).scalars():
+            counts[row.kind] = counts.get(row.kind, 0) + 1
+    assert counts == {"recording": 1, "transcript": 1, "minutes_draft": 2, "minutes_approved": 2}
 
 
 @pytest.mark.asyncio
@@ -335,7 +421,7 @@ def test_extraction_keeps_only_items_quoted_from_the_transcript(monkeypatch):
                 {"text": "শাখা পর্যালোচনা অনুমোদন", "evidence": "“বোর্ড শাখা পর্যালোচনা অনুমোদন করেছে।”"},
             ],
             "actions": [
-                {"description": "Circulate branch report", "owner": "CFO", "due_date": "2026-11-30",
+                {"description": "Circulate branch report", "owner": "CFO", "division": " Finance Division ", "due_date": "2026-11-30",
                  "evidence": "Finance will circulate the branch report", "decision_index": 2},
                 {"description": "Invented action", "owner": "MD", "evidence": "nobody said this"},
                 {"description": "Linked to dropped", "evidence": "circulate the branch report by 30 November", "decision_index": 1},
@@ -348,6 +434,7 @@ def test_extraction_keeps_only_items_quoted_from_the_transcript(monkeypatch):
     assert [a["description"] for a in out["actions"]] == ["Circulate branch report", "Linked to dropped"]
     assert out["actions"][0]["due_date"] == date(2026, 11, 30) and out["actions"][0]["decision_index"] == 1
     assert out["actions"][1]["decision_index"] is None
+    assert out["actions"][0]["division"] == "Finance Division" and out["actions"][1]["division"] is None
 
     def blocked(*a, **k):
         raise ai.EgressBlocked("internal_only")
@@ -366,8 +453,12 @@ async def test_replacing_ai_items_never_touches_manual_ones(db_session):
     manual = MeetingDecision(meeting_id=12, seq=1, text="Manual decision", source="manual", created_by="sec")
     db_session.add(manual)
     await db_session.flush()
-    first = {"decisions": [{"text": "AI decision", "evidence": "q"}], "actions": [{"description": "AI action", "decision_index": 0}]}
+    first = {
+        "decisions": [{"text": "AI decision", "evidence": "q"}],
+        "actions": [{"description": "AI action", "division": "ICT Division", "decision_index": 0}],
+    }
     await replace_ai_items(db_session, 12, first)
+    assert (await list_items(db_session, 12))["actions"][0].division == "ICT Division"
     ai_decision = (await db_session.execute(select(MeetingDecision).where(MeetingDecision.source == "ai"))).scalar_one()
     db_session.add(MeetingAction(meeting_id=12, decision_id=ai_decision.id, description="Manual follow-up", created_by="sec"))
     await db_session.flush()
@@ -382,6 +473,7 @@ async def test_replacing_ai_items_never_touches_manual_ones(db_session):
 async def test_decisions_lock_with_minutes_but_action_status_stays_open(maker, offline):
     from bcp_project.models import AuditLog, MeetingAction, MeetingDecision
     from bcp_project.routers import meeting_minutes as routes
+    from bcp_project.services.minutes import action_payload
 
     sec = _user("sec")
     async with maker() as db:
@@ -392,9 +484,12 @@ async def test_decisions_lock_with_minutes_but_action_status_stays_open(maker, o
     async with maker() as db:
         decision = (await db.execute(select(MeetingDecision))).scalar_one()
         await routes.add_action(
-            _request(), 12, description="Publish budget", owner="CFO", due_date="2026-12-01",
+            _request(), 12, description="Publish budget", owner="CFO", division="Finance Division", due_date="2026-12-01",
             decision_id=str(decision.id), current_user=sec, db=db,
         )
+    async with maker() as db:
+        payload = action_payload((await db.execute(select(MeetingAction))).scalar_one())
+        assert payload["division"] == "Finance Division" and payload["owner"] == "CFO"
     async with maker() as db:
         await routes.submit_minutes(_request(), 12, current_user=sec, db=db)
     async with maker() as db:

@@ -226,7 +226,7 @@ class LocalWhisperStt:
 
         from ..asr import transcribe_local
 
-        return transcribe_local(Path(path))
+        return transcribe_local(Path(path), language=language, model=model)
 
 
 # ``\w`` alone splits Bangla words at vowel signs and the virama.

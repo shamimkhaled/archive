@@ -12,6 +12,7 @@ from ..aws_utils import probe_s3, storage_backend_name
 from ..config import is_production
 from ..db import engine, get_session
 from ..deps import STATIC_DIR, UPLOAD_DIR
+from ..diarization import diarization_status
 from ..jobs.queue import stream_stats
 from ..models import OutboxEvent
 from ..observability import metrics_access, render_prometheus, set_gauge
@@ -90,10 +91,12 @@ async def readyz() -> Dict[str, Any]:
         raise HTTPException(status_code=503, detail=f"database unavailable: {exc}") from exc
 
     storage = storage_backend_name()
+    diarization = diarization_status()
     payload: Dict[str, Any] = {
         "status": "ready",
         "storage": storage,
         "upload_dir": str(UPLOAD_DIR),
+        "diarization": {k: diarization[k] for k in ("provider", "ready", "issues")},
     }
     if storage == "s3":
         payload["s3"] = probe_s3()

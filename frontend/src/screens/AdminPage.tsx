@@ -196,6 +196,23 @@ function AiRoutes() {
             </button>
           </form>
           <p className="muted small">Embedding routes change only through a reindex behind the collection alias.</p>
+          <p>
+            Speaker identification:{" "}
+            {ai.data.diarization.enabled ? (
+              <>
+                <span className="mono">{ai.data.diarization.provider}</span>
+                {ai.data.diarization.detail && <span className="mono"> · {ai.data.diarization.detail}</span>}{" "}
+                <span className={ai.data.diarization.ready ? "chip" : "chip warn"}>{ai.data.diarization.ready ? "configured" : "needs attention"}</span>
+              </>
+            ) : (
+              <span className="muted">off (DIARIZATION_PROVIDER=none)</span>
+            )}
+          </p>
+          {ai.data.diarization.issues.map((issue) => (
+            <p key={issue} className="notice warn">
+              {issue}
+            </p>
+          ))}
         </>
       )}
     </div>

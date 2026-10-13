@@ -38,6 +38,30 @@ def diarization_enabled() -> bool:
     return diarization_provider() != "none"
 
 
+def diarization_status() -> Dict[str, Any]:
+    """Configuration check for the admin page and /readyz. Loads no model and imports nothing:
+    diarization runs on the meeting worker, not the web process that answers these."""
+    provider = diarization_provider()
+    issues: List[str] = []
+    detail: Optional[str] = None
+    if provider == "pyannote":
+        detail = os.getenv("DIARIZATION_MODEL") or "pyannote/speaker-diarization-3.1"
+        local_copy = detail.startswith(("/", "."))
+        if not local_copy and not (os.getenv("HF_TOKEN") or "").strip():
+            issues.append("HF_TOKEN is not set; the gated pyannote model cannot be downloaded")
+    elif provider == "http":
+        detail = (os.getenv("DIARIZATION_URL") or "").strip() or None
+        if not detail:
+            issues.append("DIARIZATION_URL is not set")
+    return {
+        "provider": provider,
+        "enabled": provider != "none",
+        "detail": detail,
+        "ready": provider != "none" and not issues,
+        "issues": issues,
+    }
+
+
 def _turn(start: Any, end: Any, speaker: Any) -> Optional[Dict[str, Any]]:
     try:
         s, e = float(start), float(end)

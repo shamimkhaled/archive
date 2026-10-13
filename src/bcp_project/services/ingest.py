@@ -23,7 +23,9 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .. import ai
+from ..ai.guard import injection_signals
 from ..models import DocumentPage, DocumentRecord, DocumentVersion
+from .metadata_suggest import apply_suggestions, metadata_review_reasons
 
 logger = logging.getLogger("bcp_project.services.ingest")
 
@@ -120,7 +122,7 @@ def ingest_status_payload(document: DocumentRecord, job: Optional[Any] = None) -
 
 
 def summarize_with_provenance(text: str, sensitivity: Optional[str]) -> Tuple[Any, Dict[str, Any]]:
-    """Run the summary model; when policy blocks it, return an empty summary instead of failing."""
+    """Run the summary model; when policy blocks it or the provider fails, return an empty summary instead of failing."""
     from ..summary_extractor import DocumentSummary, extract_document_summary
 
     try:
@@ -128,6 +130,16 @@ def summarize_with_provenance(text: str, sensitivity: Optional[str]) -> Tuple[An
     except ai.EgressBlocked as exc:
         logger.warning("Summary skipped by egress policy: %s", exc)
         return DocumentSummary(), {"summary": "skipped_egress_policy", "policy": ai.egress_policy()}
+    except Exception as exc:
+        logger.exception("Summary model call failed; indexing without an AI summary")
+        call = ai.last_call() or {}
+        return DocumentSummary(), {
+            "summary": "failed",
+            "error": str(exc)[:500],
+            "provider": call.get("provider"),
+            "model": call.get("model"),
+            "at": datetime.utcnow().isoformat() + "Z",
+        }
     call = ai.last_call() or {}
     return summary, {
         "summary": "ai",
@@ -169,17 +181,25 @@ def ai_provenance_label(summary_json: Optional[Dict[str, Any]]) -> str:
     info = (summary_json or {}).get("_ai") or {}
     if info.get("summary") == "skipped_egress_policy":
         return "AI summary withheld by egress policy"
+    if info.get("summary") == "failed":
+        return "AI summary unavailable (model provider error)"
     if info.get("provider"):
         return f"AI summary: {info['provider']} / {info.get('model') or '?'}"
     return ""
 
 
-def index_summary_vector(qdrant: Any, doc_id: str, payload: Dict[str, Any], sensitivity: Optional[str]) -> bool:
-    """Embed and upsert the summary point. False when egress policy keeps it out of the vector index."""
+def index_summary_vector(
+    qdrant: Any, doc_id: str, payload: Dict[str, Any], sensitivity: Optional[str], fallback_text: str = ""
+) -> bool:
+    """Embed and upsert the summary point. False when egress policy keeps it out of the vector index.
+
+    ``fallback_text`` is embedded when the AI summary is empty (model failed or was skipped).
+    """
     from ..qdrant_store import build_summary_embedding_text, embed_texts
 
+    text = build_summary_embedding_text(payload).strip() or fallback_text.strip() or doc_id
     try:
-        vector = embed_texts([build_summary_embedding_text(payload)], sensitivity=sensitivity)[0]
+        vector = embed_texts([text], sensitivity=sensitivity)[0]
     except ai.EgressBlocked as exc:
         logger.warning("Summary vector skipped for %s: %s", doc_id, exc)
         return False
@@ -292,17 +312,27 @@ async def run_document_ingest(doc_id: str, *, version: Optional[int] = None, ses
             if ver.status != VERSION_REVIEWED:
                 await set_ingest_status(db, document, INGEST_PARSING)
                 confidence = await _extract(db, document, ver)
-                if confidence["needs_review"]:
+                reasons = []
+                if confidence.get("bangla_suspect_pages"):
+                    reasons.append("bangla_ocr_suspect")
+                if confidence["needs_review"] and not reasons:
+                    reasons.append("low_ocr_confidence")
+                reasons += metadata_review_reasons(document, document.suggested_metadata)
+                if reasons:
+                    document.suggested_metadata = {**(document.suggested_metadata or {}), "_review_reasons": reasons}
                     ver.status = VERSION_PENDING_REVIEW
                     if document.current_version == ver.version:
                         document.verification_status = "pending"
                     await set_ingest_status(db, document, INGEST_NEEDS_REVIEW)
                     publish_event(
                         "document.needs_review",
-                        {"doc_id": doc_id, "version": ver.version, "confidence": confidence["mean"]},
+                        {"doc_id": doc_id, "version": ver.version, "confidence": confidence["mean"], "reasons": reasons},
                     )
-                    logger.info("%s v%s needs review (OCR confidence %s)", doc_id, ver.version, confidence)
+                    logger.info("%s v%s needs review (%s; OCR %s)", doc_id, ver.version, ", ".join(reasons), confidence)
                     return INGEST_NEEDS_REVIEW
+                applied = apply_suggestions(document, document.suggested_metadata)
+                if applied:
+                    document.suggested_metadata = {**(document.suggested_metadata or {}), "_applied": applied}
             pages = await load_pages(db, doc_id, ver.version)
             if not any((p.text or "").strip() for p in pages):
                 raise ValueError("Could not extract text from the document")
@@ -342,13 +372,22 @@ async def index_version(db: AsyncSession, document: DocumentRecord, ver: Documen
         summarize_pages_with_provenance, [(p.page_number, p.text or "") for p in pages], sensitivity
     )
     payload = build_summary_payload(doc_id, document.doc_type, document.doc_date.isoformat(), summary)
+    signals = sorted({s for p in pages for s in injection_signals(p.text or "")})
+    if signals:
+        provenance["injection_signals"] = signals
 
     await set_ingest_status(db, document, INGEST_INDEXING)
     acl = {**search_payload(document), "version": ver.version}
     qdrant = make_qdrant_indexer()
     await asyncio.to_thread(qdrant.create_collections)
     await asyncio.to_thread(qdrant.delete_document_chunks, doc_id)
-    if await asyncio.to_thread(index_summary_vector, qdrant, doc_id, {**payload, **acl}, sensitivity):
+    fallback_text = "\n".join(
+        [str(v) for v in (document.title, document.doc_type, document.reference_number, document.doc_date) if v]
+        + [(p.text or "") for p in pages[:2]]
+    )[:4000]
+    if await asyncio.to_thread(
+        index_summary_vector, qdrant, doc_id, {**payload, **acl}, sensitivity, fallback_text
+    ):
         page_payloads = [
             {
                 "text": p.text,

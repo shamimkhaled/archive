@@ -14,16 +14,16 @@
       "mean_confidence": 90.5741,
       "latency_ms": {
         "n": 120,
-        "p50": 2242.2,
-        "p95": 3267.5,
-        "mean": 2356.1,
-        "max": 5798.6
+        "p50": 2492.5,
+        "p95": 3128.3,
+        "mean": 2478.6,
+        "max": 3783.1
       },
       "correction_minutes_est_per_page": 0.3758,
       "review_routing": {
         "high_error_pages": 3,
-        "high_error_caught": 0,
-        "flagged_pages": 0
+        "high_error_caught": 3,
+        "flagged_pages": 8
       }
     },
     "by_lang": {
@@ -35,16 +35,16 @@
         "mean_confidence": 89.9368,
         "latency_ms": {
           "n": 60,
-          "p50": 2305.8,
-          "p95": 4154.6,
-          "mean": 2498.1,
-          "max": 5798.6
+          "p50": 2562.2,
+          "p95": 3065.0,
+          "mean": 2557.5,
+          "max": 3570.8
         },
         "correction_minutes_est_per_page": 0.4177,
         "review_routing": {
           "high_error_pages": 3,
-          "high_error_caught": 0,
-          "flagged_pages": 0
+          "high_error_caught": 3,
+          "flagged_pages": 8
         }
       },
       "en": {
@@ -55,10 +55,10 @@
         "mean_confidence": 91.2113,
         "latency_ms": {
           "n": 60,
-          "p50": 2114.5,
-          "p95": 2963.8,
-          "mean": 2214.1,
-          "max": 3226.0
+          "p50": 2392.0,
+          "p95": 3165.1,
+          "mean": 2399.7,
+          "max": 3783.1
         },
         "correction_minutes_est_per_page": 0.3338,
         "review_routing": {
@@ -78,16 +78,16 @@
       "mean_confidence": 90.7415,
       "latency_ms": {
         "n": 40,
-        "p50": 1851.8,
-        "p95": 2777.7,
-        "mean": 1992.8,
-        "max": 3657.2
+        "p50": 2024.8,
+        "p95": 3335.6,
+        "mean": 2160.4,
+        "max": 3570.8
       },
       "correction_minutes_est_per_page": 0.3738,
       "review_routing": {
         "high_error_pages": 1,
-        "high_error_caught": 0,
-        "flagged_pages": 0
+        "high_error_caught": 1,
+        "flagged_pages": 3
       }
     },
     "poor": {
@@ -98,16 +98,16 @@
       "mean_confidence": 90.0877,
       "latency_ms": {
         "n": 40,
-        "p50": 2351.6,
-        "p95": 4154.6,
-        "mean": 2554.6,
-        "max": 5798.6
+        "p50": 2615.2,
+        "p95": 3055.7,
+        "mean": 2655.0,
+        "max": 3756.9
       },
       "correction_minutes_est_per_page": 0.3825,
       "review_routing": {
         "high_error_pages": 1,
-        "high_error_caught": 0,
-        "flagged_pages": 0
+        "high_error_caught": 1,
+        "flagged_pages": 3
       }
     },
     "scan": {
@@ -118,16 +118,16 @@
       "mean_confidence": 90.893,
       "latency_ms": {
         "n": 40,
-        "p50": 2452.5,
-        "p95": 3267.5,
-        "mean": 2520.9,
-        "max": 4220.8
+        "p50": 2558.5,
+        "p95": 3065.0,
+        "mean": 2620.4,
+        "max": 3783.1
       },
       "correction_minutes_est_per_page": 0.371,
       "review_routing": {
         "high_error_pages": 1,
-        "high_error_caught": 0,
-        "flagged_pages": 0
+        "high_error_caught": 1,
+        "flagged_pages": 2
       }
     }
   },
@@ -143,11 +143,11 @@
       "wer": 0.07407407407407407,
       "edits": 11,
       "ref_chars": 166,
-      "latency_ms": 2515.8,
-      "flagged_for_review": false,
+      "latency_ms": 2528.3,
+      "flagged_for_review": true,
       "correction_minutes_est": 0.57,
       "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "bangla_suspect_words": 1
     },
     {
       "id": "SB-EVAL-019-p2-poor",
@@ -160,11 +160,11 @@
       "wer": 0.17857142857142858,
       "edits": 11,
       "ref_chars": 181,
-      "latency_ms": 2112.0,
-      "flagged_for_review": false,
+      "latency_ms": 2662.1,
+      "flagged_for_review": true,
       "correction_minutes_est": 0.6,
       "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "bangla_suspect_words": 1
     },
     {
       "id": "SB-EVAL-019-p2-clean",
@@ -177,11 +177,11 @@
       "wer": 0.14285714285714285,
       "edits": 10,
       "ref_chars": 181,
-      "latency_ms": 1668.3,
-      "flagged_for_review": false,
+      "latency_ms": 3369.8,
+      "flagged_for_review": true,
       "correction_minutes_est": 0.57,
       "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "bangla_suspect_words": 1
     },
     {
       "id": "SB-EVAL-014-p2-poor",
@@ -194,11 +194,10 @@
       "wer": 0.18518518518518517,
       "edits": 7,
       "ref_chars": 156,
-      "latency_ms": 1982.5,
+      "latency_ms": 2705.9,
       "flagged_for_review": false,
       "correction_minutes_est": 0.53,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-018-p2-poor",
@@ -211,11 +210,11 @@
       "wer": 0.08695652173913043,
       "edits": 6,
       "ref_chars": 151,
-      "latency_ms": 2314.5,
-      "flagged_for_review": false,
+      "latency_ms": 2746.7,
+      "flagged_for_review": true,
       "correction_minutes_est": 0.47,
       "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "bangla_suspect_words": 1
     },
     {
       "id": "SB-EVAL-019-p2-scan",
@@ -228,11 +227,11 @@
       "wer": 0.10714285714285714,
       "edits": 7,
       "ref_chars": 181,
-      "latency_ms": 2051.5,
-      "flagged_for_review": false,
+      "latency_ms": 3065.0,
+      "flagged_for_review": true,
       "correction_minutes_est": 0.57,
       "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "bangla_suspect_words": 1
     },
     {
       "id": "SB-EVAL-004-p2-poor",
@@ -245,11 +244,11 @@
       "wer": 0.17391304347826086,
       "edits": 6,
       "ref_chars": 159,
-      "latency_ms": 2479.2,
-      "flagged_for_review": false,
+      "latency_ms": 2663.9,
+      "flagged_for_review": true,
       "correction_minutes_est": 0.5,
       "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "bangla_suspect_words": 1
     },
     {
       "id": "SB-EVAL-016-p2-poor",
@@ -262,11 +261,10 @@
       "wer": 0.10344827586206896,
       "edits": 6,
       "ref_chars": 180,
-      "latency_ms": 2726.6,
+      "latency_ms": 2645.1,
       "flagged_for_review": false,
       "correction_minutes_est": 0.5,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-014-p2-clean",
@@ -279,11 +277,11 @@
       "wer": 0.07407407407407407,
       "edits": 5,
       "ref_chars": 156,
-      "latency_ms": 1829.6,
-      "flagged_for_review": false,
+      "latency_ms": 2119.8,
+      "flagged_for_review": true,
       "correction_minutes_est": 0.5,
       "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "bangla_suspect_words": 1
     },
     {
       "id": "SB-EVAL-013-p2-clean",
@@ -296,11 +294,10 @@
       "wer": 0.14814814814814814,
       "edits": 5,
       "ref_chars": 179,
-      "latency_ms": 3170.8,
+      "latency_ms": 2309.7,
       "flagged_for_review": false,
       "correction_minutes_est": 0.5,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     }
   ],
   "rows": [
@@ -315,11 +312,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 238,
-      "latency_ms": 2004.0,
+      "latency_ms": 3335.6,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-001-p1-scan",
@@ -332,11 +328,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 238,
-      "latency_ms": 2114.5,
+      "latency_ms": 3165.1,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-001-p1-poor",
@@ -349,11 +344,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 238,
-      "latency_ms": 1888.5,
+      "latency_ms": 2890.6,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-001-p2-clean",
@@ -366,11 +360,10 @@
       "wer": 0.041666666666666664,
       "edits": 1,
       "ref_chars": 164,
-      "latency_ms": 1648.4,
+      "latency_ms": 2290.3,
       "flagged_for_review": false,
       "correction_minutes_est": 0.4,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-001-p2-scan",
@@ -383,11 +376,10 @@
       "wer": 0.041666666666666664,
       "edits": 1,
       "ref_chars": 164,
-      "latency_ms": 2004.1,
+      "latency_ms": 2527.6,
       "flagged_for_review": false,
       "correction_minutes_est": 0.37,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-001-p2-poor",
@@ -400,11 +392,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 164,
-      "latency_ms": 2351.6,
+      "latency_ms": 2588.8,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-002-p1-clean",
@@ -417,11 +408,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 250,
-      "latency_ms": 1851.8,
+      "latency_ms": 1913.4,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-002-p1-scan",
@@ -434,11 +424,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 250,
-      "latency_ms": 2785.8,
+      "latency_ms": 2374.8,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-002-p1-poor",
@@ -451,11 +440,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 250,
-      "latency_ms": 2960.5,
+      "latency_ms": 2887.0,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-002-p2-clean",
@@ -468,11 +456,10 @@
       "wer": 0.1111111111111111,
       "edits": 4,
       "ref_chars": 182,
-      "latency_ms": 2242.2,
+      "latency_ms": 2231.6,
       "flagged_for_review": false,
       "correction_minutes_est": 0.47,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-002-p2-scan",
@@ -485,11 +472,10 @@
       "wer": 0.07407407407407407,
       "edits": 3,
       "ref_chars": 182,
-      "latency_ms": 2161.9,
+      "latency_ms": 2473.6,
       "flagged_for_review": false,
       "correction_minutes_est": 0.43,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-002-p2-poor",
@@ -502,11 +488,10 @@
       "wer": 0.07407407407407407,
       "edits": 3,
       "ref_chars": 182,
-      "latency_ms": 2291.2,
+      "latency_ms": 2626.2,
       "flagged_for_review": false,
       "correction_minutes_est": 0.43,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-003-p1-clean",
@@ -519,11 +504,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 251,
-      "latency_ms": 2127.4,
+      "latency_ms": 2006.7,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-003-p1-scan",
@@ -536,11 +520,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 251,
-      "latency_ms": 2814.9,
+      "latency_ms": 2825.7,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-003-p1-poor",
@@ -553,11 +536,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 251,
-      "latency_ms": 2963.8,
+      "latency_ms": 2508.3,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-003-p2-clean",
@@ -570,11 +552,10 @@
       "wer": 0.10526315789473684,
       "edits": 2,
       "ref_chars": 140,
-      "latency_ms": 2038.8,
+      "latency_ms": 2496.0,
       "flagged_for_review": false,
       "correction_minutes_est": 0.4,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-003-p2-scan",
@@ -587,11 +568,10 @@
       "wer": 0.10526315789473684,
       "edits": 3,
       "ref_chars": 140,
-      "latency_ms": 1887.9,
+      "latency_ms": 2538.3,
       "flagged_for_review": false,
       "correction_minutes_est": 0.43,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-003-p2-poor",
@@ -604,11 +584,10 @@
       "wer": 0.10526315789473684,
       "edits": 3,
       "ref_chars": 140,
-      "latency_ms": 2047.2,
+      "latency_ms": 2744.5,
       "flagged_for_review": false,
       "correction_minutes_est": 0.43,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-004-p1-clean",
@@ -621,11 +600,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 232,
-      "latency_ms": 1485.5,
+      "latency_ms": 1886.8,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-004-p1-scan",
@@ -638,11 +616,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 232,
-      "latency_ms": 2452.5,
+      "latency_ms": 2531.4,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-004-p1-poor",
@@ -655,11 +632,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 232,
-      "latency_ms": 3195.0,
+      "latency_ms": 2469.5,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-004-p2-clean",
@@ -672,7 +648,7 @@
       "wer": 0.043478260869565216,
       "edits": 1,
       "ref_chars": 159,
-      "latency_ms": 3657.2,
+      "latency_ms": 2454.6,
       "flagged_for_review": false,
       "correction_minutes_est": 0.37,
       "ink_coverage": 1.0,
@@ -689,11 +665,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 159,
-      "latency_ms": 3218.9,
+      "latency_ms": 2788.4,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-004-p2-poor",
@@ -706,11 +681,11 @@
       "wer": 0.17391304347826086,
       "edits": 6,
       "ref_chars": 159,
-      "latency_ms": 2479.2,
-      "flagged_for_review": false,
+      "latency_ms": 2663.9,
+      "flagged_for_review": true,
       "correction_minutes_est": 0.5,
       "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "bangla_suspect_words": 1
     },
     {
       "id": "SB-EVAL-005-p1-clean",
@@ -723,11 +698,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 245,
-      "latency_ms": 1851.2,
+      "latency_ms": 2024.8,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-005-p1-scan",
@@ -740,11 +714,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 245,
-      "latency_ms": 2281.5,
+      "latency_ms": 2372.8,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-005-p1-poor",
@@ -757,11 +730,10 @@
       "wer": 0.0,
       "edits": 1,
       "ref_chars": 245,
-      "latency_ms": 1781.1,
+      "latency_ms": 2392.0,
       "flagged_for_review": false,
       "correction_minutes_est": 0.37,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-005-p2-clean",
@@ -774,11 +746,10 @@
       "wer": 0.05,
       "edits": 2,
       "ref_chars": 150,
-      "latency_ms": 1406.0,
+      "latency_ms": 2216.2,
       "flagged_for_review": false,
       "correction_minutes_est": 0.37,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-005-p2-scan",
@@ -791,11 +762,10 @@
       "wer": 0.1,
       "edits": 1,
       "ref_chars": 150,
-      "latency_ms": 2784.8,
+      "latency_ms": 2558.5,
       "flagged_for_review": false,
       "correction_minutes_est": 0.4,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-005-p2-poor",
@@ -808,7 +778,7 @@
       "wer": 0.1,
       "edits": 1,
       "ref_chars": 150,
-      "latency_ms": 2909.7,
+      "latency_ms": 2783.5,
       "flagged_for_review": false,
       "correction_minutes_est": 0.37,
       "ink_coverage": 1.0,
@@ -825,11 +795,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 289,
-      "latency_ms": 1839.4,
+      "latency_ms": 1849.5,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-006-p1-scan",
@@ -842,11 +811,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 289,
-      "latency_ms": 2734.2,
+      "latency_ms": 2437.2,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-006-p1-poor",
@@ -859,11 +827,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 289,
-      "latency_ms": 2426.5,
+      "latency_ms": 2569.2,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-006-p2-clean",
@@ -876,11 +843,10 @@
       "wer": 0.04,
       "edits": 2,
       "ref_chars": 171,
-      "latency_ms": 1847.3,
+      "latency_ms": 2038.0,
       "flagged_for_review": false,
       "correction_minutes_est": 0.43,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-006-p2-scan",
@@ -893,11 +859,10 @@
       "wer": 0.04,
       "edits": 3,
       "ref_chars": 171,
-      "latency_ms": 4220.8,
+      "latency_ms": 2467.1,
       "flagged_for_review": false,
       "correction_minutes_est": 0.43,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-006-p2-poor",
@@ -910,11 +875,10 @@
       "wer": 0.08,
       "edits": 4,
       "ref_chars": 171,
-      "latency_ms": 5798.6,
+      "latency_ms": 2778.9,
       "flagged_for_review": false,
       "correction_minutes_est": 0.47,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-007-p1-clean",
@@ -927,11 +891,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 139,
-      "latency_ms": 2754.7,
+      "latency_ms": 1682.9,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-007-p1-scan",
@@ -944,11 +907,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 139,
-      "latency_ms": 2451.4,
+      "latency_ms": 2264.4,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-007-p1-poor",
@@ -961,11 +923,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 139,
-      "latency_ms": 2932.8,
+      "latency_ms": 2177.1,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-007-p2-clean",
@@ -978,11 +939,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 118,
-      "latency_ms": 2044.6,
+      "latency_ms": 2115.6,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-007-p2-scan",
@@ -995,11 +955,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 118,
-      "latency_ms": 2305.8,
+      "latency_ms": 2566.2,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-007-p2-poor",
@@ -1012,11 +971,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 118,
-      "latency_ms": 2846.7,
+      "latency_ms": 2462.0,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-008-p1-clean",
@@ -1029,11 +987,10 @@
       "wer": 0.029411764705882353,
       "edits": 1,
       "ref_chars": 190,
-      "latency_ms": 2340.5,
+      "latency_ms": 1971.3,
       "flagged_for_review": false,
       "correction_minutes_est": 0.37,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-008-p1-scan",
@@ -1046,11 +1003,10 @@
       "wer": 0.029411764705882353,
       "edits": 1,
       "ref_chars": 190,
-      "latency_ms": 2946.2,
+      "latency_ms": 2800.5,
       "flagged_for_review": false,
       "correction_minutes_est": 0.37,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-008-p1-poor",
@@ -1063,11 +1019,10 @@
       "wer": 0.029411764705882353,
       "edits": 1,
       "ref_chars": 190,
-      "latency_ms": 2472.6,
+      "latency_ms": 2740.3,
       "flagged_for_review": false,
       "correction_minutes_est": 0.37,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-008-p2-clean",
@@ -1080,11 +1035,10 @@
       "wer": 0.15,
       "edits": 2,
       "ref_chars": 122,
-      "latency_ms": 2494.1,
+      "latency_ms": 2027.4,
       "flagged_for_review": false,
       "correction_minutes_est": 0.4,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-008-p2-scan",
@@ -1097,11 +1051,10 @@
       "wer": 0.15,
       "edits": 2,
       "ref_chars": 122,
-      "latency_ms": 3267.5,
+      "latency_ms": 2566.1,
       "flagged_for_review": false,
       "correction_minutes_est": 0.4,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-008-p2-poor",
@@ -1114,11 +1067,10 @@
       "wer": 0.15,
       "edits": 2,
       "ref_chars": 122,
-      "latency_ms": 4154.6,
+      "latency_ms": 2562.2,
       "flagged_for_review": false,
       "correction_minutes_est": 0.4,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-009-p1-clean",
@@ -1131,11 +1083,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 223,
-      "latency_ms": 2441.9,
+      "latency_ms": 2031.7,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-009-p1-scan",
@@ -1148,11 +1099,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 223,
-      "latency_ms": 3226.0,
+      "latency_ms": 2393.0,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-009-p1-poor",
@@ -1165,11 +1115,10 @@
       "wer": 0.02564102564102564,
       "edits": 2,
       "ref_chars": 223,
-      "latency_ms": 2502.7,
+      "latency_ms": 2665.2,
       "flagged_for_review": false,
       "correction_minutes_est": 0.4,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-009-p2-clean",
@@ -1182,11 +1131,10 @@
       "wer": 0.2631578947368421,
       "edits": 3,
       "ref_chars": 119,
-      "latency_ms": 1859.7,
+      "latency_ms": 2009.7,
       "flagged_for_review": false,
       "correction_minutes_est": 0.43,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-009-p2-scan",
@@ -1199,11 +1147,10 @@
       "wer": 0.2631578947368421,
       "edits": 3,
       "ref_chars": 119,
-      "latency_ms": 3051.0,
+      "latency_ms": 2778.0,
       "flagged_for_review": false,
       "correction_minutes_est": 0.43,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-009-p2-poor",
@@ -1216,11 +1163,10 @@
       "wer": 0.2631578947368421,
       "edits": 3,
       "ref_chars": 119,
-      "latency_ms": 4303.9,
+      "latency_ms": 2538.3,
       "flagged_for_review": false,
       "correction_minutes_est": 0.43,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-010-p1-clean",
@@ -1233,11 +1179,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 196,
-      "latency_ms": 2004.5,
+      "latency_ms": 1874.6,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-010-p1-scan",
@@ -1250,11 +1195,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 196,
-      "latency_ms": 2463.6,
+      "latency_ms": 2584.6,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-010-p1-poor",
@@ -1267,11 +1211,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 196,
-      "latency_ms": 2521.1,
+      "latency_ms": 2480.0,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-010-p2-clean",
@@ -1284,11 +1227,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 125,
-      "latency_ms": 1845.8,
+      "latency_ms": 1888.8,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-010-p2-scan",
@@ -1301,11 +1243,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 125,
-      "latency_ms": 2741.9,
+      "latency_ms": 2626.5,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-010-p2-poor",
@@ -1318,11 +1259,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 125,
-      "latency_ms": 2983.3,
+      "latency_ms": 2532.0,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-011-p1-clean",
@@ -1335,11 +1275,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 181,
-      "latency_ms": 2777.7,
+      "latency_ms": 1772.3,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-011-p1-scan",
@@ -1352,11 +1291,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 181,
-      "latency_ms": 2922.7,
+      "latency_ms": 2299.2,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-011-p1-poor",
@@ -1369,11 +1307,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 181,
-      "latency_ms": 3147.2,
+      "latency_ms": 2276.6,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-011-p2-clean",
@@ -1386,11 +1323,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 173,
-      "latency_ms": 2404.8,
+      "latency_ms": 1970.2,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-011-p2-scan",
@@ -1403,11 +1339,10 @@
       "wer": 0.04,
       "edits": 2,
       "ref_chars": 173,
-      "latency_ms": 2887.3,
+      "latency_ms": 2582.3,
       "flagged_for_review": false,
       "correction_minutes_est": 0.37,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-011-p2-poor",
@@ -1420,11 +1355,10 @@
       "wer": 0.04,
       "edits": 3,
       "ref_chars": 173,
-      "latency_ms": 2273.1,
+      "latency_ms": 2982.7,
       "flagged_for_review": false,
       "correction_minutes_est": 0.43,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-012-p1-clean",
@@ -1437,11 +1371,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 160,
-      "latency_ms": 1572.0,
+      "latency_ms": 2012.3,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-012-p1-scan",
@@ -1454,11 +1387,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 160,
-      "latency_ms": 1955.2,
+      "latency_ms": 2366.9,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-012-p1-poor",
@@ -1471,11 +1403,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 160,
-      "latency_ms": 2473.6,
+      "latency_ms": 2580.5,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-012-p2-clean",
@@ -1488,11 +1419,10 @@
       "wer": 0.10344827586206896,
       "edits": 4,
       "ref_chars": 185,
-      "latency_ms": 2349.5,
+      "latency_ms": 2147.3,
       "flagged_for_review": false,
       "correction_minutes_est": 0.47,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-012-p2-scan",
@@ -1505,11 +1435,10 @@
       "wer": 0.10344827586206896,
       "edits": 3,
       "ref_chars": 185,
-      "latency_ms": 2793.4,
+      "latency_ms": 2597.5,
       "flagged_for_review": false,
       "correction_minutes_est": 0.43,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-012-p2-poor",
@@ -1522,11 +1451,10 @@
       "wer": 0.10344827586206896,
       "edits": 3,
       "ref_chars": 185,
-      "latency_ms": 2358.5,
+      "latency_ms": 3055.7,
       "flagged_for_review": false,
       "correction_minutes_est": 0.43,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-013-p1-clean",
@@ -1539,11 +1467,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 164,
-      "latency_ms": 1887.6,
+      "latency_ms": 1792.1,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-013-p1-scan",
@@ -1556,11 +1483,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 164,
-      "latency_ms": 2444.3,
+      "latency_ms": 2268.9,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-013-p1-poor",
@@ -1573,11 +1499,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 164,
-      "latency_ms": 2084.5,
+      "latency_ms": 2306.4,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-013-p2-clean",
@@ -1590,11 +1515,10 @@
       "wer": 0.14814814814814814,
       "edits": 5,
       "ref_chars": 179,
-      "latency_ms": 3170.8,
+      "latency_ms": 2309.7,
       "flagged_for_review": false,
       "correction_minutes_est": 0.5,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-013-p2-scan",
@@ -1607,11 +1531,10 @@
       "wer": 0.07407407407407407,
       "edits": 1,
       "ref_chars": 179,
-      "latency_ms": 3383.4,
+      "latency_ms": 2603.8,
       "flagged_for_review": false,
       "correction_minutes_est": 0.4,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-013-p2-poor",
@@ -1624,11 +1547,10 @@
       "wer": 0.07407407407407407,
       "edits": 3,
       "ref_chars": 179,
-      "latency_ms": 2626.2,
+      "latency_ms": 2594.7,
       "flagged_for_review": false,
       "correction_minutes_est": 0.4,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-014-p1-clean",
@@ -1641,11 +1563,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 120,
-      "latency_ms": 1717.5,
+      "latency_ms": 1878.9,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-014-p1-scan",
@@ -1658,11 +1579,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 120,
-      "latency_ms": 1931.2,
+      "latency_ms": 2481.2,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-014-p1-poor",
@@ -1675,11 +1595,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 120,
-      "latency_ms": 1908.9,
+      "latency_ms": 2345.6,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-014-p2-clean",
@@ -1692,11 +1611,11 @@
       "wer": 0.07407407407407407,
       "edits": 5,
       "ref_chars": 156,
-      "latency_ms": 1829.6,
-      "flagged_for_review": false,
+      "latency_ms": 2119.8,
+      "flagged_for_review": true,
       "correction_minutes_est": 0.5,
       "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "bangla_suspect_words": 1
     },
     {
       "id": "SB-EVAL-014-p2-scan",
@@ -1709,11 +1628,10 @@
       "wer": 0.037037037037037035,
       "edits": 4,
       "ref_chars": 156,
-      "latency_ms": 2513.4,
+      "latency_ms": 2571.5,
       "flagged_for_review": false,
       "correction_minutes_est": 0.47,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-014-p2-poor",
@@ -1726,11 +1644,10 @@
       "wer": 0.18518518518518517,
       "edits": 7,
       "ref_chars": 156,
-      "latency_ms": 1982.5,
+      "latency_ms": 2705.9,
       "flagged_for_review": false,
       "correction_minutes_est": 0.53,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-015-p1-clean",
@@ -1743,11 +1660,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 178,
-      "latency_ms": 1411.3,
+      "latency_ms": 1946.7,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-015-p1-scan",
@@ -1760,11 +1676,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 178,
-      "latency_ms": 2219.8,
+      "latency_ms": 2392.4,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-015-p1-poor",
@@ -1777,11 +1692,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 178,
-      "latency_ms": 1980.2,
+      "latency_ms": 2615.2,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-015-p2-clean",
@@ -1794,11 +1708,11 @@
       "wer": 0.07692307692307693,
       "edits": 4,
       "ref_chars": 177,
-      "latency_ms": 1816.7,
-      "flagged_for_review": false,
+      "latency_ms": 1981.0,
+      "flagged_for_review": true,
       "correction_minutes_est": 0.47,
       "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "bangla_suspect_words": 2
     },
     {
       "id": "SB-EVAL-015-p2-scan",
@@ -1811,11 +1725,10 @@
       "wer": 0.07692307692307693,
       "edits": 1,
       "ref_chars": 177,
-      "latency_ms": 2002.4,
+      "latency_ms": 2450.4,
       "flagged_for_review": false,
       "correction_minutes_est": 0.37,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-015-p2-poor",
@@ -1828,11 +1741,10 @@
       "wer": 0.11538461538461539,
       "edits": 2,
       "ref_chars": 177,
-      "latency_ms": 2039.9,
+      "latency_ms": 2730.9,
       "flagged_for_review": false,
       "correction_minutes_est": 0.4,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-016-p1-clean",
@@ -1845,11 +1757,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 157,
-      "latency_ms": 1476.2,
+      "latency_ms": 1970.7,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-016-p1-scan",
@@ -1862,11 +1773,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 157,
-      "latency_ms": 1795.3,
+      "latency_ms": 2460.9,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-016-p1-poor",
@@ -1879,11 +1789,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 157,
-      "latency_ms": 2203.7,
+      "latency_ms": 2501.6,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-016-p2-clean",
@@ -1896,11 +1805,10 @@
       "wer": 0.034482758620689655,
       "edits": 2,
       "ref_chars": 180,
-      "latency_ms": 2132.8,
+      "latency_ms": 2303.3,
       "flagged_for_review": false,
       "correction_minutes_est": 0.4,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-016-p2-scan",
@@ -1913,11 +1821,10 @@
       "wer": 0.06896551724137931,
       "edits": 2,
       "ref_chars": 180,
-      "latency_ms": 2523.8,
+      "latency_ms": 2928.3,
       "flagged_for_review": false,
       "correction_minutes_est": 0.37,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-016-p2-poor",
@@ -1930,11 +1837,10 @@
       "wer": 0.10344827586206896,
       "edits": 6,
       "ref_chars": 180,
-      "latency_ms": 2726.6,
+      "latency_ms": 2645.1,
       "flagged_for_review": false,
       "correction_minutes_est": 0.5,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-017-p1-clean",
@@ -1947,11 +1853,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 186,
-      "latency_ms": 1538.3,
+      "latency_ms": 2358.6,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-017-p1-scan",
@@ -1964,11 +1869,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 186,
-      "latency_ms": 2068.2,
+      "latency_ms": 3783.1,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-017-p1-poor",
@@ -1981,11 +1885,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 186,
-      "latency_ms": 2070.6,
+      "latency_ms": 3756.9,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-017-p2-clean",
@@ -1998,11 +1901,10 @@
       "wer": 0.037037037037037035,
       "edits": 1,
       "ref_chars": 166,
-      "latency_ms": 1971.2,
+      "latency_ms": 3570.8,
       "flagged_for_review": false,
       "correction_minutes_est": 0.37,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-017-p2-scan",
@@ -2015,11 +1917,11 @@
       "wer": 0.07407407407407407,
       "edits": 11,
       "ref_chars": 166,
-      "latency_ms": 2515.8,
-      "flagged_for_review": false,
+      "latency_ms": 2528.3,
+      "flagged_for_review": true,
       "correction_minutes_est": 0.57,
       "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "bangla_suspect_words": 1
     },
     {
       "id": "SB-EVAL-017-p2-poor",
@@ -2032,11 +1934,10 @@
       "wer": 0.037037037037037035,
       "edits": 1,
       "ref_chars": 166,
-      "latency_ms": 2082.7,
+      "latency_ms": 2524.8,
       "flagged_for_review": false,
       "correction_minutes_est": 0.37,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-018-p1-clean",
@@ -2049,11 +1950,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 182,
-      "latency_ms": 1738.3,
+      "latency_ms": 2186.6,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-018-p1-scan",
@@ -2066,11 +1966,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 182,
-      "latency_ms": 2863.4,
+      "latency_ms": 2765.8,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-018-p1-poor",
@@ -2083,11 +1982,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 182,
-      "latency_ms": 2256.7,
+      "latency_ms": 2708.1,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-018-p2-clean",
@@ -2100,11 +1998,10 @@
       "wer": 0.043478260869565216,
       "edits": 1,
       "ref_chars": 151,
-      "latency_ms": 2001.5,
+      "latency_ms": 2253.9,
       "flagged_for_review": false,
       "correction_minutes_est": 0.37,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-018-p2-scan",
@@ -2117,11 +2014,10 @@
       "wer": 0.08695652173913043,
       "edits": 2,
       "ref_chars": 151,
-      "latency_ms": 2199.4,
+      "latency_ms": 2990.0,
       "flagged_for_review": false,
       "correction_minutes_est": 0.4,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-018-p2-poor",
@@ -2134,11 +2030,11 @@
       "wer": 0.08695652173913043,
       "edits": 6,
       "ref_chars": 151,
-      "latency_ms": 2314.5,
-      "flagged_for_review": false,
+      "latency_ms": 2746.7,
+      "flagged_for_review": true,
       "correction_minutes_est": 0.47,
       "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "bangla_suspect_words": 1
     },
     {
       "id": "SB-EVAL-019-p1-clean",
@@ -2151,11 +2047,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 155,
-      "latency_ms": 1334.7,
+      "latency_ms": 1760.8,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-019-p1-scan",
@@ -2168,11 +2063,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 155,
-      "latency_ms": 1728.8,
+      "latency_ms": 2492.5,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-019-p1-poor",
@@ -2185,11 +2079,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 155,
-      "latency_ms": 1799.1,
+      "latency_ms": 2484.0,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-019-p2-clean",
@@ -2202,11 +2095,11 @@
       "wer": 0.14285714285714285,
       "edits": 10,
       "ref_chars": 181,
-      "latency_ms": 1668.3,
-      "flagged_for_review": false,
+      "latency_ms": 3369.8,
+      "flagged_for_review": true,
       "correction_minutes_est": 0.57,
       "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "bangla_suspect_words": 1
     },
     {
       "id": "SB-EVAL-019-p2-scan",
@@ -2219,11 +2112,11 @@
       "wer": 0.10714285714285714,
       "edits": 7,
       "ref_chars": 181,
-      "latency_ms": 2051.5,
-      "flagged_for_review": false,
+      "latency_ms": 3065.0,
+      "flagged_for_review": true,
       "correction_minutes_est": 0.57,
       "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "bangla_suspect_words": 1
     },
     {
       "id": "SB-EVAL-019-p2-poor",
@@ -2236,11 +2129,11 @@
       "wer": 0.17857142857142858,
       "edits": 11,
       "ref_chars": 181,
-      "latency_ms": 2112.0,
-      "flagged_for_review": false,
+      "latency_ms": 2662.1,
+      "flagged_for_review": true,
       "correction_minutes_est": 0.6,
       "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "bangla_suspect_words": 1
     },
     {
       "id": "SB-EVAL-020-p1-clean",
@@ -2253,11 +2146,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 160,
-      "latency_ms": 1358.1,
+      "latency_ms": 1922.8,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-020-p1-scan",
@@ -2270,11 +2162,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 160,
-      "latency_ms": 1733.3,
+      "latency_ms": 2597.8,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-020-p1-poor",
@@ -2287,11 +2178,10 @@
       "wer": 0.0,
       "edits": 0,
       "ref_chars": 160,
-      "latency_ms": 1833.7,
+      "latency_ms": 2790.5,
       "flagged_for_review": false,
       "correction_minutes_est": 0.33,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-020-p2-clean",
@@ -2304,11 +2194,10 @@
       "wer": 0.03571428571428571,
       "edits": 3,
       "ref_chars": 198,
-      "latency_ms": 1771.5,
+      "latency_ms": 2441.4,
       "flagged_for_review": false,
       "correction_minutes_est": 0.4,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-020-p2-scan",
@@ -2321,11 +2210,10 @@
       "wer": 0.0,
       "edits": 1,
       "ref_chars": 198,
-      "latency_ms": 2386.5,
+      "latency_ms": 2949.8,
       "flagged_for_review": false,
       "correction_minutes_est": 0.37,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     },
     {
       "id": "SB-EVAL-020-p2-poor",
@@ -2338,16 +2226,19 @@
       "wer": 0.03571428571428571,
       "edits": 3,
       "ref_chars": 198,
-      "latency_ms": 2099.9,
+      "latency_ms": 3128.3,
       "flagged_for_review": false,
       "correction_minutes_est": 0.4,
-      "ink_coverage": 1.0,
-      "recovered_lines": 0
+      "ink_coverage": 1.0
     }
   ],
-  "generated_at": "2026-10-12T13:08:11Z",
+  "generated_at": "2026-10-13T07:55:02Z",
   "environment": {
-    "commit": "89b114e",
-    "host": "archlinux"
+    "commit": "d096a3c",
+    "host": "archlinux",
+    "OCR_LANGUAGES": "eng+ben",
+    "AI_CHAT_PROVIDER": "openrouter",
+    "AI_EMBED_PROVIDER": "openrouter",
+    "AI_EGRESS": "cloud_allowed"
   }
 }

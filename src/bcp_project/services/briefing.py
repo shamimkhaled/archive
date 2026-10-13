@@ -25,6 +25,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .. import ai
+from ..ai.guard import with_rules, wrap_untrusted
 from ..config import is_production
 from ..long_text import page_windows, render_window, sample_windows
 from ..models import BoardBriefing, DocumentRecord, DocumentVersion
@@ -220,7 +221,13 @@ def _llm_reduce(
         lines = [f"  {i}. {p.text} (p. {p.page})" for i, p in enumerate(candidates[key], 1)]
         blocks.append(f"{key}:\n" + ("\n".join(lines) if lines else "  (none)"))
     try:
-        data = ai.chat_json("board_brief", _REDUCE_SYSTEM, "\n\n".join(blocks), sensitivity=sensitivity, max_tokens=2000)
+        data = ai.chat_json(
+            "board_brief",
+            with_rules(_REDUCE_SYSTEM),
+            wrap_untrusted("\n\n".join(blocks), "briefing_candidates"),
+            sensitivity=sensitivity,
+            max_tokens=2000,
+        )
     except ai.EgressBlocked:
         raise
     except Exception:
@@ -263,9 +270,9 @@ def generate_briefing(
 
     def run(item: Tuple[int, List[Tuple[int, str]]]) -> Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
         index, window = item
-        user = f"Board paper{label}, part {index} of {len(used)}:\n\n{render_window(window)}"
+        user = f"Board paper{label}, part {index} of {len(used)}:\n\n{wrap_untrusted(render_window(window), 'board_paper')}"
         try:
-            data = ai.chat_json("board_brief", _MAP_SYSTEM, user, sensitivity=sensitivity, max_tokens=1800)
+            data = ai.chat_json("board_brief", with_rules(_MAP_SYSTEM), user, sensitivity=sensitivity, max_tokens=1800)
         except ai.EgressBlocked:
             raise
         except Exception:

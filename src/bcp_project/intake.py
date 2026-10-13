@@ -182,7 +182,43 @@ def store_write_once(data: bytes, key: str, *, content_type: str, sha256: str) -
     return _put_s3_once(data, key, content_type=content_type, sha256=sha256)
 
 
-def _put_s3_once(data: bytes, key: str, *, content_type: str, sha256: str) -> str:
+def sha256_file(path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for block in iter(lambda: fh.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def store_file_write_once(path, key: str, *, content_type: str, sha256: str) -> str:
+    """``store_write_once`` for large files (meeting recordings): streamed, never read whole into memory."""
+    import shutil
+
+    from .aws_utils import assert_production_storage_ready, use_local_storage
+
+    assert_production_storage_ready()
+    if use_local_storage():
+        from .deps import UPLOAD_DIR
+
+        dest = (UPLOAD_DIR / key).resolve()
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with open(path, "rb") as src, open(dest, "xb") as out:
+                shutil.copyfileobj(src, out, 1024 * 1024)
+        except FileExistsError as exc:
+            if sha256_file(dest) == sha256:
+                return key
+            raise WriteOnceViolation(f"{key} already exists with different content") from exc
+        try:
+            os.chmod(dest, 0o444)
+        except OSError:
+            pass
+        return key
+    with open(path, "rb") as fh:
+        return _put_s3_once(fh, key, content_type=content_type, sha256=sha256)
+
+
+def _put_s3_once(data, key: str, *, content_type: str, sha256: str) -> str:
     from datetime import datetime, timedelta, timezone
 
     from botocore.exceptions import ClientError

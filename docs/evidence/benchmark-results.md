@@ -19,14 +19,14 @@ Commit `89b114e` on `archlinux`.
 
 Failure cases (10 worst): `SB-EVAL-004-p2-clean`, `SB-EVAL-005-p2-poor`, `SB-EVAL-017-p2-scan`, `SB-EVAL-019-p2-poor`, `SB-EVAL-019-p2-clean`, `SB-EVAL-014-p2-poor`, `SB-EVAL-018-p2-poor`, `SB-EVAL-019-p2-scan`, `SB-EVAL-004-p2-poor`, `SB-EVAL-016-p2-poor`.
 
-### OCR: synthetic set, with line recovery — 2026-10-12T13:08:11Z
+### OCR: synthetic set, with line recovery and Bangla suspect-word routing — 2026-10-13T07:55:02Z
 
-Commit `89b114e` on `archlinux`.
+Commit `d096a3c` on `archlinux`.
 
 | Language | Pages | CER | CER (graphemes) | WER | Mean confidence | p95 latency (ms) | Est. correction min/page | High-error pages caught by review |
 |---|---|---|---|---|---|---|---|---|
-| bn | 60 | 1.8% | 2.5% | 7.9% | 89.94 | 4,154.60 | 0.42 | 0/3 |
-| en | 60 | 0.1% | 0.1% | 0.2% | 91.21 | 2,963.80 | 0.33 | 0/0 |
+| bn | 60 | 1.8% | 2.5% | 7.9% | 89.94 | 3,065.00 | 0.42 | 3/3 |
+| en | 60 | 0.1% | 0.1% | 0.2% | 91.21 | 3,165.10 | 0.33 | 0/0 |
 
 | Scan quality | Pages | CER | WER |
 |---|---|---|---|
@@ -47,3 +47,17 @@ Commit `?` on `?`.
 | bn | 50 | 100.0% | 0.98 | 100.0% | 100.0% |
 
 Restricted-document leaks: 0. Filter violations: 0. Latency p50/p95: 9.6 / 14.2 ms.
+
+### STT: synthetic two-speaker set (espeak-ng), Whisper small — 2026-10-13T08:53:34Z
+
+Commit `d096a3c` on `archlinux`.
+
+| Language | Files | Audio (min) | WER | CER | Mean RTF | cpWER (perfect turns) | cpWER (diarized) |
+|---|---|---|---|---|---|---|---|
+| bn | 2 | 1.6 | 118.8% | 93.6% | 2.85 | 120.1% | — |
+| en | 2 | 1.7 | 14.8% | 4.4% | 0.14 | 14.8% | — |
+| mixed | 4 | 3.1 | 79.9% | 60.4% | 0.88 | 79.0% | — |
+
+Speaker-attributed WER (cpWER): diarized (none) —; with perfect speaker turns 68.5%.
+
+Failure cases (8 worst): `meeting-05`, `meeting-01`, `meeting-03`, `meeting-07`, `meeting-04`, `meeting-08`, `meeting-06`, `meeting-02`.

@@ -69,6 +69,42 @@ def test_empty_reference_rate():
     assert M.cer("", "x").rate is None
 
 
+def test_cpwer_counts_words_given_to_the_wrong_speaker():
+    reference = {"Chair": "the board approves the policy", "CFO": "finance will circulate the report"}
+    perfect, mapping = M.cpwer(reference, {"S1": "finance will circulate the report", "S0": "the board approves the policy"})
+    assert perfect.distance == 0 and mapping == {"Chair": "S0", "CFO": "S1"}
+
+    # Same words, but "the policy" landed on the other speaker: plain WER would be 0.
+    swapped, _ = M.cpwer(reference, {"S0": "the board approves", "S1": "the policy finance will circulate the report"})
+    assert swapped.distance == 4 and swapped.reference_length == 10
+
+    one_speaker, mapping = M.cpwer(reference, {"S0": "the board approves the policy finance will circulate the report"})
+    # The CFO's five words are insertions on the Chair and deletions for the CFO.
+    assert mapping["CFO"] is None and one_speaker.distance == 10
+
+    extra, _ = M.cpwer({"Chair": "board approves"}, {"S0": "board approves", "S1": "noise words"})
+    assert extra.distance == 2 and extra.insertions == 2
+
+
+def test_diarization_status_reports_configuration_without_loading_models(monkeypatch):
+    from bcp_project.diarization import diarization_status
+
+    for name in ("DIARIZATION_PROVIDER", "DIARIZATION_MODEL", "DIARIZATION_URL", "HF_TOKEN"):
+        monkeypatch.delenv(name, raising=False)
+    assert diarization_status() == {"provider": "none", "enabled": False, "detail": None, "ready": False, "issues": []}
+
+    monkeypatch.setenv("DIARIZATION_PROVIDER", "pyannote")
+    status = diarization_status()
+    assert status["enabled"] and not status["ready"] and "HF_TOKEN" in status["issues"][0]
+    monkeypatch.setenv("DIARIZATION_MODEL", "/srv/models/pyannote/config.yaml")
+    assert diarization_status()["ready"] is True
+
+    monkeypatch.setenv("DIARIZATION_PROVIDER", "http")
+    assert diarization_status()["issues"] == ["DIARIZATION_URL is not set"]
+    monkeypatch.setenv("DIARIZATION_URL", "http://diarize.internal/diarize")
+    assert diarization_status()["ready"] is True
+
+
 def test_language_of_and_digit_folding():
     assert M.language_of("বোর্ড সভা ২০২৬") == "bn"
     assert M.language_of("Board meeting 2026") == "en"

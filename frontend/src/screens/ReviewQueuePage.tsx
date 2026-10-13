@@ -47,6 +47,7 @@ export function ReviewQueuePage() {
                   <Link to={`/review/${encodeURIComponent(item.doc_id)}?v=${item.version}`}>{item.title || item.doc_id}</Link>
                   {item.is_new_version && <span className="chip">v{item.version}</span>}
                   {item.sensitivity === "restricted" && <span className="chip warn">Restricted</span>}
+                  {item.review_reasons.length > 0 && <div className="muted small">{item.review_reasons.join("; ")}</div>}
                 </td>
                 <td>{item.doc_type}</td>
                 <td>{item.ocr_confidence == null ? "—" : `${Math.round(item.ocr_confidence)}%`}</td>

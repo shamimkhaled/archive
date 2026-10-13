@@ -205,6 +205,75 @@ Scalable & deployment-neutral stack:
 
 ---
 
+## Post-demonstration evaluation 3.1 and 3.2 — evidence
+
+Where each requirement from the post-demonstration report (sections 3.1 and 3.2, workflows 6.1 and
+6.2) is met, and how it is shown. Sections 3.3 and 3.4 were already met; see PRD.md.
+
+### 3.1 OCR-based digital archive
+
+| Requirement | Code | Tests | Measured evidence |
+|---|---|---|---|
+| Upload scans, PDFs, images, letters, circulars, office orders, memos, Board papers | `intake.validate_upload`, `document_types.DEFAULT_DOCUMENT_TYPES` (includes Office Order) | `test_phase4_ocr.py` | — |
+| Bangla and English OCR with measurable accuracy | `ocr.py` (Tesseract `ben+eng`, line recovery, legacy Bijoy detection) | `test_phase4_ocr.py` | `eval/reports/ocr-synthetic.json` (120 synthetic pages, three scan qualities): CER 0.05% English, 1.8% Bangla (2.5% by grapheme cluster), Bangla WER 7.9%; `docs/evidence/benchmark-report.md` |
+| Extract text and metadata (title, reference, date, department, subject, category, keywords) | `services/metadata_suggest.py` (AI with rules fallback) | `test_metadata_rules_fallback_extracts_reference` | `scripts/bench_accuracy.py metadata` |
+| Classify, index, and tag automatically; original unchanged | `metadata_suggest.apply_suggestions` fills empty fields and classifies "Other" uploads; `intake.store_write_once` (never overwrites) | `test_apply_suggestions_fills_only_empty_fields_and_classifies_other`, `test_clean_text_pdf_auto_applies_metadata`, `test_store_write_once_local` | — |
+| Full-text search, version history, role-based access, audit trail | search routers, `services/document_versions.py`, `access_control.py`, hash-chained `AuditLog` | `test_clean_scan_indexes_directly_and_new_version_supersedes`, `test_seal_and_verify_chain` | — |
+| Human verification for low-confidence OCR **and metadata** | `services/ingest.run_document_ingest` routes to `/review` with reasons; `ocr.bangla_suspect_words`; `metadata_suggest.metadata_review_reasons` | `test_low_confidence_scan_waits_for_review_and_stays_hidden`, `test_suspect_bangla_page_routes_to_review_despite_high_confidence`, `test_type_mismatch_sends_clean_pdf_to_review`, `test_metadata_review_reasons` | Bangla routing catches 3 of 3 pages above 5% CER, flags 8 of 60 Bangla pages and 0 of 60 English pages (`ocr-synthetic.json`, `review_routing`) |
+
+Review reasons shown to the reviewer: low OCR confidence, Bangla words misread as Latin characters,
+AI metadata unavailable, title missing, AI document type differs from the one entered, AI date
+differs from the one entered. Metadata review is on by default (`METADATA_REVIEW=off` keeps
+auto-apply only). A rules fallback caused by the egress policy is not a review reason, since it
+is expected for restricted documents.
+
+OCR review thresholds (POC defaults, tune on bank samples):
+
+| Setting | Default | Effect |
+|---|---|---|
+| `OCR_REVIEW_THRESHOLD` | 75 | Mean word confidence below this sends the upload to review |
+| `OCR_PAGE_REVIEW_THRESHOLD` | 60 | Any page below this sends the upload to review |
+| `OCR_BANGLA_PAGE_REVIEW_THRESHOLD` | page threshold (92 recommended) | Stricter page bar for mostly-Bangla pages |
+| `OCR_BANGLA_SUSPECT_WORDS` | 1 | A Bangla page with this many Latin/ASCII junk words goes to review (0 = off) |
+| `OCR_BANGLA_SUSPECT_WORD_CONF` | 50 | Only junk words below this word confidence count |
+
+### 3.2 Meeting minutes (speech-to-text)
+
+| Requirement | Code | Tests | Measured evidence |
+|---|---|---|---|
+| Recorded audio/video and live transcription | `routers/meeting_minutes.py` upload, `meeting_audio.py`, live chunk STT in `jobs/handlers.py` | `test_recording_upload_stores_hashes_and_queues_transcription` | — |
+| Bangla and English speech recognition | `asr.py` (faster-whisper; per-file language and model), `ai.transcribe` routes | `test_phase_a_transcription.py` | `eval/reports/stt-synthetic.json` (see below) |
+| Speaker identification where possible | `diarization.py` (pyannote or bank-hosted HTTP), status on the admin AI page and `/readyz`; worker image `WITH_DIARIZATION=1` with `requirements-diarization.txt` | `test_assign_speakers_by_greatest_overlap_and_rename`, `test_diarization_failure_keeps_transcript`, `test_diarization_status_reports_configuration_without_loading_models` | Speaker-attributed WER (cpWER) in `stt-synthetic.json`; diarizer accuracy not yet measured (see below) |
+| Transcript, discussion points, decisions, actions, responsible persons/**divisions**, target dates | `minutes_draft.py` (Discussion points section; Action / Owner / Responsible division / Due table), `services/minutes.extract_decisions_and_actions` (quote-grounded), `MeetingAction.division` | `test_extraction_keeps_only_items_quoted_from_the_transcript`, `test_llm_minutes_prompt_asks_for_discussion_points_and_division`, `test_decisions_lock_with_minutes_but_action_status_stays_open` | — |
+| AI-assisted draft minutes in the organisational template | `minutes_draft.generate_minutes_markdown`, `minutes_pdf.py` | `test_generate_minutes_template_fallback`, `test_minutes_pdf_maps_every_word_to_a_page_and_keeps_bangla` | — |
+| Authorised review, correction, approval (four-eyes) | `services/minutes.py` workflow | `test_four_eyes_rule`, `test_edit_marks_source_edited_and_lock_blocks_changes` | — |
+| Archive audio/video, transcript, draft and approved minutes **as linked records** | `services/meeting_records.py`, `MeetingRecord` (migration `0012_meeting_records`), `GET /api/meetings/{id}/records`, Archive records panel on the meeting page | `test_meeting_records_seal_recording_transcript_and_every_minutes_version` | Every record is write-once with its SHA-256; transcript is archive document `TRN-<id>`, approved minutes `MIN-<id>` |
+
+Speech-to-text evidence so far (`eval/reports/stt-synthetic.json`; Whisper `small`, CPU int8;
+eight synthetic two-speaker meetings from `make_synthetic_benchmarks.py --sets stt`):
+
+| Slice | Files | WER | Speaker-attributed WER, perfect turns | Real-time factor |
+|---|---|---|---|---|
+| English | 2 | 14.8% | 14.8% | 0.14 |
+| Bangla (espeak-ng voice) | 2 | 119% | 120% | 2.85 |
+| One speaker Bangla, one English | 4 | 80% | 79% | 0.88 |
+
+What this shows and what it does not:
+
+- Speaker attribution adds no error on top of recognition when turns are separated by short
+  pauses: with perfect speaker turns, speaker-attributed WER equals plain WER for English.
+- espeak-ng's Bangla voice is not intelligible to Whisper (it returns noise and emoji), so the
+  Bangla rows measure the synthetic voice, not the product. The mixed rows show that Whisper,
+  left to detect the language, picks one language for the whole file; real code-switched board
+  meetings must be measured before choosing between forcing `WHISPER_LANGUAGE=bn` and a larger model.
+- The diarizer itself (pyannote) is not measured yet: its model is gated on Hugging Face and needs
+  the bank's token, or the bank-hosted `DIARIZATION_URL` service.
+- Credible numbers need 30–60 minutes of real, consented board-room recordings per language with
+  typed speaker turns, in the manifest format of `eval/benchmarks/README.md`. Target: Bangla WER
+  ≤ 25% (`docs/evidence/benchmark-report.md`, section 5).
+
+---
+
 ## Traceability to other docs
 
 | Doc | Role vs this file |

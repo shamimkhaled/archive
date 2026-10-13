@@ -8,7 +8,8 @@ benchmark-report.md), and
 ``compare`` puts a cloud run next to an on-premise run of the same manifest.
 
   ocr       Bangla/English OCR: CER (code points and grapheme clusters), WER, confidence routing
-  stt       Speech-to-text: WER, CER, real-time factor, speaker count when diarization is on
+  stt       Speech-to-text: WER, CER, real-time factor; with reference turns, speaker-attributed
+            WER (cpWER) for the configured diarizer and for perfect turns (the ceiling)
   metadata  Classification (doc_type accuracy, macro-F1, confusion) and field extraction accuracy
   summary   Board briefing: heading detection, ROUGE-L against reference points, citation grounding
   ask       Grounded answers over HTTP against a running instance: refusal accuracy, citation
@@ -19,7 +20,8 @@ benchmark-report.md), and
 
 Manifests (paths are relative to the manifest file; see eval/benchmarks/README.md):
   ocr:      {"id", "file", "page", "lang", "reference" | "reference_file", "quality"}
-  stt:      {"id", "audio", "lang", "reference" | "reference_file", "speakers"}
+  stt:      {"id", "audio", "lang" ("bn" | "en" | "mixed"), "reference" | "reference_file", "speakers",
+             "turns": [{"speaker", "start", "end", "text"}] (optional)}
   metadata: {"id", "file" | "text" | "text_file", "lang", "expected": {"doc_type", "title", ...}}
   summary:  {"id", "file" | "pages", "title", "sensitivity", "expected": {heading: [points] | "not_found"}}
   ask:      {"id", "question", "lang", "user", "expect_docs", "expect_answer", "should_refuse", "forbidden_docs"}
@@ -102,10 +104,18 @@ def environment() -> Dict[str, Any]:
         "OCR_LANGUAGES",
         "OCR_REVIEW_THRESHOLD",
         "OCR_PAGE_REVIEW_THRESHOLD",
+        "OCR_BANGLA_PAGE_REVIEW_THRESHOLD",
+        "OCR_BANGLA_SUSPECT_WORD_CONF",
+        "OCR_BANGLA_SUSPECT_WORDS",
         "AI_CHAT_PROVIDER",
         "AI_CHAT_MODEL",
         "AI_STT_PROVIDER",
         "AI_STT_MODEL",
+        "WHISPER_MODEL",
+        "WHISPER_DEVICE",
+        "WHISPER_COMPUTE_TYPE",
+        "DIARIZATION_PROVIDER",
+        "DIARIZATION_MODEL",
         "AI_EMBED_PROVIDER",
         "AI_EMBED_MODEL",
         "AI_EGRESS",
@@ -147,17 +157,14 @@ def run_ocr(args) -> Dict[str, Any]:
     from bcp_project import ocr
 
     lang = args.ocr_lang or ocr.ocr_languages()
-    _, page_threshold = ocr.review_thresholds()
     rows: List[Dict[str, Any]] = []
     for sample in load_manifest(args.manifest):
         path = resolve(sample, "file")
         data = path.read_bytes()
         page = int(sample.get("page") or 1)
-        meta: Dict[str, Any] = {}
         if path.suffix.lower() == ".pdf" and not args.pipeline:
             result, ms = timed(lambda: ocr.ocr_image_detail(ocr._render_pdf_page(data, page), lang))
-            text, conf, source = result.text, result.confidence, "ocr"
-            meta = {"ink_coverage": result.ink_coverage, "recovered_lines": result.recovered_lines}
+            hit = ocr.PageText(page, result.text, result.confidence, "ocr", ocr._ocr_meta(lang, result))
         else:
             if path.suffix.lower() == ".pdf":
                 pages, ms = timed(lambda: ocr.extract_pages(data, "application/pdf"))
@@ -165,8 +172,10 @@ def run_ocr(args) -> Dict[str, Any]:
             else:
                 pages, ms = timed(lambda: ocr.extract_image(data))
                 hit = pages[page - 1] if len(pages) >= page else None
-            text, conf, source = (hit.text, hit.confidence, hit.source) if hit else ("", 0.0, "missing")
-            meta = {k: v for k, v in (hit.metadata if hit else {}).items() if k in ("ink_coverage", "recovered_lines")}
+        text, conf, source = (hit.text, hit.confidence, hit.source) if hit else ("", 0.0, "missing")
+        meta = {k: v for k, v in (hit.metadata if hit else {}).items() if k in ("ink_coverage", "recovered_lines", "bangla_suspect_words")}
+        # Same routing the ingest pipeline applies to a one-page document.
+        flagged = bool(hit) and ocr.summarize_confidence([hit])["needs_review"]
         reference = reference_text(sample)
         cp, gc, w = M.cer(reference, text), M.cer(reference, text, clusters=True), M.wer(reference, text)
         rows.append(
@@ -185,7 +194,7 @@ def run_ocr(args) -> Dict[str, Any]:
                 "edits": cp.distance,
                 "ref_chars": cp.reference_length,
                 "latency_ms": round(ms, 1),
-                "flagged_for_review": conf is not None and conf < page_threshold,
+                "flagged_for_review": flagged,
                 "correction_minutes_est": M.correction_minutes(gc.distance, edits_per_minute=args.edits_per_minute),
                 **meta,
             }
@@ -241,39 +250,75 @@ def audio_seconds(path: Path) -> Optional[float]:
         return None
 
 
+def speaker_texts(segments: List[Dict[str, Any]]) -> Dict[str, str]:
+    """Hypothesis text per diarized speaker label; segments no turn overlapped are "unassigned"."""
+    out: Dict[str, List[str]] = {}
+    for seg in segments:
+        out.setdefault(str(seg.get("speaker_label") or "unassigned"), []).append(str(seg.get("text") or ""))
+    return {k: " ".join(v) for k, v in out.items()}
+
+
 def run_stt(args) -> Dict[str, Any]:
     from bcp_project import ai
+    from bcp_project.diarization import assign_speakers, diarization_enabled, diarization_provider, diarize
 
     rows: List[Dict[str, Any]] = []
     stats: Dict[str, List[M.EditStats]] = {}
     for sample in load_manifest(args.manifest):
         path = resolve(sample, "audio")
         lang = sample.get("lang")
-        segments, ms = timed(lambda: ai.transcribe(str(path), language=lang, sensitivity=args.sensitivity))
+        whisper_lang = lang if lang in ("bn", "en") else None
+        segments, ms = timed(lambda: ai.transcribe(str(path), language=whisper_lang, sensitivity=args.sensitivity))
+        if any(s.get("speaker") == "System" for s in segments):
+            raise SystemExit(f"{sample['id']}: speech-to-text did not run: {segments[0].get('text')}")
         hypothesis = " ".join(str(s.get("text") or "") for s in segments)
         reference = reference_text(sample)
         w, c = M.wer(reference, hypothesis), M.cer(reference, hypothesis)
         seconds = audio_seconds(path)
-        speakers = {s.get("speaker") for s in segments if s.get("speaker")}
         key = lang or M.language_of(reference)
         stats.setdefault(f"{key}:wer", []).append(w)
         stats.setdefault(f"{key}:cer", []).append(c)
-        rows.append(
-            {
-                "id": sample["id"],
-                "lang": key,
-                "condition": sample.get("condition") or "unspecified",
-                "wer": w.rate,
-                "cer": c.rate,
-                "audio_s": seconds,
-                "processing_s": round(ms / 1000, 2),
-                "rtf": round(ms / 1000 / seconds, 3) if seconds else None,
-                "speakers_expected": sample.get("speakers"),
-                "speakers_found": len(speakers) or None,
-                **provenance(),
-            }
-        )
-        print(f"{sample['id']}: WER {w.rate:.3f}  CER {c.rate:.3f}  RTF {rows[-1]['rtf']}")
+        row: Dict[str, Any] = {
+            "id": sample["id"],
+            "lang": key,
+            "condition": sample.get("condition") or "unspecified",
+            "wer": w.rate,
+            "cer": c.rate,
+            "audio_s": seconds,
+            "processing_s": round(ms / 1000, 2),
+            "rtf": round(ms / 1000 / seconds, 3) if seconds else None,
+            "speakers_expected": sample.get("speakers"),
+            "speakers_found": None,
+            **provenance(),
+        }
+        turns = sample.get("turns") or []
+        if turns:
+            reference_by_speaker: Dict[str, List[str]] = {}
+            for turn in turns:
+                reference_by_speaker.setdefault(turn["speaker"], []).append(turn["text"])
+            ref_speakers = {k: " ".join(v) for k, v in reference_by_speaker.items()}
+            # Ceiling: the reference turns used as a perfect diarizer, so only Whisper's segment
+            # boundaries (a segment spanning a speaker change) can misattribute words.
+            oracle = assign_speakers(segments, [{"start": t["start"], "end": t["end"], "speaker": t["speaker"]} for t in turns])
+            cp, _ = M.cpwer(ref_speakers, speaker_texts(oracle))
+            stats.setdefault("cpwer_oracle", []).append(cp)
+            stats.setdefault(f"{key}:cpwer_oracle", []).append(cp)
+            row["cpwer_oracle_turns"] = cp.rate
+            if diarization_enabled():
+                found, dms = timed(lambda: diarize(path))
+                diarized = assign_speakers(segments, found)
+                cp, mapping = M.cpwer(ref_speakers, speaker_texts(diarized))
+                stats.setdefault("cpwer_diarized", []).append(cp)
+                stats.setdefault(f"{key}:cpwer_diarized", []).append(cp)
+                row.update(
+                    cpwer_diarized=cp.rate,
+                    speakers_found=len({t["speaker"] for t in found}) or None,
+                    speaker_mapping=mapping,
+                    diarization_s=round(dms / 1000, 2),
+                )
+        rows.append(row)
+        extra = "".join(f"  {k} {row[k]:.3f}" for k in ("cpwer_oracle_turns", "cpwer_diarized") if row.get(k) is not None)
+        print(f"{sample['id']}: WER {w.rate:.3f}  CER {c.rate:.3f}  RTF {row['rtf']}{extra}")
     langs = sorted({r["lang"] for r in rows})
     by_lang = {
         lang_: {
@@ -282,14 +327,22 @@ def run_stt(args) -> Dict[str, Any]:
             "cer": M.pooled_rate(stats[f"{lang_}:cer"]),
             "rtf_mean": M.mean(r["rtf"] for r in rows if r["lang"] == lang_),
             "audio_minutes": round(sum(r["audio_s"] or 0 for r in rows if r["lang"] == lang_) / 60, 1),
+            "cpwer_oracle_turns": M.pooled_rate(stats.get(f"{lang_}:cpwer_oracle", [])),
+            "cpwer_diarized": M.pooled_rate(stats.get(f"{lang_}:cpwer_diarized", [])),
         }
         for lang_ in langs
     }
-    with_speakers = [r for r in rows if r["speakers_expected"]]
+    with_speakers = [r for r in rows if r["speakers_expected"] and r["speakers_found"] is not None]
     return {
         "kind": "stt",
+        "config": {"diarization_provider": diarization_provider()},
         "summary": {
             "by_lang": by_lang,
+            "speaker_attributed": {
+                "diarization_provider": diarization_provider(),
+                "cpwer_diarized": M.pooled_rate(stats.get("cpwer_diarized", [])),
+                "cpwer_oracle_turns": M.pooled_rate(stats.get("cpwer_oracle", [])),
+            },
             "speaker_count_exact": (
                 round(sum(1 for r in with_speakers if r["speakers_found"] == r["speakers_expected"]) / len(with_speakers), 4)
                 if with_speakers
@@ -582,11 +635,24 @@ def markdown(report: Dict[str, Any]) -> str:
             for q, g in report["by_quality"].items():
                 lines.append(f"| {q} | {g['pages']} | {_fmt(g['cer'], True)} | {_fmt(g['wer'], True)} |")
     elif kind == "stt":
-        lines += ["| Language | Files | Audio (min) | WER | CER | Mean RTF |", "|---|---|---|---|---|---|"]
+        lines += [
+            "| Language | Files | Audio (min) | WER | CER | Mean RTF | cpWER (perfect turns) | cpWER (diarized) |",
+            "|---|---|---|---|---|---|---|---|",
+        ]
         for lang, g in s.get("by_lang", {}).items():
-            lines.append(f"| {lang} | {g['files']} | {g['audio_minutes']} | {_fmt(g['wer'], True)} | {_fmt(g['cer'], True)} | {_fmt(g['rtf_mean'])} |")
+            lines.append(
+                f"| {lang} | {g['files']} | {g['audio_minutes']} | {_fmt(g['wer'], True)} | {_fmt(g['cer'], True)} | {_fmt(g['rtf_mean'])} "
+                f"| {_fmt(g.get('cpwer_oracle_turns'), True)} | {_fmt(g.get('cpwer_diarized'), True)} |"
+            )
         if s.get("speaker_count_exact") is not None:
             lines.append(f"\nSpeaker count correct: {_fmt(s['speaker_count_exact'], True)}.")
+        attributed = s.get("speaker_attributed") or {}
+        if attributed.get("cpwer_oracle_turns") is not None or attributed.get("cpwer_diarized") is not None:
+            lines.append(
+                f"\nSpeaker-attributed WER (cpWER): diarized ({attributed.get('diarization_provider')}) "
+                f"{_fmt(attributed.get('cpwer_diarized'), True)}; with perfect speaker turns "
+                f"{_fmt(attributed.get('cpwer_oracle_turns'), True)}."
+            )
     elif kind == "metadata":
         c = s.get("classification") or {}
         lines += [f"Classification: {c.get('n')} documents, accuracy {_fmt(c.get('accuracy'), True)}, macro-F1 {_fmt(c.get('macro_f1'))}.", ""]

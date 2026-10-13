@@ -138,6 +138,41 @@ def wer(reference: str, hypothesis: str) -> EditStats:
     return edit_stats(ref, hyp)
 
 
+def cpwer(reference: Dict[str, str], hypothesis: Dict[str, str]) -> Tuple[EditStats, Dict[str, Optional[str]]]:
+    """Concatenated minimum-permutation WER (CHiME-6): speaker-attributed word error.
+
+    ``reference`` and ``hypothesis`` map a speaker to everything that speaker said. Each reference
+    speaker is scored against one hypothesis speaker, under the mapping with the fewest errors, so a
+    word transcribed correctly but given to the wrong speaker still counts as an error. Hypothesis
+    speakers left unmatched count as insertions. Returns the pooled stats and the mapping used.
+    """
+    from itertools import permutations
+
+    ref_ids, hyp_ids = list(reference), list(hypothesis)
+    slots: List[Optional[str]] = list(hyp_ids) + [None] * max(0, len(ref_ids) - len(hyp_ids))
+    if len(slots) > 8:
+        raise ValueError("cpWER supports at most 8 speakers")
+    hyp_words = {h: normalize(hypothesis[h], strip_punct=True).split() for h in hyp_ids}
+    best: Optional[Tuple[int, List[EditStats], int, Tuple[Optional[str], ...]]] = None
+    for perm in permutations(slots, len(ref_ids)):
+        stats = [wer(reference[r], hypothesis[h] if h else "") for r, h in zip(ref_ids, perm)]
+        extra = sum(len(hyp_words[h]) for h in hyp_ids if h not in perm)
+        total = sum(s.distance for s in stats) + extra
+        if best is None or total < best[0]:
+            best = (total, stats, extra, perm)
+    if best is None:
+        return EditStats(0, 0, 0, 0, 0), {}
+    total, stats, extra, perm = best
+    pooled = EditStats(
+        total,
+        sum(s.reference_length for s in stats),
+        sum(s.substitutions for s in stats),
+        sum(s.deletions for s in stats),
+        sum(s.insertions for s in stats) + extra,
+    )
+    return pooled, dict(zip(ref_ids, perm))
+
+
 def pooled_rate(stats: Iterable[EditStats]) -> Optional[float]:
     """Corpus-level rate: total edits over total reference length (not a mean of page rates)."""
     items = list(stats)

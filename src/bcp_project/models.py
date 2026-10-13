@@ -406,6 +406,7 @@ class MeetingAction(Base):
     decision_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("meeting_decisions.id"), nullable=True)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     owner: Mapped[Optional[str]] = mapped_column(String(128), nullable=True, index=True)
+    division: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     due_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     status: Mapped[str] = mapped_column(String(16), default="open", server_default="open", nullable=False, index=True)
     evidence: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -472,6 +473,30 @@ class MeetingDocument(Base):
     uploaded_by: Mapped[str] = mapped_column(String(64), nullable=False)
     uploaded_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     archive_doc_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True, index=True)
+
+
+class MeetingRecord(Base):
+    """One sealed artifact of a meeting: recording, transcript, a draft-minutes version, or approved minutes.
+
+    Bytes are stored write-once; ``sha256`` is the hash of exactly those bytes. Transcript and
+    approved minutes are also archive documents (``archive_doc_id``) so they are searchable.
+    """
+
+    __tablename__ = "meeting_records"
+    __table_args__ = (UniqueConstraint("meeting_id", "kind", "version", name="uq_meeting_record_kind_version"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    meeting_id: Mapped[int] = mapped_column(Integer, ForeignKey("board_meetings.id"), nullable=False, index=True)
+    kind: Mapped[str] = mapped_column(String(24), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    file_location: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    size_bytes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    content_type: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    filename: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    archive_doc_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    created_by: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
 class MeetingInvitation(Base):

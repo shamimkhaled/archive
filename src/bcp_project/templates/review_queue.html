@@ -32,6 +32,7 @@
                     <td>
                         <strong>{{ it.doc_id }}</strong>{% if it.is_new_version %} <span class="badge">v{{ it.version }}</span>{% endif %}
                         {% if it.title %}<br><span class="muted">{{ it.title }}</span>{% endif %}
+                        {% if it.review_reasons %}<br><span class="muted small">{{ it.review_reasons|join('; ') }}</span>{% endif %}
                     </td>
                     <td>{{ it.doc_type }}</td>
                     <td><span class="badge">{{ it.sensitivity }}</span></td>

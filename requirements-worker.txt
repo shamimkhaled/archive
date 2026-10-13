@@ -1,3 +1,5 @@
 # Worker-only dependencies (speech-to-text). Installed on top of requirements.txt
 # in the Dockerfile `worker` target so the web image stays small.
 faster-whisper>=1.0.0
+# faster-whisper 1.2 passes av.open(metadata_errors=...), which PyAV 16+ removed.
+av>=11,<16

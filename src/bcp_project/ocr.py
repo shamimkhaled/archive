@@ -10,6 +10,7 @@ from __future__ import annotations
 import io
 import logging
 import os
+import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -114,6 +115,30 @@ class OcrResult:
     confidence: Optional[float]
     ink_coverage: Optional[float] = None
     recovered_lines: int = 0
+    bangla_suspect_words: int = 0
+
+
+_BANGLA_CHAR = re.compile("[\u0980-\u09ff]")
+_LATIN_OR_ASCII_DIGIT = re.compile("[A-Za-z0-9]")
+
+
+def bangla_suspect_words(words: List[Dict[str, Any]], text: str) -> int:
+    """Words on a Bangla page that Tesseract replaced with Latin or ASCII-digit junk.
+
+    On Bangla pages Tesseract's page confidence does not track errors (eval/reports/ocr-synthetic.json:
+    pages above 5% CER score 89-91 while clean pages go down to 82). What does track them is a whole
+    word read as Latin ("অ্যান্ড কোং" -> "WIS (@12", "১১.২" -> "5502") with low word confidence.
+    Mixed-digit numbers ("১0৮০০") and stray brackets are single-character slips and are not counted.
+    """
+    if not _mostly_bangla(text):
+        return 0
+    cutoff = float(os.getenv("OCR_BANGLA_SUSPECT_WORD_CONF", "50"))
+    count = 0
+    for word in words:
+        token = word["text"]
+        if word["conf"] < cutoff and _LATIN_OR_ASCII_DIGIT.search(token) and not _BANGLA_CHAR.search(token):
+            count += 1
+    return count
 
 
 def _words(data: Dict[str, List[Any]], dx: int = 0, dy: int = 0) -> List[Dict[str, Any]]:
@@ -248,7 +273,7 @@ def ocr_image_detail(image, lang: Optional[str] = None) -> OcrResult:
     minimum = float(os.getenv("OCR_MIN_INK_COVERAGE", "0.9"))
     if coverage is not None and coverage < minimum:
         mean = min(mean, coverage * 100)
-    return OcrResult(text, round(mean, 2), coverage, recovered)
+    return OcrResult(text, round(mean, 2), coverage, recovered, bangla_suspect_words(words, text))
 
 
 def ocr_image(image, lang: Optional[str] = None) -> Tuple[str, Optional[float]]:
@@ -338,6 +363,8 @@ def _ocr_meta(lang: str, result: OcrResult) -> Dict[str, Any]:
         meta["ink_coverage"] = result.ink_coverage
     if result.recovered_lines:
         meta["recovered_lines"] = result.recovered_lines
+    if result.bangla_suspect_words:
+        meta["bangla_suspect_words"] = result.bangla_suspect_words
     return meta
 
 
@@ -379,12 +406,16 @@ def summarize_confidence(pages: List[PageText]) -> Dict[str, Any]:
     # 85-92 have the same error rate), so Bangla pages can be held to their own bar.
     bangla_threshold = float(os.getenv("OCR_BANGLA_PAGE_REVIEW_THRESHOLD") or page_threshold)
     bangla_low = any(_mostly_bangla(p.text) and (p.confidence or 0.0) < bangla_threshold for p in ocr_pages)
+    # Confidence alone misses misread Bangla words, so suspect words also route a page to review.
+    suspect_limit = int(os.getenv("OCR_BANGLA_SUSPECT_WORDS", "1"))
+    suspect_pages = [p.page_number for p in ocr_pages if suspect_limit > 0 and (p.metadata or {}).get("bangla_suspect_words", 0) >= suspect_limit]
     empty = all(not p.text.strip() for p in pages)
     return {
         "mean": mean,
         "min": round(low, 2),
         "ocr_pages": len(ocr_pages),
-        "needs_review": empty or mean < mean_threshold or low < page_threshold or bangla_low,
+        "bangla_suspect_pages": suspect_pages,
+        "needs_review": empty or mean < mean_threshold or low < page_threshold or bangla_low or bool(suspect_pages),
     }
 
 

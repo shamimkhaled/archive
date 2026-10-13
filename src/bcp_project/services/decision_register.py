@@ -95,6 +95,7 @@ async def decision_register(
                 {
                     "description": a.description,
                     "owner": a.owner,
+                    "division": a.division,
                     "due_date": a.due_date.isoformat() if a.due_date else None,
                     "status": a.status,
                 }

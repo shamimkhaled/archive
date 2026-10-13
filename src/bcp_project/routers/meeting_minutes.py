@@ -6,10 +6,11 @@ import hashlib
 import logging
 import re
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile, status
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
@@ -29,7 +30,7 @@ from ..meeting_audio import (
     sniff_recording,
 )
 from ..minutes_draft import MINUTES_PENDING, meeting_sensitivity
-from ..models import BoardMeeting, MeetingAction, MeetingDecision, Role, User
+from ..models import BoardMeeting, MeetingAction, MeetingDecision, MeetingRecord, Role, User
 from ..services.minutes import (
     MinutesWorkflowError,
     action_payload,
@@ -47,6 +48,14 @@ from ..services.minutes import (
     set_action_status,
     submit_for_review,
     workflow_view,
+)
+from ..services.meeting_records import (
+    KIND_MINUTES_APPROVED,
+    archive_transcript,
+    link_archive_document,
+    list_records,
+    record_payload,
+    seal_minutes_draft,
 )
 from .meeting_common import _meeting_transcription_status
 
@@ -103,7 +112,15 @@ async def submit_minutes(
         submit_for_review(meeting, current_user.username)
     except MinutesWorkflowError as exc:
         return _fail(meeting_id, exc)
-    await _audit(db, request, current_user, "minutes_submit", meeting_id, f"version={meeting.minutes_version}")
+    draft = await seal_minutes_draft(db, meeting, submitted_by=current_user.username)
+    await _audit(
+        db,
+        request,
+        current_user,
+        "minutes_submit",
+        meeting_id,
+        f"version={meeting.minutes_version} draft_sha256={draft.sha256 if draft else '-'}",
+    )
     await db.commit()
     return _back(meeting_id, "minutes_submitted")
 
@@ -150,6 +167,15 @@ async def approve_minutes(
         return _fail(meeting_id, exc)
     try:
         result = await archive_approved_minutes(db, meeting, approved_by=current_user.username)
+        await link_archive_document(
+            db,
+            meeting_id,
+            KIND_MINUTES_APPROVED,
+            result,
+            created_by=current_user.username,
+            filename=f"minutes-v{int(meeting.minutes_version or 1)}.pdf",
+        )
+        transcript = await archive_transcript(db, meeting, approved_by=current_user.username)
     except Exception:
         logger.exception("Archiving approved minutes failed for meeting %s", meeting_id)
         await db.rollback()
@@ -161,10 +187,13 @@ async def approve_minutes(
         "minutes_approve",
         meeting_id,
         f"version={meeting.minutes_version} sha256={digest} doc_id={result.document.doc_id} "
-        f"doc_version={result.version.version} pdf_sha256={result.version.sha256}",
+        f"doc_version={result.version.version} pdf_sha256={result.version.sha256}"
+        + (f" transcript_doc={transcript[0].document.doc_id} v{transcript[0].version.version}" if transcript else ""),
     )
     await db.commit()
     dispatch_after_commit(result, background_tasks)
+    if transcript:
+        dispatch_after_commit(transcript[0], background_tasks)
     publish_event(
         "meeting.minutes_approved",
         {
@@ -335,6 +364,7 @@ async def add_action(
     meeting_id: int,
     description: str = Form(..., min_length=3, max_length=4000),
     owner: str = Form(""),
+    division: str = Form(""),
     due_date: str = Form(""),
     decision_id: str = Form(""),
     current_user: User = Depends(get_current_user),
@@ -351,6 +381,7 @@ async def add_action(
         decision_id=await _decision_link(db, meeting_id, decision_id),
         description=description.strip(),
         owner=_clean(owner, 128),
+        division=_clean(division, 128),
         due_date=parse_due_date(due_date),
         source="manual",
         created_by=current_user.username,
@@ -369,6 +400,7 @@ async def edit_action(
     action_id: int,
     description: str = Form(..., min_length=3, max_length=4000),
     owner: str = Form(""),
+    division: str = Form(""),
     due_date: str = Form(""),
     decision_id: str = Form(""),
     current_user: User = Depends(get_current_user),
@@ -385,6 +417,7 @@ async def edit_action(
         row.source = "edited"
     row.description = description.strip()
     row.owner = _clean(owner, 128)
+    row.division = _clean(division, 128)
     row.due_date = parse_due_date(due_date)
     row.decision_id = await _decision_link(db, meeting_id, decision_id)
     row.updated_by = current_user.username
@@ -573,3 +606,64 @@ async def update_speaker_names(
     await _audit(db, request, current_user, "speaker_map", meeting_id, f"named={len(mapping)} of {len(labels)}")
     await db.commit()
     return _back(meeting_id, "speakers_saved", "transcription")
+
+
+# --- Sealed meeting records --------------------------------------------------------------
+
+@router.get("/api/meetings/{meeting_id}/records")
+async def api_meeting_records(
+    meeting_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Recording, transcript, draft-minutes versions, and approved minutes, each with its SHA-256."""
+    require_meeting_organizer(current_user)
+    if await db.get(BoardMeeting, meeting_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
+    return {"records": [record_payload(row) for row in await list_records(db, meeting_id)]}
+
+
+@router.get("/meetings/{meeting_id}/records/{record_id}/file")
+async def download_meeting_record(
+    request: Request,
+    meeting_id: int,
+    record_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """Stream a sealed record (recordings can be hours of video, so never read it into memory)."""
+    from .. import deps
+    from ..aws_utils import get_s3_client
+
+    require_meeting_organizer(current_user)
+    row = await db.get(MeetingRecord, record_id)
+    if row is None or row.meeting_id != meeting_id or not row.file_location:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Record not found")
+    name = (row.filename or f"{row.kind}-v{row.version}").encode("ascii", "replace").decode().replace("?", "_")
+    headers = {
+        "Content-Disposition": f'attachment; filename="{_safe_filename(name)}"',
+        "X-Content-SHA256": row.sha256,
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+    }
+    media_type = row.content_type or "application/octet-stream"
+    location = row.file_location.strip()
+    if location.startswith("s3://"):
+        bucket, _, key = location[len("s3://"):].partition("/")
+        try:
+            body = await asyncio.to_thread(lambda: get_s3_client().get_object(Bucket=bucket, Key=key)["Body"])
+        except Exception as exc:
+            logger.exception("S3 get_object failed for meeting record %s", row.id)
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Failed to fetch the record from storage") from exc
+        response: Response = StreamingResponse(body.iter_chunks(UPLOAD_READ_BYTES), media_type=media_type, headers=headers)
+    else:
+        path = Path(location)
+        if not path.is_absolute():
+            path = deps.UPLOAD_DIR / location
+        path = path.resolve()
+        if not path.is_relative_to(deps.UPLOAD_DIR.resolve()) or not path.is_file():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Record file missing from storage")
+        response = FileResponse(path, media_type=media_type, headers=headers)
+    await _audit(db, request, current_user, "meeting_record_download", meeting_id, f"kind={row.kind} v{row.version} sha256={row.sha256}")
+    await db.commit()
+    return response

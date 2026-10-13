@@ -268,6 +268,7 @@ def extract_decisions_and_actions(
     Returns empty lists when the model is unavailable or blocked by egress policy.
     """
     from .. import ai
+    from ..ai.guard import with_rules, wrap_untrusted
 
     transcript = transcript_to_plain(list(segments or []))
     if not transcript.strip() or not (body_md or "").strip():
@@ -275,14 +276,21 @@ def extract_decisions_and_actions(
     system = (
         "You extract board decisions and action items for Sonali Bank PLC minutes. "
         "Return JSON: {\"decisions\": [{\"text\", \"agenda_item\", \"evidence\"}], "
-        "\"actions\": [{\"description\", \"owner\", \"due_date\" (YYYY-MM-DD or null), \"evidence\", "
+        "\"actions\": [{\"description\", \"owner\", \"division\", \"due_date\" (YYYY-MM-DD or null), \"evidence\", "
         "\"decision_index\" (0-based index into decisions, or null)}]}. "
+        "\"owner\" is the person responsible; \"division\" is the responsible division or department "
+        "(e.g. Finance Division, Credit Division, ICT Division) as stated, or null. "
         "\"evidence\" must be an exact quote copied from the transcript that supports the item. "
         "Only include items the transcript states. Keep the language of the transcript (Bangla or English)."
     )
-    user = f"Draft minutes:\n{body_md[:12000]}\n\nTranscript:\n{transcript[:24000]}"
+    user = (
+        f"Draft minutes:\n{wrap_untrusted(body_md[:12000], 'draft_minutes')}\n\n"
+        f"Transcript:\n{wrap_untrusted(transcript[:24000], 'transcript')}"
+    )
     try:
-        data = ai.chat_json("minutes", system, user, sensitivity=sensitivity or meeting_sensitivity(), max_tokens=2000)
+        data = ai.chat_json(
+            "minutes", with_rules(system), user, sensitivity=sensitivity or meeting_sensitivity(), max_tokens=2000
+        )
     except ai.EgressBlocked as exc:
         logger.info("Decision extraction skipped by egress policy: %s", exc)
         return {"decisions": [], "actions": []}
@@ -315,7 +323,8 @@ def extract_decisions_and_actions(
         actions.append(
             {
                 "description": description,
-                "owner": (str(item.get("owner") or "").strip() or None),
+                "owner": (str(item.get("owner") or "").strip()[:128] or None),
+                "division": (str(item.get("division") or "").strip()[:128] or None),
                 "due_date": parse_due_date(item.get("due_date")),
                 "evidence": evidence,
                 "decision_index": index_map.get(link) if isinstance(link, int) else None,
@@ -368,6 +377,7 @@ async def replace_ai_items(
                 decision_id=rows[link].id if isinstance(link, int) and 0 <= link < len(rows) else None,
                 description=item["description"],
                 owner=item.get("owner"),
+                division=item.get("division"),
                 due_date=item.get("due_date"),
                 evidence=item.get("evidence"),
                 source=SOURCE_AI,
@@ -414,6 +424,7 @@ def action_payload(row: MeetingAction) -> Dict[str, Any]:
         "decision_id": row.decision_id,
         "description": row.description,
         "owner": row.owner,
+        "division": row.division,
         "due_date": row.due_date.isoformat() if row.due_date else None,
         "status": row.status,
         "evidence": row.evidence,

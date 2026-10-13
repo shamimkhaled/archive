@@ -19,6 +19,7 @@ DEFAULT_DOCUMENT_TYPES: Sequence[str] = (
     "Budget",
     "Audit Report",
     "Circular",
+    "Office Order",
     "Memo",
     "Policy",
     "Letter",

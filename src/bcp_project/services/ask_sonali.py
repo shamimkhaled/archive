@@ -9,6 +9,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .. import ai
+from ..ai.guard import with_rules, wrap_untrusted
 from ..access_control import get_sensitivity_for_docs, write_audit
 from ..observability import Timer, incr
 from ..policy import Principal, Scope, require_scope
@@ -132,7 +133,7 @@ async def ask_sonali_for_principal(
         for idx, row in enumerate(sources, start=1):
             sources_block.append(
                 f"[{idx}] doc_id={row['doc_id']} page={row.get('page')} type={row.get('doc_type')}\n"
-                f"{row.get('text') or ''}"
+                f"{wrap_untrusted(row.get('text') or '', 'archive_excerpt')}"
             )
         user_prompt = (
             f"Question:\n{q}\n\nSOURCE excerpts (authorized only):\n"
@@ -143,7 +144,7 @@ async def ask_sonali_for_principal(
         try:
             llm = get_llm_client()
             model_out = llm.chat_json(
-                system=SYSTEM_PROMPT,
+                system=with_rules(SYSTEM_PROMPT),
                 user=user_prompt,
                 temperature=0.0,
                 task="ask",

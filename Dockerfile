@@ -4,11 +4,13 @@
 #   web       FastAPI API + Jinja PWA (default)
 #   pipeline  ingest / notify workers and the outbox relay (OCR, no audio stack)
 #   worker    meeting worker: adds ffmpeg and faster-whisper
+#             (WITH_DIARIZATION=1 also adds pyannote.audio for speaker identification)
 #
 # Railway passes service variables to declared ARGs, so set SERVICE_ROLE=worker
 # on worker services (see .railway/railway.ts). Locally:
 #   docker build -t sonali-archive-web .
 #   docker build --build-arg SERVICE_ROLE=worker -t sonali-archive-worker .
+#   docker build --build-arg SERVICE_ROLE=worker --build-arg WITH_DIARIZATION=1 -t sonali-archive-worker-dz .
 
 # React PWA served by FastAPI under /app (see src/bcp_project/spa.py and docs/FRONTEND.md).
 FROM node:22-bookworm-slim AS frontend
@@ -21,13 +23,16 @@ RUN npm run build
 FROM python:3.12-slim-bookworm AS deps
 
 ARG SERVICE_ROLE=web
+ARG WITH_DIARIZATION=0
 ENV PIP_NO_CACHE_DIR=1
 RUN apt-get update && apt-get install -y --no-install-recommends build-essential \
     && rm -rf /var/lib/apt/lists/*
-COPY requirements.txt requirements-worker.txt ./
+COPY requirements.txt requirements-worker.txt requirements-diarization.txt ./
 RUN pip install --upgrade pip \
     && pip install --prefix=/install -r requirements.txt \
-    && if [ "$SERVICE_ROLE" = "worker" ]; then pip install --prefix=/install -r requirements-worker.txt; fi
+    && if [ "$SERVICE_ROLE" = "worker" ]; then pip install --prefix=/install -r requirements-worker.txt; fi \
+    && if [ "$SERVICE_ROLE" = "worker" ] && [ "$WITH_DIARIZATION" = "1" ]; then \
+         pip install --prefix=/install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements-diarization.txt; fi
 
 FROM python:3.12-slim-bookworm
 

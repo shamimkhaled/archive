@@ -14,6 +14,7 @@ from .. import ai
 from ..ai import route_changes, routing
 from ..ai.providers import ALL_PROVIDERS, provider_configured
 from ..deps import _client_ip, get_current_user, get_db, require_role, templates
+from ..diarization import diarization_status
 from ..models import ModelRegistryEntry, Role, User
 
 logger = logging.getLogger("bcp_project.routers.admin_ai")
@@ -41,6 +42,7 @@ async def ai_overview(db: AsyncSession) -> Dict[str, Any]:
         "configured": {
             name: provider_configured(name) for name in sorted(ALL_PROVIDERS)
         },
+        "diarization": diarization_status(),
         "history": [
             {
                 "id": row.id,

@@ -116,6 +116,21 @@
 </section>
 
 <section class="panel">
+    <h2>Speaker identification</h2>
+    {% set dz = ov.diarization %}
+    {% if not dz.enabled %}
+    <p class="muted">Off (<code>DIARIZATION_PROVIDER=none</code>). Transcripts are not split by speaker; the secretary names speakers by hand.</p>
+    {% else %}
+    <p>
+        Provider <code>{{ dz.provider }}</code>{% if dz.detail %} · <code>{{ dz.detail }}</code>{% endif %}
+        {% if dz.ready %}<span class="badge badge-accent">configured</span>{% else %}<span class="badge badge-warn">needs attention</span>{% endif %}
+    </p>
+    {% for issue in dz.issues %}<p class="notice warn">{{ issue }}</p>{% endfor %}
+    <p class="muted">Runs on the meeting worker. Speaker labels are matched onto transcript segments and renamed on the meeting page.</p>
+    {% endif %}
+</section>
+
+<section class="panel">
     <h2>Switch a route</h2>
     <form action="/admin/ai/route" method="post" class="form-grid">
         <label>Task

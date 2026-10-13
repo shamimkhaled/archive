@@ -429,3 +429,115 @@ async def test_verify_endpoint_detects_tampering(maker, local_storage, monkeypat
         path.write_bytes(b"%PDF-1.7 altered on disk")
         bad = await ingest_router.verify_document_version(request, "SB-2026-903", 1, current_user=user, db=db)
         assert bad["match"] is False and bad["recorded_sha256"] == digest
+
+
+# --- Metadata classification and review routing -----------------------------------------
+
+
+def _ai_suggestion(**fields):
+    base = {"title": "", "reference_number": "", "department": "", "subject": "", "category": "", "doc_date": "", "doc_type": "", "keywords": []}
+    return {**base, **fields, "_source": {"kind": "ai", "provider": "stub", "model": "m"}}
+
+
+def test_metadata_review_reasons():
+    from bcp_project.services.metadata_suggest import metadata_review_reasons
+
+    doc = SimpleNamespace(title="Budget circular", doc_type="Circular", doc_date=date(2026, 1, 5))
+    assert metadata_review_reasons(doc, _ai_suggestion(doc_type="circular", doc_date="2026-01-05")) == []
+    assert metadata_review_reasons(doc, _ai_suggestion(doc_type="Office Order")) == ["doc_type_mismatch"]
+    assert metadata_review_reasons(doc, _ai_suggestion(doc_date="2025-12-01")) == ["doc_date_mismatch"]
+    rules = {"_source": {"kind": "rules", "reason": "APIStatusError"}}
+    assert metadata_review_reasons(doc, rules) == ["ai_unavailable"]
+    assert metadata_review_reasons(doc, {"_source": {"kind": "rules", "reason": "EgressBlocked"}}) == []
+    untitled = SimpleNamespace(title=None, doc_type="Other", doc_date=date(2026, 1, 5))
+    assert metadata_review_reasons(untitled, _ai_suggestion(doc_type="Memo")) == ["missing_title"]
+
+
+def test_metadata_review_can_be_disabled(monkeypatch):
+    from bcp_project.services.metadata_suggest import metadata_review_reasons
+
+    monkeypatch.setenv("METADATA_REVIEW", "off")
+    doc = SimpleNamespace(title=None, doc_type="Circular", doc_date=date(2026, 1, 5))
+    assert metadata_review_reasons(doc, {"_source": {"kind": "rules", "reason": "X"}}) == []
+
+
+def test_apply_suggestions_fills_only_empty_fields_and_classifies_other():
+    from bcp_project.services.metadata_suggest import apply_suggestions
+
+    doc = SimpleNamespace(
+        title="Uploader title", reference_number=None, department=None, subject=None, category=None, doc_type="Other", keywords=[]
+    )
+    applied = apply_suggestions(
+        doc, _ai_suggestion(title="AI title", department="Treasury", doc_type="Office Order", keywords=["budget", "বাজেট"])
+    )
+    assert doc.title == "Uploader title"
+    assert doc.department == "Treasury" and doc.doc_type == "Office Order" and doc.keywords == ["budget", "বাজেট"]
+    assert set(applied) == {"department", "doc_type", "keywords"}
+
+
+@pytest.mark.asyncio
+async def test_clean_text_pdf_auto_applies_metadata(maker, offline_pipeline, monkeypatch):
+    from bcp_project.models import DocumentRecord
+    from bcp_project.services.ingest import run_document_ingest
+
+    monkeypatch.setattr(
+        "bcp_project.services.metadata_suggest.suggest_metadata",
+        lambda text, sensitivity=None: _ai_suggestion(department="Finance", subject="Budget", doc_type="Circular", keywords=["budget"]),
+    )
+    await _intake(maker, text_pdf("Budget circular for 2026"), doc_id="SB-2026-910")
+    assert await run_document_ingest("SB-2026-910", session_factory=maker) == "indexed"
+    async with maker() as db:
+        doc = (await db.execute(select(DocumentRecord).where(DocumentRecord.doc_id == "SB-2026-910"))).scalar_one()
+        assert doc.department == "Finance" and doc.subject == "Budget"
+        assert doc.metadata_confirmed_by is None
+        assert "department" in doc.suggested_metadata["_applied"]
+
+
+@pytest.mark.asyncio
+async def test_type_mismatch_sends_clean_pdf_to_review(maker, offline_pipeline, monkeypatch):
+    from bcp_project.models import DocumentRecord
+    from bcp_project.services.ingest import run_document_ingest
+
+    monkeypatch.setattr(
+        "bcp_project.services.metadata_suggest.suggest_metadata",
+        lambda text, sensitivity=None: _ai_suggestion(doc_type="Board Paper"),
+    )
+    await _intake(maker, text_pdf("Memorandum to the Board"), doc_id="SB-2026-911")
+    assert await run_document_ingest("SB-2026-911", session_factory=maker) == "needs_review"
+    async with maker() as db:
+        doc = (await db.execute(select(DocumentRecord).where(DocumentRecord.doc_id == "SB-2026-911"))).scalar_one()
+        assert doc.suggested_metadata["_review_reasons"] == ["doc_type_mismatch"]
+        assert doc.department is None
+
+
+def test_bangla_suspect_words_count_latin_junk_on_bangla_pages_only(monkeypatch):
+    from bcp_project.ocr import bangla_suspect_words
+
+    monkeypatch.delenv("OCR_BANGLA_SUSPECT_WORD_CONF", raising=False)
+    bangla = "সোনালী ব্যাংক পিএলসি প্রধান কার্যালয় অফিস আদেশ নম্বর"
+    words = [
+        {"text": "সোনালী", "conf": 30.0},
+        {"text": "WIS", "conf": 41.0},
+        {"text": "5502", "conf": 22.0},
+        {"text": "(@12", "conf": 70.0},
+        {"text": "১0৮০০", "conf": 10.0},
+    ]
+    assert bangla_suspect_words(words, bangla) == 2
+    assert bangla_suspect_words(words, "Sonali Bank PLC head office order WIS 5502") == 0
+    monkeypatch.setenv("OCR_BANGLA_SUSPECT_WORD_CONF", "80")
+    assert bangla_suspect_words(words, bangla) == 3
+
+
+def test_suspect_bangla_page_routes_to_review_despite_high_confidence(monkeypatch):
+    from bcp_project.ocr import PageText, summarize_confidence
+
+    for name in ("OCR_BANGLA_SUSPECT_WORDS", "OCR_BANGLA_PAGE_REVIEW_THRESHOLD", "OCR_REVIEW_THRESHOLD", "OCR_PAGE_REVIEW_THRESHOLD"):
+        monkeypatch.delenv(name, raising=False)
+    text = "সোনালী ব্যাংক পিএলসি প্রধান কার্যালয় অফিস আদেশ " * 5
+    clean = PageText(1, text, 91.0, "ocr", {"bangla_suspect_words": 0})
+    suspect = PageText(2, text, 91.0, "ocr", {"bangla_suspect_words": 1})
+    assert summarize_confidence([clean])["needs_review"] is False
+    summary = summarize_confidence([clean, suspect])
+    assert summary["needs_review"] is True and summary["bangla_suspect_pages"] == [2]
+    monkeypatch.setenv("OCR_BANGLA_SUSPECT_WORDS", "0")
+    assert summarize_confidence([clean, suspect])["needs_review"] is False

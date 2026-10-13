@@ -24,6 +24,9 @@
 {% if not can_act %}
 <div class="alert" role="status">This version is {{ version.status }}; it is shown read-only.</div>
 {% endif %}
+{% if review_reasons %}
+<div class="alert" role="status">Sent for verification: {{ review_reasons|join('; ') }}.</div>
+{% endif %}
 
 <form action="/review/{{ document.doc_id }}/v/{{ version.version }}/approve" method="post" id="approveForm">
     <section class="panel">
@@ -34,6 +37,10 @@
             from the text. Correct anything wrong; these fields drive search filters.
         </p>
         <div class="form-grid">
+            <div class="form-group">
+                <label for="meta_doc_type">Document type{% if suggested_type and suggested_type|lower != document.doc_type|lower %} (AI suggests {{ suggested_type }}){% endif %}</label>
+                <input id="meta_doc_type" type="text" name="doc_type" value="{{ document.doc_type }}" maxlength="64" {% if not can_act %}disabled{% endif %} />
+            </div>
             {% for f in fields %}
             <div class="form-group">
                 <label for="meta_{{ f }}">{{ f|replace('_', ' ')|capitalize }}</label>

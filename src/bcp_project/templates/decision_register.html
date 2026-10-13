@@ -34,7 +34,7 @@
                     </td>
                     <td>
                         {% for a in e.actions %}
-                        <div>{{ a.description }}{% if a.owner %} <span class="muted">· {{ a.owner }}</span>{% endif %}{% if a.due_date %} <span class="muted">· due {{ a.due_date }}</span>{% endif %} <span class="badge{% if a.status == 'done' %} badge-accent{% elif a.status == 'open' %} badge-warn{% endif %}">{{ a.status|replace('_', ' ') }}</span></div>
+                        <div>{{ a.description }}{% if a.owner %} <span class="muted">· {{ a.owner }}</span>{% endif %}{% if a.division %} <span class="muted">· {{ a.division }}</span>{% endif %}{% if a.due_date %} <span class="muted">· due {{ a.due_date }}</span>{% endif %} <span class="badge{% if a.status == 'done' %} badge-accent{% elif a.status == 'open' %} badge-warn{% endif %}">{{ a.status|replace('_', ' ') }}</span></div>
                         {% else %}<span class="muted">—</span>{% endfor %}
                     </td>
                     <td><a class="button button-secondary" href="{{ e.minutes_url }}">Minutes</a></td>

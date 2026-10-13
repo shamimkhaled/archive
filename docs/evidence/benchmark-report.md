@@ -4,9 +4,10 @@ Section 9 item covered here: AI Accuracy / Benchmark Report (with section 4.2 an
 post-demonstration report). Raw tables: [`benchmark-results.md`](benchmark-results.md). JSON
 reports: `eval/reports/`. Manifest formats and the bank sample plan: `eval/benchmarks/README.md`.
 
-**Status, 12 October 2026.** OCR and retrieval have been measured on synthetic and CI data. Speech
-to text, metadata, summarisation and Ask need bank samples and are ready to run; nothing below
-claims accuracy on real Sonali Bank documents yet.
+**Status, 13 October 2026.** OCR and retrieval have been measured on synthetic and CI data, and
+speech to text with speaker attribution on a small synthetic two-speaker set (English only is
+meaningful; see 2a). Bangla speech, diarization, metadata, summarisation and Ask need bank samples
+and are ready to run; nothing below claims accuracy on real Sonali Bank documents yet.
 
 ## 1. Method
 
@@ -17,7 +18,7 @@ endpoint), so results describe the shipped code rather than a separate prototype
 | Benchmark | Metrics | Human effort measure |
 |---|---|---|
 | OCR | CER (code points and grapheme clusters), WER, mean confidence, p50/p95 latency, high-error pages caught by review routing | Estimated correction minutes per page from edit distance (`--edits-per-minute`, default 30) |
-| STT | WER, CER, real-time factor, speaker count error | Minutes of transcript editing |
+| STT | WER, CER, real-time factor, speaker count error, speaker-attributed WER (cpWER) with the diarizer and with perfect speaker turns | Minutes of transcript editing |
 | Metadata | Document-type accuracy and macro-F1 with confusion matrix; per-field exact / normalised match | Fields changed at confirmation (`metadata_confirm changed=`) |
 | Summary | Heading detection, ROUGE-L against reference points, citation grounding (cited page contains the point) | Sections edited before approval |
 | Ask | Answer-or-refuse accuracy, citation precision and recall, required facts present, restricted-document leaks, latency | — |
@@ -71,6 +72,15 @@ caught 0 of 3 Bangla pages above 5% CER. The product now has a separate Bangla p
 samples so that at least 90% of pages above 5% CER reach a reviewer while the review queue stays
 manageable.
 
+A second signal works better than any confidence bar: on the bad pages, Tesseract replaces whole
+Bangla words with Latin or ASCII-digit junk ("অ্যান্ড কোং" read as "WIS (@12") at low word
+confidence. A page with at least one such word (`OCR_BANGLA_SUSPECT_WORDS=1`, word confidence
+below `OCR_BANGLA_SUSPECT_WORD_CONF=50`) goes to review. On the synthetic set this catches **3 of
+3** Bangla pages above 5% CER while flagging 8 of 60 Bangla pages (13%) and 0 of 60 English pages
+(`eval/reports/ocr-synthetic.json`, `review_routing`). It is on by default. A second Tesseract pass
+with a different page-segmentation mode was also tried as a cross-check; it produced identical text
+on these pages, so it is not used.
+
 ### Finding 3: legacy Bijoy-font PDFs
 
 Many Bangladeshi documents are typed in Bijoy fonts (SutonnyMJ and similar) whose PDF text layer
@@ -84,6 +94,37 @@ before this change should be re-ingested if they came from Bijoy sources.
 
 Handwriting is not recognised (route to review). Very poor faxes and stamps over text produce the
 remaining errors; see the "failure cases" lists in `benchmark-results.md`.
+
+## 2a. Speech to text and speaker attribution (synthetic two-speaker set)
+
+`make_synthetic_benchmarks.py --sets stt` builds eight two-speaker meetings with espeak-ng, with
+exact speaker turns; `bench_accuracy.py stt` scores them with Whisper `small` (CPU, int8).
+Speaker-attributed WER is cpWER (CHiME-6): each reference speaker's words against one hypothesis
+speaker's, under the best mapping, so a word given to the wrong speaker is an error.
+
+| Slice | Files | WER | cpWER, perfect turns | Real-time factor |
+|---|---|---|---|---|
+| English | 2 | 14.8% | 14.8% | 0.14 |
+| Bangla (espeak-ng voice) | 2 | 119% | 120% | 2.85 |
+| Bangla + English speakers | 4 | 80% | 79% | 0.88 |
+
+Findings:
+
+1. **Attribution plumbing works.** With perfect turns, cpWER equals WER on English: Whisper's
+   segment boundaries do not straddle speaker changes separated by a short pause.
+2. **The synthetic Bangla voice is unusable.** Whisper hears espeak-ng Bangla as noise (it emits
+   emoji and loops, hence the real-time factor near 3). These rows say nothing about Bangla
+   recognition; real recordings are required. Generating better Bangla speech with Meta's MMS-TTS
+   was rejected because its weights are licensed for non-commercial use only.
+3. **Language detection is per file.** Left to detect the language, Whisper picks one for the
+   whole recording; a meeting that starts in Bangla loses its English turns and vice versa.
+   faster-whisper's per-segment `multilingual` mode did not change the result on this set. Decide
+   between `WHISPER_LANGUAGE=bn` and a larger model on real code-switched recordings.
+4. **Diarization accuracy is not measured yet.** The pyannote model is gated on Hugging Face; with
+   the bank's token (or the bank-hosted `DIARIZATION_URL`), the same command reports cpWER with
+   the real diarizer next to the perfect-turns ceiling.
+5. Running the benchmark found that a worker image built today would install PyAV 16+, which
+   faster-whisper 1.2 cannot open audio with. `requirements-worker.txt` now pins `av<16`.
 
 ## 3. Retrieval (CI evaluation)
 
@@ -105,7 +146,7 @@ bank's own question set is run through the `ask` benchmark below.
 
 | Benchmark | Needs | Command |
 |---|---|---|
-| STT | 10 board-room recordings with typed transcripts | `bench_accuracy.py stt --manifest …/stt.jsonl --json eval/reports/stt-cloud.json` |
+| STT | 10 board-room recordings with typed transcripts and speaker turns (30–60 min per language at minimum) | `bench_accuracy.py stt --manifest …/stt.jsonl --json eval/reports/stt-cloud.json` (set `DIARIZATION_PROVIDER` for diarized cpWER) |
 | Metadata | 150 documents with confirmed metadata | `bench_accuracy.py metadata --manifest …/metadata.jsonl --json …` |
 | Summary | 20 board papers with management's reference briefing | `bench_accuracy.py summary --manifest …/summary.jsonl --json …` |
 | Ask | Running UAT instance, test users per role (`BENCH_TOKENS`), 100 questions | `BENCH_BASE_URL=… bench_accuracy.py ask --manifest …/ask.jsonl --json …` |
