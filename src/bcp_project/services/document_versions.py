@@ -19,7 +19,16 @@ from .ingest import INGEST_QUEUED, JOB_DOCUMENT_INGEST, VERSION_PROCESSING
 
 logger = logging.getLogger("bcp_project.services.document_versions")
 
-METADATA_FIELDS = ("title", "reference_number", "department", "subject", "category")
+METADATA_FIELDS = ("title", "reference_number", "department", "subject", "category", "language")
+LANGUAGE_CHOICES = (("en", "English"), ("bn", "Bangla"), ("mixed", "English and Bangla"))
+
+
+def clean_metadata_value(field: str, value: Any) -> Optional[str]:
+    """Form value for a metadata field, or None. Language must be one of LANGUAGE_CHOICES."""
+    text = str(value or "").strip()[:500]
+    if field == "language":
+        return text.lower() if text.lower() in {code for code, _ in LANGUAGE_CHOICES} else None
+    return text or None
 
 
 @dataclass
@@ -96,7 +105,7 @@ async def intake_new_document(
     ``stage=False`` is for callers that run the ingest themselves in-request.
     """
     files = await store_version_files(doc_id, 1, upload)
-    fields = {k: (v or None) for k, v in (metadata or {}).items() if k in METADATA_FIELDS}
+    fields = {k: clean_metadata_value(k, v) for k, v in (metadata or {}).items() if k in METADATA_FIELDS}
     document = DocumentRecord(
         doc_id=doc_id,
         doc_date=doc_date,
@@ -130,6 +139,10 @@ async def intake_new_document(
     db.add(document)
     db.add(version)
     await db.flush()
+    if keywords:
+        from .taxonomy import set_document_tags
+
+        await set_document_tags(db, document, keywords, source="uploader", confirmed=True, username=uploaded_by)
     return IntakeResult(document, version, _stage(db, doc_id, 1) if stage else None, duplicates)
 
 

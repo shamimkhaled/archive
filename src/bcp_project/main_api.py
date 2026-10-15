@@ -163,6 +163,15 @@ async def _run_retention_refresh() -> None:
                 logger.info("Retention dates updated for %d documents", changed)
         except Exception:
             logger.exception("Retention refresh failed; it will retry tomorrow")
+        try:
+            from .services.search_log import purge_expired_activity
+
+            async with get_session() as session:
+                removed = await purge_expired_activity(session)
+            if removed:
+                logger.info("Search activity purge removed %d rows past retention", removed)
+        except Exception:
+            logger.exception("Search activity purge failed; it will retry tomorrow")
 
 
 @app.on_event("startup")

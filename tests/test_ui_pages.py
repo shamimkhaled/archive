@@ -373,6 +373,307 @@ async def test_admin_pages_use_plain_words_and_confirmations(maker, monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_search_activity_page_is_admin_only_audited_and_exports(maker):
+    from sqlalchemy import select
+
+    from bcp_project.models import AuditLog, Role, User
+    from bcp_project.routers import admin_search_activity
+    from bcp_project.services.search_log import AiTrace, record_search
+
+    async with maker() as db:
+        await _seed(db)
+        await record_search(
+            db,
+            channel="web_search",
+            username="member1",
+            role=Role.board_member,
+            query="ঋণ নীতি ২০২৬",
+            results=[{"doc_id": "SB-OK", "can_view": True, "page": 1}],
+        )
+        await record_search(
+            db,
+            channel="ask",
+            username="member1",
+            role=Role.board_member,
+            query="What was approved?",
+            results=[{"doc_id": "SB-OK", "can_view": True, "page": 2}],
+            ai_trace=AiTrace(
+                model="qwen3",
+                source_docs=[{"doc_id": "SB-OK", "page": 2}],
+                cited_docs=[{"doc_id": "SB-OK", "page": 2}],
+                withheld_docs=[{"doc_id": "SB-SECRET", "page": 1}],
+            ),
+        )
+
+    admin_user = User(id=99, username="admin1", hashed_password="x", role=Role.admin, is_active=True)
+    app = _app(maker, admin_user, admin_search_activity.router)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://t") as client:
+        page = await client.get("/admin/search-activity", headers={"User-Agent": "Mobile 360"})
+        assert page.status_code == 200
+        assert "ঋণ নীতি ২০২৬" in page.text and "Ask Sonali" in page.text
+        assert "Withheld from the AI" in page.text and "SB-SECRET" in page.text
+
+        only_secret = await client.get("/api/admin/search-activity", params={"doc_id": "SB-SECRET"})
+        assert only_secret.status_code == 200
+        body = only_secret.json()
+        assert body["total"] == 1 and body["entries"][0]["channel"] == "ask"
+        assert body["entries"][0]["intact"] is True
+        assert [d["doc_id"] for d in body["entries"][0]["ai"]["cited_docs"]] == ["SB-OK"]
+
+        export = await client.get("/admin/search-activity.csv", params={"channel": "web_search"})
+        assert export.status_code == 200 and export.headers["content-type"].startswith("text/csv")
+        lines = export.text.strip().splitlines()
+        assert lines[0].startswith("id,created_at,username") and len(lines) == 2
+
+    async with maker() as db:
+        actions = (await db.execute(select(AuditLog.action))).scalars().all()
+    assert actions.count("search_logged") == 2
+    assert "search_log_view" in actions and "search_log_export" in actions
+
+    member = User(id=5, username="member1", hashed_password="x", role=Role.board_member, is_active=True)
+    app = _app(maker, member, admin_search_activity.router)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://t") as client:
+        assert (await client.get("/admin/search-activity")).status_code == 403
+        assert (await client.get("/admin/search-activity.csv")).status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_audit_log_page_filters_flags_tampering_and_exports(maker):
+    from datetime import timedelta
+
+    from sqlalchemy import select, update
+
+    from bcp_project.access_control import write_audit
+    from bcp_project.models import AuditLog, Role, User
+    from bcp_project.routers import admin_audit
+    from bcp_project.services.audit_chain import seal_pending
+
+    async with maker() as db:
+        await write_audit(db, username="up1", action="upload", resource_type="document", resource_id="SB-1", correlation_id="req-1")
+        await write_audit(db, username="up1", action="view", resource_type="document", resource_id="SB-1", correlation_id="req-1")
+        await write_audit(db, username="member1", action="download", resource_type="document", resource_id="SB-2")
+        await write_audit(db, username="member1", action="login", resource_type="session", detail="=HYPERLINK(\"http://x\")")
+        await db.commit()
+        assert await seal_pending(db, now=datetime.utcnow() + timedelta(minutes=1)) == 4
+        await write_audit(db, username="admin1", action="user_update", resource_type="user", resource_id="member1", commit=True)
+        await db.execute(update(AuditLog).where(AuditLog.action == "download").values(resource_id="SB-OTHER"))
+        await db.commit()
+
+    admin_user = User(id=99, username="admin1", hashed_password="x", role=Role.admin, is_active=True)
+    app = _app(maker, admin_user, admin_audit.router)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://t") as client:
+        page = await client.get("/admin/audit", headers={"User-Agent": "Mobile 360"})
+        assert page.status_code == 200
+        assert "Audit log" in page.text and "has not been checked yet" in page.text
+        assert "Changed after sealing" in page.text and "Not sealed yet" in page.text
+        assert 'href="/view/SB-1"' in page.text
+
+        one_request = (await client.get("/api/admin/audit", params={"correlation_id": "req-1"})).json()
+        assert one_request["total"] == 2 and {e["action"] for e in one_request["entries"]} == {"upload", "view"}
+        assert all(e["sealed"] and e["intact"] for e in one_request["entries"])
+
+        tampered = (await client.get("/api/admin/audit", params={"action": "download"})).json()["entries"][0]
+        assert tampered["intact"] is False and tampered["resource_id"] == "SB-OTHER"
+        pending = (await client.get("/api/admin/audit", params={"username": "ADMIN1", "action": "user_update"})).json()
+        assert pending["total"] == 1 and pending["entries"][0]["sealed"] is False
+        assert (await client.get("/api/admin/audit", params={"date_from": "bad"})).status_code == 400
+
+        export = await client.get("/admin/audit.csv", params={"resource_type": "session"})
+        assert export.status_code == 200 and export.headers["content-type"].startswith("text/csv")
+        lines = export.text.strip().splitlines()
+        assert lines[0].startswith("id,created_at,username") and len(lines) == 2
+        assert "'=HYPERLINK" in lines[1]
+
+        verify = await client.post("/admin/audit/verify")
+        assert verify.status_code == 303 and verify.headers["location"] == "/admin/audit"
+        after = await client.get("/admin/audit")
+        assert "has been tampered with" in after.text and "row content changed" in after.text
+
+    async with maker() as db:
+        actions = (await db.execute(select(AuditLog.action))).scalars().all()
+    assert "audit_log_view" in actions and "audit_log_export" in actions and "audit_chain_broken" in actions
+
+    member = User(id=5, username="member1", hashed_password="x", role=Role.board_member, is_active=True)
+    app = _app(maker, member, admin_audit.router)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://t") as client:
+        assert (await client.get("/admin/audit")).status_code == 403
+        assert (await client.get("/admin/audit.csv")).status_code == 403
+        assert (await client.post("/admin/audit/verify")).status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_ai_filled_details_wait_for_a_person_to_confirm(maker, monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from sqlalchemy import and_, select, update
+
+    from bcp_project.models import AuditLog, DocumentRecord, Role, User
+    from bcp_project.routers import review
+    from bcp_project.search_acl import SearchFilters
+
+    monkeypatch.setenv("OCR_REVIEW_FOUR_EYES", "1")
+    monkeypatch.setattr(review, "refresh_search_payload", AsyncMock())
+    monkeypatch.setattr("bcp_project.cache.bump_search_cache_version", AsyncMock())
+    async with maker() as db:
+        await _seed(db)
+        await db.execute(
+            update(DocumentRecord)
+            .where(DocumentRecord.doc_id == "SB-1")
+            .values(
+                department="Finance",
+                metadata_check_pending=True,
+                suggested_metadata={"_applied": ["title", "department"], "_source": {"kind": "ai"}},
+                metadata_confidence={"title": 0.9, "department": 0.6},
+            )
+        )
+        await db.commit()
+
+        async def unchecked_ids(value):
+            conditions = SearchFilters.from_params(metadata_check=value).sql_conditions()
+            return (await db.execute(select(DocumentRecord.doc_id).where(and_(*conditions)))).scalars().all()
+
+        assert await unchecked_ids("unchecked") == ["SB-1"]
+        assert "SB-1" not in await unchecked_ids("checked")
+    with pytest.raises(ValueError):
+        SearchFilters.from_params(metadata_check="maybe")
+
+    user = User(username="sec1", hashed_password="x", role=Role.board_secretary, is_active=True)
+    app = _app(maker, user, review.router)
+    form = {"doc_type": "Board Minutes", "doc_date": "2026-03-01", "title": "March board minutes", "department": "Treasury"}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://t") as client:
+        queue = await client.get("/review")
+        assert "Details to confirm (1)" in queue.text
+        details = await client.get("/review?list=details")
+        assert "Filled in by the AI: Title, Department" in details.text and "Lower confidence: Department" in details.text
+        page = await client.get("/documents/SB-1/metadata")
+        assert "Details not yet checked" in page.text and "Confirm details" in page.text and "Filled in by AI" in page.text
+
+        user.username, user.role = "up1", Role.admin
+        own = await client.post("/documents/SB-1/metadata", data=form)
+        assert own.status_code == 303 and own.headers["location"].endswith("status=own_upload")
+        async with maker() as db:
+            doc = (await db.execute(select(DocumentRecord).where(DocumentRecord.doc_id == "SB-1"))).scalar_one()
+            assert doc.metadata_check_pending is True and doc.department == "Treasury"
+            assert doc.metadata_confidence["department"] == 1.0 and doc.metadata_confirmed_by is None
+
+        user.username, user.role = "sec1", Role.board_secretary
+        done = await client.post("/documents/SB-1/metadata", data=form)
+        assert done.headers["location"].endswith("status=confirmed")
+        assert "All details are checked." in (await client.get("/review?list=details")).text
+
+        user.username, user.role = "up1", Role.uploader
+        assert "Details to confirm" not in (await client.get("/review")).text
+
+    async with maker() as db:
+        doc = (await db.execute(select(DocumentRecord).where(DocumentRecord.doc_id == "SB-1"))).scalar_one()
+        assert doc.metadata_check_pending is False and doc.metadata_confirmed_by == "sec1"
+        details = (await db.execute(select(AuditLog.detail).where(AuditLog.action == "metadata_confirm"))).scalars().all()
+    assert details == ["changed=none ai_filled=title,department"]
+
+
+@pytest.mark.asyncio
+async def test_package_and_metadata_pages_render_bangla_on_mobile(maker, monkeypatch):
+    from datetime import timedelta
+
+    from bcp_project.models import (
+        AccessMode,
+        AccessRequestStatus,
+        BoardBriefing,
+        BoardMeeting,
+        DocumentAccessRequest,
+        DocumentRecord,
+        DocumentVersion,
+        MeetingInvitation,
+        Role,
+        User,
+    )
+    from bcp_project.routers import board, briefings, meetings, review
+    from bcp_project.services.briefing import BoardPaperSummary, BriefingPoint, BriefingSection
+
+    async def no_refs(*a, **k):
+        return []
+
+    monkeypatch.setattr(briefings, "historical_references", no_refs)
+    mobile = {"User-Agent": "Mozilla/5.0 (Linux; Android 14; 360x800) Mobile"}
+    async with maker() as db:
+        await _seed(db)
+        sb1 = await db.get(DocumentRecord, 1)
+        sb1.subject = "মূলধন সংযোজন"
+        sb1.language = "bn"
+        sb1.metadata_confidence = {"subject": 0.4, "title": 0.95}
+        db.add(
+            DocumentRecord(
+                doc_id="SB-4", doc_date=date(2026, 3, 1), doc_type="Annexure", keywords=[], file_location="pdfs/SB-4.pdf",
+                uploaded_by="up1", ingest_status="indexed", title="নিরীক্ষিত হিসাব", page_count=2,
+            )
+        )
+        db.add(DocumentVersion(doc_id="SB-4", version=1, sha256="c" * 64, file_location="pdfs/SB-4.pdf", created_by="up1"))
+        db.add(BoardMeeting(id=7, title="412th Board Meeting", scheduled_at=datetime(2026, 4, 1, 10, 0), created_by="sec1"))
+        db.add(MeetingInvitation(meeting_id=7, username="m1"))
+        for doc_id in ("SB-1", "SB-4"):
+            db.add(
+                DocumentAccessRequest(
+                    doc_id=doc_id, requester_username="m1", purpose="board work", requested_mode=AccessMode.view_only,
+                    status=AccessRequestStatus.approved, expires_at=datetime.utcnow() + timedelta(days=7),
+                )
+            )
+        await db.commit()
+
+    sec = User(id=2, username="sec1", hashed_password="x", role=Role.board_secretary, is_active=True)
+    app = _app(maker, sec, briefings.router, meetings.router, review.router)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://t", headers=mobile) as client:
+        listing = await client.get("/board/packages")
+        assert listing.status_code == 200 and "No packages yet" in listing.text
+        form = await client.get("/board/packages/new", params={"meeting_id": 7})
+        assert form.status_code == 200 and 'value="7" selected' in form.text
+        created = await client.post("/board/packages", data={"title": "মূলধন প্যাকেজ", "meeting_id": "7", "memo_doc_id": "SB-1"})
+        assert created.status_code == 303 and created.headers["location"] == "/board/packages/1?status=created"
+        added = await client.post("/board/packages/1/members", data={"doc_id": "SB-4", "role": "annexure"})
+        assert added.status_code == 303 and "status=saved" in added.headers["location"]
+        detail = await client.get("/board/packages/1")
+        assert detail.status_code == 200
+        assert "মূলধন প্যাকেজ" in detail.text and "নিরীক্ষিত হিসাব" in detail.text and ">A1<" in detail.text
+        empty = await client.get("/board/packages/1/briefing")
+        assert empty.status_code == 200 and "/board/packages/1/briefing/generate" in empty.text
+
+        summary = BoardPaperSummary(
+            proposal=BriefingSection(points=[BriefingPoint(text="মূলধন সংযোজনের প্রস্তাব", page=1, doc_id="SB-1")], not_found=False),
+            risks=BriefingSection(points=[BriefingPoint(text="ঋণ ঝুঁকি বেড়েছে", page=2, doc_id="SB-4")], not_found=False),
+        )
+        async with maker() as db:
+            db.add(
+                BoardBriefing(
+                    doc_id="SB-1", version=1, package_id=1, package_revision=2, state="approved", status="ready",
+                    content=summary.model_dump(), requested_by="sec1", approved_by="sec2", sha256="0" * 64,
+                    members=[
+                        {"doc_id": "SB-1", "version": 1, "role": "memo", "label": "M", "seq": 0, "page_count": 1, "title": "March board minutes"},
+                        {"doc_id": "SB-4", "version": 1, "role": "annexure", "label": "A1", "seq": 1, "page_count": 2, "title": "নিরীক্ষিত হিসাব"},
+                    ],
+                )
+            )
+            await db.commit()
+        meeting = await client.get("/meetings/7")
+        assert meeting.status_code == 200 and "/board/packages/1/briefing" in meeting.text
+
+        metadata = await client.get("/documents/SB-1/metadata")
+        assert metadata.status_code == 200
+        assert "মূলধন সংযোজন" in metadata.text and "is-low-confidence" in metadata.text
+
+    member = User(id=5, username="m1", hashed_password="x", role=Role.board_member, is_active=True)
+    app = _app(maker, member, briefings.router, board.router)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://t", headers=mobile) as client:
+        meeting = await client.get("/board/meetings/7")
+        assert meeting.status_code == 200 and "/board/packages/1/briefing" in meeting.text
+        page = await client.get("/board/packages/1/briefing")
+        assert page.status_code == 200
+        text = page.text
+        assert "Key risks for the Board" in text and "briefing-section--attention" in text
+        assert "ঋণ ঝুঁকি বেড়েছে" in text and 'class="paper-chip"' in text
+        assert "Required Board decision" in text and "Papers covered" in text
+        assert (await client.get("/board/packages")).status_code == 403
+
+
+@pytest.mark.asyncio
 async def test_pages_are_not_cached_and_logout_clears_the_browser_cache(maker):
     from fastapi.responses import HTMLResponse, PlainTextResponse
     from fastapi.staticfiles import StaticFiles

@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional, Set
 
@@ -44,7 +45,7 @@ from ..deps import (
     require_role,
     templates,
 )
-from ..document_types import merge_document_types, normalize_document_type
+from ..document_types import is_board_paper_type, merge_document_types, normalize_document_type
 from ..graph_builder import (
     GraphBuildResult,
     GraphDoc,
@@ -58,11 +59,13 @@ from .ingest import dispatch_after_commit, ingest_mode, read_validated
 from ..pdf_watermark import stamp_pdf_bytes
 from ..qdrant_store import make_qdrant_indexer
 from ..intake import IntakeRejected, validate_upload
-from ..services.document_versions import intake_new_document
+from ..services.document_versions import LANGUAGE_CHOICES, intake_new_document
+from ..services.taxonomy import search_tags, tag_facets
 from ..search_acl import SearchFilters, acl_scope_for_user, norm
 from ..services.ingest import ai_provenance_label, run_document_ingest
 from ..services.retention import doc_id_conflict
 from ..services.search import hybrid_search
+from ..services.search_log import record_search
 
 logger = logging.getLogger("bcp_project.routers.documents")
 router = APIRouter()
@@ -221,25 +224,36 @@ async def search_page(
     )
 
 
-async def _audit_staff_search(
+async def _log_staff_search(
     db: AsyncSession,
     request: Request,
     user: User,
     *,
-    action: str,
+    channel: str,
     query: str,
     results: List[dict],
+    started: float,
+    filters: Optional[Dict[str, Any]] = None,
+    lang: Optional[str] = None,
+    mode: Optional[str] = None,
+    cached: bool = False,
+    degraded: bool = False,
 ) -> None:
-    viewable = sum(1 for row in results if row.get("can_view"))
-    await write_audit(
+    await record_search(
         db,
+        channel=channel,
         username=user.username,
-        action=action,
-        resource_type="document",
-        detail=f"q={query[:120]} count={len(results)} viewable={viewable}",
-        ip_address=_client_ip(request),
+        role=user.role,
         actor_type="user",
-        commit=True,
+        query=query,
+        results=results,
+        ip_address=_client_ip(request),
+        lang=lang,
+        filters=filters,
+        mode=mode,
+        cached=cached,
+        degraded=degraded,
+        latency_ms=int((time.perf_counter() - started) * 1000),
     )
 
 
@@ -254,11 +268,17 @@ async def search_documents(
     reference_number: Optional[str] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
+    subject: Optional[str] = None,
+    title: Optional[str] = None,
+    language: Optional[str] = None,
+    tags: Optional[str] = None,
+    metadata_check: Optional[str] = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
     """Hybrid search (summary vectors + page chunks + keywords) under the caller's ACL and filters."""
     require_role(current_user, [Role.admin, Role.board_secretary, Role.board_member])
+    started = time.perf_counter()
     q = q.strip()
     lang_hint = (lang or "").strip().lower() or None
     if lang_hint not in (None, "en", "bn", "any"):
@@ -271,6 +291,11 @@ async def search_documents(
             reference_number=reference_number,
             date_from=date_from,
             date_to=date_to,
+            subject=subject,
+            title=title,
+            language=language,
+            tags=tags,
+            metadata_check=metadata_check,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -280,7 +305,20 @@ async def search_documents(
     acl = await acl_scope_for_user(db, current_user)
     outcome = await hybrid_search(db, acl=acl, q=q, lang=lang_hint, filters=filters, limit=20)
     enriched = await enrich_results_with_access(db, current_user, outcome.results)
-    await _audit_staff_search(db, request, current_user, action="search", query=q, results=enriched)
+    await _log_staff_search(
+        db,
+        request,
+        current_user,
+        channel="web_search",
+        query=q,
+        results=enriched,
+        started=started,
+        filters=filters.as_dict(),
+        lang=lang_hint,
+        mode=outcome.mode,
+        cached=outcome.cached,
+        degraded=outcome.degraded,
+    )
     return {
         "results": enriched,
         "count": len(enriched),
@@ -310,7 +348,20 @@ async def search_facets(
         "departments": await distinct(DocumentRecord.department),
         "categories": await distinct(DocumentRecord.category),
         "doc_types": await list_document_types(db),
+        "tags": [{"value": t["slug"], "label": f"{t['label']} ({t['count']})"} for t in await tag_facets(db)],
+        "languages": [{"value": code, "label": label} for code, label in LANGUAGE_CHOICES],
     }
+
+
+@router.get("/api/tags")
+async def list_tags(
+    q: str = "",
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Dict[str, Any]:
+    """Tag autocomplete for upload, verification and the details editor."""
+    require_role(current_user, [Role.admin, Role.board_secretary, Role.board_member, Role.uploader])
+    return {"tags": await search_tags(db, q)}
 
 
 @router.get("/api/search/metadata")
@@ -324,10 +375,22 @@ async def search_documents_by_metadata(
     department: Optional[str] = None,
     category: Optional[str] = None,
     reference_number: Optional[str] = None,
+    subject: Optional[str] = None,
+    title: Optional[str] = None,
+    language: Optional[str] = None,
+    tags: Optional[str] = None,
+    metadata_check: Optional[str] = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
     require_role(current_user, [Role.admin, Role.board_secretary, Role.board_member])
+    started = time.perf_counter()
+    try:
+        extra = SearchFilters.from_params(
+            subject=subject, title=title, language=language, tags=tags, metadata_check=metadata_check
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     filters = {
         "doc_id": (doc_id or "").strip(),
@@ -338,14 +401,20 @@ async def search_documents_by_metadata(
         "department": norm(department),
         "category": norm(category),
         "reference_number": (reference_number or "").strip(),
+        "subject": extra.subject,
+        "title": extra.title,
+        "language": extra.language,
+        "tags": ",".join(extra.tags),
+        "metadata_check": extra.metadata_check,
     }
 
     audit_query = " ".join(f"{key}={value}" for key, value in filters.items() if value)
     cached = await get_cached_metadata_search(filters)
     if cached is not None:
         enriched = await enrich_results_with_access(db, current_user, cached.get("results") or [])
-        await _audit_staff_search(
-            db, request, current_user, action="search_metadata", query=audit_query, results=enriched
+        await _log_staff_search(
+            db, request, current_user, channel="metadata_search", query=audit_query, results=enriched,
+            started=started, filters=filters, mode="metadata", cached=True,
         )
         return {**cached, "results": enriched, "count": len(enriched), "cached": True}
 
@@ -358,6 +427,11 @@ async def search_documents_by_metadata(
             department=filters["department"],
             category=filters["category"],
             reference_number=filters["reference_number"],
+            subject=extra.subject,
+            title=extra.title,
+            language=extra.language,
+            tags=extra.tags,
+            metadata_check=extra.metadata_check,
         ).sql_conditions(),
     ]
     if filters["doc_id"]:
@@ -395,6 +469,9 @@ async def search_documents_by_metadata(
             "department": doc.department,
             "category": doc.category,
             "reference_number": doc.reference_number,
+            "subject": doc.subject,
+            "language": doc.language,
+            "metadata_check_pending": doc.metadata_check_pending,
         }
         for doc in documents
     ]
@@ -402,8 +479,9 @@ async def search_documents_by_metadata(
     await set_cached_metadata_search(filters, cache_payload)
 
     enriched = await enrich_results_with_access(db, current_user, base_results)
-    await _audit_staff_search(
-        db, request, current_user, action="search_metadata", query=audit_query, results=enriched
+    await _log_staff_search(
+        db, request, current_user, channel="metadata_search", query=audit_query, results=enriched,
+        started=started, filters=filters, mode="metadata",
     )
     return {"results": enriched, "count": len(enriched), "cached": False}
 
@@ -959,6 +1037,10 @@ async def view_document(
             "versions_url": f"/documents/{doc_id}/versions"
             if current_user.role in {Role.admin, Role.board_secretary}
             else None,
+            "metadata_url": f"/documents/{doc_id}/metadata"
+            if current_user.role in {Role.admin, Role.board_secretary}
+            else None,
+            "metadata_unchecked": document.metadata_check_pending,
             "current_version": document.current_version,
             "back_url": back_url,
             "back_label": back_label,
@@ -966,8 +1048,24 @@ async def view_document(
             "hide_app_chrome": True,
             "can_download": can_download,
             "archive_doc_id": doc_id,
+            "briefing_url": await _viewer_briefing_url(db, current_user, document),
         },
     )
+
+
+async def _viewer_briefing_url(db: AsyncSession, user: User, document: DocumentRecord) -> Optional[str]:
+    """Organizers can brief any Board-paper-type document; others see the link once a briefing is approved."""
+    from urllib.parse import quote
+
+    from ..services.briefing import latest_briefing
+
+    url = f"/documents/{quote(document.doc_id, safe='')}/briefing"
+    organizer = user.role in {Role.admin, Role.board_secretary}
+    if organizer and is_board_paper_type(document.doc_type):
+        return url
+    if user.role not in {Role.admin, Role.board_secretary, Role.board_member}:
+        return None
+    return url if await latest_briefing(db, document.doc_id, approved_only=not organizer) else None
 
 
 @router.get("/view/{doc_id}/file")
@@ -1049,6 +1147,7 @@ async def upload_document_stream(
     department: str = Form(""),
     subject: str = Form(""),
     category: str = Form(""),
+    language: str = Form(""),
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -1099,6 +1198,7 @@ async def upload_document_stream(
                     "department": department.strip(),
                     "subject": subject.strip(),
                     "category": category.strip(),
+                    "language": language.strip(),
                 },
                 stage=False,
             )
@@ -1183,6 +1283,7 @@ async def upload_document(
     department: str = Form(""),
     subject: str = Form(""),
     category: str = Form(""),
+    language: str = Form(""),
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -1217,6 +1318,7 @@ async def upload_document(
             "department": department.strip(),
             "subject": subject.strip(),
             "category": category.strip(),
+            "language": language.strip(),
         },
     )
     await write_audit(

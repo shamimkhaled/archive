@@ -47,6 +47,31 @@
                     <select id="f_category" name="category" data-facet="categories" data-value="{{ qp.get('category', '') }}"><option value="">Any category</option></select>
                 </div>
                 <div class="form-group">
+                    <label for="f_subject">Subject contains</label>
+                    <input id="f_subject" name="subject" type="text" autocomplete="off" placeholder="For example: credit policy" value="{{ qp.get('subject', '') }}" />
+                </div>
+                <div class="form-group">
+                    <label for="f_title">Title contains</label>
+                    <input id="f_title" name="title" type="text" autocomplete="off" value="{{ qp.get('title', '') }}" />
+                </div>
+                <div class="form-group">
+                    <label for="f_language">Language</label>
+                    <select id="f_language" name="language" data-facet="languages" data-value="{{ qp.get('language', '') }}"><option value="">Any language</option></select>
+                </div>
+                <div class="form-group">
+                    <label for="f_tags">Tag</label>
+                    <select id="f_tags" name="tags" data-facet="tags" data-value="{{ qp.get('tags', '') }}"><option value="">Any tag</option></select>
+                </div>
+                <div class="form-group">
+                    <label for="f_metadata_check">Details</label>
+                    {% set mc = qp.get('metadata_check', '') %}
+                    <select id="f_metadata_check" name="metadata_check">
+                        <option value="">Checked or not</option>
+                        <option value="checked"{% if mc == 'checked' %} selected{% endif %}>Entered or checked by a person</option>
+                        <option value="unchecked"{% if mc == 'unchecked' %} selected{% endif %}>Filled in by the AI, not yet checked</option>
+                    </select>
+                </div>
+                <div class="form-group">
                     <label for="f_date_from">From date</label>
                     <input id="f_date_from" name="date_from" type="date" value="{{ qp.get('date_from', '') }}" />
                 </div>

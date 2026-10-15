@@ -12,7 +12,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass, field
 from datetime import date, datetime
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -51,6 +51,21 @@ def day_number(value: Any) -> Optional[int]:
     return value.year * 10000 + value.month * 100 + value.day
 
 
+LANGUAGE_CODES = ("en", "bn", "mixed")
+METADATA_CHECK_VALUES = ("checked", "unchecked")
+
+
+def _tag_slugs(document: Any) -> List[str]:
+    from .services.taxonomy import tag_slug
+
+    slugs = []
+    for keyword in getattr(document, "keywords", None) or []:
+        slug = tag_slug(str(keyword))
+        if slug and slug not in slugs:
+            slugs.append(slug)
+    return slugs
+
+
 def search_payload(document: Any) -> Dict[str, Any]:
     """Fields stored on every vector of ``document`` (summary and chunks)."""
     sensitivity = getattr(document, "sensitivity", None) or Sensitivity.internal.value
@@ -63,6 +78,10 @@ def search_payload(document: Any) -> Dict[str, Any]:
         "reference_number": (getattr(document, "reference_number", None) or None),
         "doc_day": day_number(getattr(document, "doc_date", None)),
         "version": getattr(document, "current_version", None) or 1,
+        "language": getattr(document, "language", None) or None,
+        "tags": _tag_slugs(document) or None,
+        "title_text": norm(getattr(document, "title", None)) or None,
+        "subject_text": norm(getattr(document, "subject", None)) or None,
     }
     return {k: v for k, v in payload.items() if v is not None}
 
@@ -71,6 +90,7 @@ def payload_index_schema() -> Dict[str, Any]:
     from qdrant_client.http import models as rest
 
     keyword = rest.PayloadSchemaType.KEYWORD
+    text = rest.PayloadSchemaType.TEXT
     return {
         "allowed_roles": keyword,
         "sensitivity": keyword,
@@ -78,6 +98,10 @@ def payload_index_schema() -> Dict[str, Any]:
         "department": keyword,
         "category": keyword,
         "doc_day": rest.PayloadSchemaType.INTEGER,
+        "language": keyword,
+        "tags": keyword,
+        "title_text": text,
+        "subject_text": text,
     }
 
 
@@ -89,6 +113,12 @@ class SearchFilters:
     reference_number: str = ""
     date_from: Optional[date] = None
     date_to: Optional[date] = None
+    subject: str = ""
+    title: str = ""
+    language: str = ""
+    tags: Tuple[str, ...] = ()
+    # "unchecked" | "checked": whether a person has confirmed AI-filled details. SQL only (not in Qdrant).
+    metadata_check: str = ""
 
     @classmethod
     def from_params(
@@ -100,7 +130,13 @@ class SearchFilters:
         reference_number: Optional[str] = None,
         date_from: Optional[str] = None,
         date_to: Optional[str] = None,
+        subject: Optional[str] = None,
+        title: Optional[str] = None,
+        language: Optional[str] = None,
+        tags: Optional[Union[str, Sequence[str]]] = None,
+        metadata_check: Optional[str] = None,
     ) -> "SearchFilters":
+        from .services.taxonomy import tag_slug
         def parse(value: Optional[str], name: str) -> Optional[date]:
             if not value:
                 return None
@@ -109,6 +145,18 @@ class SearchFilters:
             except ValueError as exc:
                 raise ValueError(f"Invalid {name}, expected YYYY-MM-DD") from exc
 
+        lang = (language or "").strip().lower()
+        if lang and lang not in LANGUAGE_CODES:
+            raise ValueError("Invalid language, expected en, bn or mixed")
+        check = (metadata_check or "").strip().lower()
+        if check and check not in METADATA_CHECK_VALUES:
+            raise ValueError("Invalid metadata_check, expected checked or unchecked")
+        slugs: List[str] = []
+        raw_tags = tags.split(",") if isinstance(tags, str) else list(tags or [])
+        for raw in raw_tags:
+            slug = tag_slug(raw)
+            if slug and slug not in slugs:
+                slugs.append(slug)
         return cls(
             department=norm(department),
             category=norm(category),
@@ -116,11 +164,30 @@ class SearchFilters:
             reference_number=(reference_number or "").strip(),
             date_from=parse(date_from, "date_from"),
             date_to=parse(date_to, "date_to"),
+            subject=norm(subject)[:200],
+            title=norm(title)[:200],
+            language=lang,
+            tags=tuple(slugs[:10]),
+            metadata_check=check,
         )
 
     @property
     def active(self) -> bool:
-        return any([self.department, self.category, self.doc_type, self.reference_number, self.date_from, self.date_to])
+        return any(
+            [
+                self.department,
+                self.category,
+                self.doc_type,
+                self.reference_number,
+                self.date_from,
+                self.date_to,
+                self.subject,
+                self.title,
+                self.language,
+                self.tags,
+                self.metadata_check,
+            ]
+        )
 
     def as_dict(self) -> Dict[str, str]:
         return {
@@ -130,6 +197,11 @@ class SearchFilters:
             "reference_number": self.reference_number,
             "date_from": self.date_from.isoformat() if self.date_from else "",
             "date_to": self.date_to.isoformat() if self.date_to else "",
+            "subject": self.subject,
+            "title": self.title,
+            "language": self.language,
+            "tags": ",".join(self.tags),
+            "metadata_check": self.metadata_check,
         }
 
     def cache_part(self) -> str:
@@ -156,12 +228,36 @@ class SearchFilters:
                     range=rest.Range(gte=day_number(self.date_from), lte=day_number(self.date_to)),
                 )
             )
+        if self.language:
+            conditions.append(rest.FieldCondition(key="language", match=rest.MatchValue(value=self.language)))
+        if self.tags:
+            conditions.append(rest.FieldCondition(key="tags", match=rest.MatchAny(any=list(self.tags))))
+        if self.title:
+            conditions.append(rest.FieldCondition(key="title_text", match=rest.MatchText(text=self.title)))
+        if self.subject:
+            conditions.append(rest.FieldCondition(key="subject_text", match=rest.MatchText(text=self.subject)))
         return conditions
 
     def sql_conditions(self) -> List[Any]:
-        from sqlalchemy import func
+        from sqlalchemy import exists, func
+
+        from .models import DocumentTag, Tag
 
         conditions: List[Any] = []
+        if self.subject:
+            conditions.append(func.lower(DocumentRecord.subject).contains(self.subject, autoescape=True))
+        if self.title:
+            conditions.append(func.lower(DocumentRecord.title).contains(self.title, autoescape=True))
+        if self.language:
+            conditions.append(DocumentRecord.language == self.language)
+        if self.tags:
+            conditions.append(
+                exists(
+                    select(DocumentTag.id)
+                    .join(Tag, Tag.id == DocumentTag.tag_id)
+                    .where(DocumentTag.doc_id == DocumentRecord.doc_id, Tag.slug.in_(self.tags))
+                )
+            )
         if self.department:
             conditions.append(func.lower(DocumentRecord.department) == self.department)
         if self.category:
@@ -174,6 +270,8 @@ class SearchFilters:
             conditions.append(DocumentRecord.doc_date >= self.date_from)
         if self.date_to:
             conditions.append(DocumentRecord.doc_date <= self.date_to)
+        if self.metadata_check:
+            conditions.append(DocumentRecord.metadata_check_pending.is_(self.metadata_check == "unchecked"))
         return conditions
 
 

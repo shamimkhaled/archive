@@ -125,3 +125,44 @@
     </div>
 </a>
 {% endmacro %}
+
+{% macro tag_input(name, tags=[], id='tags', label='Tags', hint=None, disabled=False) %}
+<div class="form-group tag-input" data-tag-input>
+    <label for="{{ id }}_entry">{{ label }}</label>
+    <ul class="tag-chips" role="list" data-tag-chips aria-label="{{ label }}">
+        {% for t in tags %}
+        <li class="tag-chip{% if t.confirmed is defined and not t.confirmed %} is-suggested{% endif %}" data-label="{{ t.label }}">
+            <span>{{ t.label }}</span>{% if t.confirmed is defined and not t.confirmed %}<span class="tag-chip-note">suggested</span>{% endif %}
+            {% if not disabled %}<button type="button" class="tag-chip-remove" aria-label="Remove {{ t.label }}">&times;</button>{% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% if not disabled %}
+    <input id="{{ id }}_entry" type="text" list="{{ id }}_options" autocomplete="off" maxlength="120"
+           placeholder="Type a tag, then press Enter or comma" data-tag-entry />
+    <datalist id="{{ id }}_options"></datalist>
+    {% endif %}
+    <input type="hidden" name="{{ name }}" value="{{ tags | map(attribute='label') | join(', ') }}" data-tag-value />
+    {% if hint %}<p class="field-hint">{{ hint }}</p>{% endif %}
+</div>
+{% endmacro %}
+
+{% macro language_select(name='language', value='', id='language', disabled=False, include_blank=True) %}
+<div class="form-group">
+    <label for="{{ id }}">Language</label>
+    <select id="{{ id }}" name="{{ name }}" {% if disabled %}disabled{% endif %}>
+        {% if include_blank %}<option value="">Detect automatically</option>{% endif %}
+        <option value="en" {% if value == 'en' %}selected{% endif %}>English</option>
+        <option value="bn" lang="bn" {% if value == 'bn' %}selected{% endif %}>বাংলা (Bangla)</option>
+        <option value="mixed" {% if value == 'mixed' %}selected{% endif %}>English and Bangla</option>
+    </select>
+</div>
+{% endmacro %}
+
+{% macro confidence_badge(score) %}
+{% if score is not none %}
+{% set pct = (score * 100) | round | int %}
+<span class="confidence-badge {% if score >= 0.85 %}is-high{% elif score >= 0.7 %}is-medium{% else %}is-low{% endif %}"
+      title="How sure the archive is about this value">{% if score >= 1 %}Entered by a person{% else %}{{ pct }}% sure{% endif %}</span>
+{% endif %}
+{% endmacro %}

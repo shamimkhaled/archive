@@ -27,6 +27,14 @@ DEFAULT_DOCUMENT_TYPES: Sequence[str] = (
 )
 
 
+# Types the Board receives as papers; the viewer offers organizers a structured briefing for them.
+BOARD_PAPER_TYPES: Sequence[str] = ("Board Paper", "Board Memo", "Memo")
+
+
+def is_board_paper_type(value: str) -> bool:
+    return normalize_document_type(value).casefold() in {t.casefold() for t in BOARD_PAPER_TYPES}
+
+
 def normalize_document_type(value: str) -> str:
     """Trim and collapse whitespace; keep user casing for display."""
     cleaned = " ".join((value or "").split())

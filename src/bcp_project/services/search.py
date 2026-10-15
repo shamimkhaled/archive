@@ -334,6 +334,7 @@ async def _attach_metadata(
                     DocumentRecord.category,
                     DocumentRecord.reference_number,
                     DocumentRecord.sensitivity,
+                    DocumentRecord.metadata_check_pending,
                 ).where(DocumentRecord.doc_id.in_(ids), *_searchable(acl, filters))
             )
         ).all()
@@ -355,6 +356,7 @@ async def _attach_metadata(
                 "category": meta.category,
                 "reference_number": meta.reference_number,
                 "sensitivity": meta.sensitivity,
+                "metadata_check_pending": bool(meta.metadata_check_pending),
                 "page": page,
                 "view_url": citation_url(meta.doc_id, page, hl),
             }

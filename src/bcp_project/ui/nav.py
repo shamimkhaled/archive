@@ -40,6 +40,7 @@ ITEMS: Dict[str, NavItem] = {
         NavItem("my_meetings", "/board/meetings", "calendar", ALL),
         NavItem("manage_meetings", "/meetings", "calendar-edit", (ADMIN, SECRETARY)),
         NavItem("decisions", "/board/decisions", "check-list", (ADMIN, SECRETARY, MEMBER)),
+        NavItem("packages", "/board/packages", "file", (ADMIN, SECRETARY)),
         NavItem("upload", "/upload", "upload", (ADMIN, UPLOADER)),
         NavItem("my_uploads", "/uploads/mine", "inbox", (ADMIN, UPLOADER)),
         NavItem("review", "/review", "doc-check", (ADMIN, SECRETARY, UPLOADER)),
@@ -48,6 +49,8 @@ ITEMS: Dict[str, NavItem] = {
         NavItem("retention", "/admin/retention", "archive-box", (ADMIN, SECRETARY)),
         NavItem("queues", "/admin/queues", "pulse", (ADMIN,)),
         NavItem("ai", "/admin/ai", "sparkle", (ADMIN,)),
+        NavItem("search_log", "/admin/search-activity", "clock", (ADMIN,)),
+        NavItem("audit_log", "/admin/audit", "shield", (ADMIN,)),
         NavItem("my_access", "/access-requests", "key", (MEMBER,)),
         NavItem("notifications", "/notifications", "bell", ALL),
         NavItem("appearance", "/appearance", "sun", ALL),
@@ -57,9 +60,9 @@ ITEMS: Dict[str, NavItem] = {
 GROUPS: Sequence[Tuple[Optional[str], Sequence[str]]] = (
     (None, ("home",)),
     ("group_find", ("search", "ask", "map")),
-    ("group_meetings", ("my_meetings", "manage_meetings", "decisions")),
+    ("group_meetings", ("my_meetings", "manage_meetings", "decisions", "packages")),
     ("group_documents", ("upload", "my_uploads", "review")),
-    ("group_admin", ("access_review", "people", "retention", "queues", "ai")),
+    ("group_admin", ("access_review", "people", "retention", "queues", "ai", "search_log", "audit_log")),
     ("group_account", ("my_access", "notifications", "appearance")),
 )
 

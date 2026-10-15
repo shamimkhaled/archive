@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% from "macros/ui.html" import breadcrumbs, empty_state %}
+
+{% block title %}Board paper packages | {{ brand.product_name }}{% endblock %}
+
+{% block content %}
+{{ breadcrumbs([{'href': '/', 'label': 'Home'}, {'label': 'Board paper packages'}]) }}
+<div class="page-header">
+    <div class="title-group">
+        <h1>Board paper packages</h1>
+        <p>Group a memo with its annexures and supporting papers so one briefing covers all of them, including the risks in every annexure.</p>
+    </div>
+    <a class="button" href="/board/packages/new" data-nav>New package</a>
+</div>
+
+{% if rows %}
+<ul class="card-list">
+    {% for row in rows %}
+    {% set p = row.package %}
+    <li class="list-card">
+        <div class="list-card-top">
+            <h3><a href="/board/packages/{{ p.id }}" data-nav>{{ p.title }}</a></h3>
+            {% if row.briefing %}
+            <span class="status-chip status-chip-{{ 'ok' if row.briefing.state == 'approved' else ('info' if row.briefing.state == 'management_reviewed' else 'warn') }}">{{ {'approved': 'Briefing approved', 'management_reviewed': 'Briefing checked', 'ai_draft': 'Briefing draft'}.get(row.briefing.state, row.briefing.state) }}</span>
+            {% else %}<span class="status-chip status-chip-neutral">No briefing yet</span>{% endif %}
+        </div>
+        <p class="list-card-meta">
+            {{ row.members }} paper{{ 's' if row.members != 1 else '' }}
+            {% if p.memo_doc_id %}· memo <span class="mono">{{ p.memo_doc_id }}</span>{% else %}· <strong>no memo yet</strong>{% endif %}
+            {% if row.meeting %}· for <a href="/meetings/{{ row.meeting.id }}" data-nav>{{ row.meeting.title }}</a>{% endif %}
+        </p>
+        <div class="list-card-actions">
+            <a class="button button-secondary" href="/board/packages/{{ p.id }}" data-nav>Papers</a>
+            <a class="button button-secondary" href="/board/packages/{{ p.id }}/briefing" data-nav>Briefing</a>
+        </div>
+    </li>
+    {% endfor %}
+</ul>
+{% else %}
+{{ empty_state('No packages yet', 'Create a package for a memo that comes with annexures. You can also start one from a meeting page.', '/board/packages/new', 'New package') }}
+{% endif %}
+{% endblock %}

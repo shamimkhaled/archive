@@ -17,6 +17,7 @@ import os
 import re
 import unicodedata
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -41,10 +42,12 @@ BRIEFING_HEADINGS: Tuple[Tuple[str, str], ...] = (
     ("risks", "Risks"),
     ("regulatory_considerations", "Regulatory considerations"),
     ("management_recommendation", "Management recommendation"),
-    ("decision_required", "Decision required"),
+    ("decision_required", "Required Board decision"),
 )
 HEADING_KEYS = tuple(key for key, _ in BRIEFING_HEADINGS)
 HEADING_LABELS = dict(BRIEFING_HEADINGS)
+# Headings that carry risk for the Board; highlighted and gathered into the key-risks strip.
+ATTENTION_KEYS = ("risks", "financial_implications", "regulatory_considerations")
 
 STATE_AI_DRAFT = "ai_draft"
 STATE_REVIEWED = "management_reviewed"
@@ -81,6 +84,8 @@ class BriefingPoint(BaseModel):
     page: Optional[int] = None
     quote: Optional[str] = None
     source: str = SOURCE_AI
+    # Which paper the page belongs to; None on a single-paper briefing.
+    doc_id: Optional[str] = None
 
 
 class BriefingSection(BaseModel):
@@ -149,7 +154,7 @@ def ground_point(point: BriefingPoint, page_norms: Dict[int, str]) -> Optional[B
     return None
 
 
-def _coerce_points(raw: Any, window_pages: Sequence[int]) -> List[BriefingPoint]:
+def _coerce_points(raw: Any, window_pages: Sequence[int], doc_id: Optional[str] = None) -> List[BriefingPoint]:
     points: List[BriefingPoint] = []
     for item in raw if isinstance(raw, list) else []:
         if not isinstance(item, dict):
@@ -161,7 +166,7 @@ def _coerce_points(raw: Any, window_pages: Sequence[int]) -> List[BriefingPoint]
         except (TypeError, ValueError):
             page = window_pages[0] if len(window_pages) == 1 else None
         if text and quote:
-            points.append(BriefingPoint(text=text[:600], page=page, quote=quote[:500]))
+            points.append(BriefingPoint(text=text[:600], page=page, quote=quote[:500], doc_id=doc_id))
     return points
 
 
@@ -178,6 +183,20 @@ Rules:
 - "page" is the number from the [Page N] marker of the page the evidence is on.
 - "quote" is copied exactly from that page: 5 to 40 consecutive words, same spelling and language.
 - "text" is one short point in the paper's own language (English or Bangla).
+- If this part says nothing for a heading, return an empty list for that heading.
+- At most 4 points per heading."""
+
+_PACKAGE_MAP_SYSTEM = f"""You prepare Board briefings for Sonali Bank PLC from a package of Board papers:
+a memo (M) with its annexures (A1, A2, ...) and supporting papers (S1, ...).
+You receive one part of ONE paper in the package. Each page starts with a [LABEL · Page N] marker.
+Return a JSON object with exactly these keys: {_KEYS_TEXT}.
+Each key maps to a list of points: {{"text": "...", "page": N, "quote": "..."}}.
+Rules:
+- Use only the text you are given. Never infer, estimate, or add outside knowledge.
+- "page" is the number N from the marker of the page the evidence is on.
+- "quote" is copied exactly from that page: 5 to 40 consecutive words, same spelling and language.
+- "text" is one short point in the paper's own language (English or Bangla).
+- Risks, financial effects and regulatory issues in annexures matter as much as those in the memo.
 - If this part says nothing for a heading, return an empty list for that heading.
 - At most 4 points per heading."""
 
@@ -198,6 +217,17 @@ def max_windows() -> int:
     return max(1, int(os.getenv("BRIEFING_MAX_WINDOWS") or 16))
 
 
+@dataclass
+class Paper:
+    """One paper to brief. ``doc_id``/``label`` are set for package members (M, A1, S1 ...)."""
+
+    pages: Sequence[Tuple[int, str]]
+    doc_id: Optional[str] = None
+    label: str = ""
+    title: str = ""
+    role: str = "memo"
+
+
 def _dedupe(points: List[BriefingPoint]) -> List[BriefingPoint]:
     seen, out = set(), []
     for point in points:
@@ -209,16 +239,25 @@ def _dedupe(points: List[BriefingPoint]) -> List[BriefingPoint]:
     return out
 
 
+def _cite_label(point: BriefingPoint, labels: Dict[Optional[str], str]) -> str:
+    label = labels.get(point.doc_id) or ""
+    return f"{label} p. {point.page}" if label else f"p. {point.page}"
+
+
 def _deterministic_reduce(candidates: Dict[str, List[BriefingPoint]]) -> Dict[str, List[BriefingPoint]]:
     return {key: _dedupe(points)[:MAX_POINTS_PER_HEADING] for key, points in candidates.items()}
 
 
 def _llm_reduce(
-    candidates: Dict[str, List[BriefingPoint]], *, sensitivity: Optional[str]
+    candidates: Dict[str, List[BriefingPoint]],
+    *,
+    sensitivity: Optional[str],
+    labels: Optional[Dict[Optional[str], str]] = None,
 ) -> Optional[Dict[str, List[BriefingPoint]]]:
+    labels = labels or {}
     blocks = []
     for key in HEADING_KEYS:
-        lines = [f"  {i}. {p.text} (p. {p.page})" for i, p in enumerate(candidates[key], 1)]
+        lines = [f"  {i}. {p.text} ({_cite_label(p, labels)})" for i, p in enumerate(candidates[key], 1)]
         blocks.append(f"{key}:\n" + ("\n".join(lines) if lines else "  (none)"))
     try:
         data = ai.chat_json(
@@ -254,25 +293,65 @@ def _llm_reduce(
     return merged
 
 
-def generate_briefing(
-    pages: Sequence[Tuple[int, str]], *, sensitivity: Optional[str], title: str = ""
-) -> Tuple[BoardPaperSummary, Dict[str, Any]]:
-    """Map each window to cited points, ground them against the page text, then reduce.
+def _allocate_windows(counts: Sequence[int], budget: int) -> List[int]:
+    """Window budget per paper: the memo (index 0) gets at least half, every other paper at least one."""
+    if len(counts) == 1:
+        return [min(counts[0], budget)]
+    budget = max(budget, 2 * (len(counts) - 1))
+    alloc = [0] * len(counts)
+    alloc[0] = min(counts[0], max(1, budget // 2))
+    remaining = budget - alloc[0]
+    while remaining > 0:
+        progressed = False
+        for i in range(1, len(counts)):
+            if remaining and alloc[i] < counts[i]:
+                alloc[i] += 1
+                remaining -= 1
+                progressed = True
+        if not progressed:
+            break
+    alloc[0] = min(counts[0], alloc[0] + remaining)
+    return alloc
 
-    Raises ``ai.EgressBlocked`` when policy forbids sending the paper to the configured model.
+
+def _generate(papers: Sequence[Paper], *, sensitivity: Optional[str]) -> Tuple[BoardPaperSummary, Dict[str, Any]]:
+    """Map every paper's windows to cited points, ground each against its own paper, then reduce.
+
+    Windows never mix papers, so a point's ``doc_id`` is the paper its window came from and its
+    quote must be on that paper; a quote that only appears in another paper is dropped.
     """
-    page_norms = {number: _norm(text) for number, text in pages if (text or "").strip()}
-    if not page_norms:
+    package = len(papers) > 1 or any(p.label for p in papers)
+    norms: Dict[Optional[str], Dict[int, str]] = {}
+    per_paper: List[List[List[Tuple[int, str]]]] = []
+    for paper in papers:
+        texts = [(n, t) for n, t in paper.pages if (t or "").strip()]
+        norms[paper.doc_id] = {number: _norm(text) for number, text in texts}
+        per_paper.append(page_windows(texts, window_chars()))
+    if not any(norms.values()):
         raise BriefingWorkflowError("The paper has no extractable text.", status_code=422)
-    windows = page_windows([(n, t) for n, t in pages if (t or "").strip()], window_chars())
-    used = sample_windows(windows, max_windows())
-    label = f" ({title})" if title else ""
 
-    def run(item: Tuple[int, List[Tuple[int, str]]]) -> Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
-        index, window = item
-        user = f"Board paper{label}, part {index} of {len(used)}:\n\n{wrap_untrusted(render_window(window), 'board_paper')}"
+    alloc = _allocate_windows([len(w) for w in per_paper], max_windows())
+    jobs: List[Tuple[Paper, List[Tuple[int, str]]]] = []
+    paper_stats = []
+    for paper, windows, quota in zip(papers, per_paper, alloc):
+        chosen = sample_windows(windows, quota) if windows else []
+        jobs.extend((paper, window) for window in chosen)
+        paper_stats.append(
+            {"doc_id": paper.doc_id, "label": paper.label, "windows": len(windows), "used": len(chosen)}
+        )
+    total_windows = sum(len(w) for w in per_paper)
+    system = _PACKAGE_MAP_SYSTEM if package else _MAP_SYSTEM
+
+    def run(item: Tuple[int, Tuple[Paper, List[Tuple[int, str]]]]) -> Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
+        index, (paper, window) = item
+        name = f" ({paper.title})" if paper.title else ""
+        if package:
+            head = f"Paper {paper.label}{name} — {paper.role}, part {index} of {len(jobs)}:"
+        else:
+            head = f"Board paper{name}, part {index} of {len(jobs)}:"
+        user = f"{head}\n\n{wrap_untrusted(render_window(window, paper.label if package else ''), 'board_paper')}"
         try:
-            data = ai.chat_json("board_brief", with_rules(_MAP_SYSTEM), user, sensitivity=sensitivity, max_tokens=1800)
+            data = ai.chat_json("board_brief", with_rules(system), user, sensitivity=sensitivity, max_tokens=1800)
         except ai.EgressBlocked:
             raise
         except Exception:
@@ -282,39 +361,40 @@ def generate_briefing(
 
     workers = max(1, int(os.getenv("BRIEFING_MAP_CONCURRENCY") or 3))
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        results = list(pool.map(run, enumerate(used, 1)))
+        results = list(pool.map(run, enumerate(jobs, 1)))
     succeeded = [(data, call) for data, call in results if data is not None]
     if not succeeded:
         raise RuntimeError("The model did not return a usable briefing for any part of the paper.")
 
     candidates: Dict[str, List[BriefingPoint]] = {key: [] for key in HEADING_KEYS}
     proposed = dropped = 0
-    for (data, _), window in zip(results, used):
+    for (data, _), (paper, window) in zip(results, jobs):
         if data is None:
             continue
         window_pages = [number for number, _ in window]
         for key in HEADING_KEYS:
-            for point in _coerce_points(data.get(key), window_pages):
+            for point in _coerce_points(data.get(key), window_pages, paper.doc_id if package else None):
                 proposed += 1
-                grounded = ground_point(point, page_norms)
+                grounded = ground_point(point, norms[paper.doc_id])
                 if grounded is None:
                     dropped += 1
                     continue
                 candidates[key].append(grounded)
 
+    labels = {paper.doc_id: paper.label for paper in papers} if package else {}
     reducer = "single"
-    merged = candidates
-    if len(used) > 1:
-        merged = _llm_reduce(candidates, sensitivity=sensitivity) if any(candidates.values()) else None
+    if len(jobs) > 1:
+        merged = _llm_reduce(candidates, sensitivity=sensitivity, labels=labels) if any(candidates.values()) else None
         reducer = "llm" if merged is not None else "deterministic"
         if merged is None:
             merged = _deterministic_reduce(candidates)
     else:
         merged = _deterministic_reduce(candidates)
 
+    order = {paper.doc_id: i for i, paper in enumerate(papers)}
     summary = BoardPaperSummary()
     for key in HEADING_KEYS:
-        points = sorted(merged[key], key=lambda p: (p.page or 0))
+        points = sorted(merged[key], key=lambda p: (order.get(p.doc_id, 0), p.page or 0))
         setattr(summary, key, BriefingSection(points=points, not_found=not points))
 
     call = next((c for _, c in reversed(succeeded) if c), None) or ai.last_call() or {}
@@ -324,35 +404,72 @@ def generate_briefing(
         "route": call.get("source"),
         "at": datetime.utcnow().isoformat() + "Z",
         "map_reduce": {
-            "windows": len(windows),
-            "used": len(used),
+            "windows": total_windows,
+            "used": len(jobs),
             "failed": len(results) - len(succeeded),
             "reducer": reducer,
         },
         "citations": {"proposed": proposed, "dropped_ungrounded": dropped},
     }
+    if package:
+        provenance["papers"] = paper_stats
     return summary, provenance
+
+
+def generate_briefing(
+    pages: Sequence[Tuple[int, str]], *, sensitivity: Optional[str], title: str = ""
+) -> Tuple[BoardPaperSummary, Dict[str, Any]]:
+    """Brief one paper. Raises ``ai.EgressBlocked`` when policy forbids sending it to the model."""
+    return _generate([Paper(pages=pages, title=title)], sensitivity=sensitivity)
+
+
+def generate_package_briefing(
+    papers: Sequence[Paper], *, sensitivity: Optional[str]
+) -> Tuple[BoardPaperSummary, Dict[str, Any]]:
+    """Brief a memo with its annexures; ``papers[0]`` is the memo. Every point names its paper."""
+    if not papers:
+        raise BriefingWorkflowError("The package has no papers.", status_code=422)
+    return _generate(papers, sensitivity=sensitivity)
 
 
 # --- Editing -------------------------------------------------------------------------------
 
 _BN_DIGITS = str.maketrans("০১২৩৪৫৬৭৮৯", "0123456789")
-_CITE = re.compile(r"\[\s*(?:p|pp|page|পৃ|পৃষ্ঠা)\.?\s*([0-9০-৯]{1,4})\s*\]\s*$", re.IGNORECASE)
+_CITE = re.compile(
+    r"\[\s*(?:(?-i:(M|[AS]\d{1,2}))\s*[·.,:-]?\s*)?(?:p|pp|page|পৃ|পৃষ্ঠা)\.?\s*([0-9০-৯]{1,4})\s*\]\s*$",
+    re.IGNORECASE,
+)
 _NOT_FOUND = re.compile(r"^\[?\s*(?:not found|পাওয়া যায়নি)\s*\]?$", re.IGNORECASE)
 _BULLET = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s*")
+MEMO_LABEL = "M"
 
 
-def section_to_text(section: BriefingSection) -> str:
+def member_labels(members: Optional[Sequence[Dict[str, Any]]]) -> Dict[str, str]:
+    return {str(m["doc_id"]): str(m.get("label") or "") for m in members or [] if m.get("doc_id")}
+
+
+def _cite(point: BriefingPoint, labels: Optional[Dict[str, str]]) -> str:
+    label = (labels or {}).get(point.doc_id or "")
+    return f"[{label} p. {point.page}]" if label else f"[p. {point.page}]"
+
+
+def section_to_text(section: BriefingSection, labels: Optional[Dict[str, str]] = None) -> str:
     if not section.points:
         return "[not found]"
-    return "\n".join(f"- {p.text} [p. {p.page}]" for p in section.points)
+    return "\n".join(f"- {p.text} {_cite(p, labels)}" for p in section.points)
 
 
-def parse_section_text(text: str, existing: BriefingSection, page_count: Optional[int]) -> BriefingSection:
-    """One point per line ending in ``[p. N]``; ``[not found]`` (or nothing) marks the heading empty.
+def parse_section_text(
+    text: str,
+    existing: BriefingSection,
+    page_count: Optional[int],
+    *,
+    members: Optional[Sequence[Dict[str, Any]]] = None,
+) -> BriefingSection:
+    """One point per line ending in ``[p. N]`` (``[A1 p. N]`` in a package; no label means the memo).
 
-    A line that matches an existing point keeps that point's quote, so unchanged AI points stay
-    traceable to their evidence.
+    ``[not found]`` (or nothing) marks the heading empty. A line that matches an existing point
+    keeps that point's quote, so unchanged AI points stay traceable to their evidence.
     """
     lines = [_BULLET.sub("", line).strip() for line in (text or "").splitlines()]
     lines = [line for line in lines if line]
@@ -360,19 +477,37 @@ def parse_section_text(text: str, existing: BriefingSection, page_count: Optiona
         return BriefingSection(points=[], not_found=True)
     if len(lines) > MAX_EDITED_POINTS:
         raise BriefingWorkflowError(f"At most {MAX_EDITED_POINTS} points per heading.", status_code=400)
-    known = {(_norm(p.text), p.page): p for p in existing.points}
+    by_label = {
+        str(m.get("label")): (str(m["doc_id"]), m.get("page_count")) for m in members or [] if m.get("doc_id")
+    }
+    known = {(_norm(p.text), p.doc_id, p.page): p for p in existing.points}
     points: List[BriefingPoint] = []
     for line in lines:
         match = _CITE.search(line)
         if not match:
-            raise BriefingWorkflowError(f"Every point needs a page reference such as [p. 3]: “{line[:80]}”", status_code=400)
-        page = int(match.group(1).translate(_BN_DIGITS))
-        if page < 1 or (page_count and page > page_count):
-            raise BriefingWorkflowError(f"Page {page} is not in this paper.", status_code=400)
+            example = "[A1 p. 3]" if by_label else "[p. 3]"
+            raise BriefingWorkflowError(f"Every point needs a page reference such as {example}: “{line[:80]}”", status_code=400)
+        label = match.group(1)
+        doc_id: Optional[str] = None
+        limit = page_count
+        if by_label:
+            label = label or MEMO_LABEL
+            if label not in by_label:
+                raise BriefingWorkflowError(f"There is no paper {label} in this package.", status_code=400)
+            doc_id, limit = by_label[label]
+        elif label and label != MEMO_LABEL:
+            raise BriefingWorkflowError("This briefing covers one paper; cite pages as [p. 3].", status_code=400)
+        page = int(match.group(2).translate(_BN_DIGITS))
+        if page < 1 or (limit and page > limit):
+            where = f"paper {label}" if by_label else "this paper"
+            raise BriefingWorkflowError(f"Page {page} is not in {where}.", status_code=400)
         body = line[: match.start()].strip()
         if not body:
             raise BriefingWorkflowError("A point cannot be only a page reference.", status_code=400)
-        points.append(known.get((_norm(body), page)) or BriefingPoint(text=body[:600], page=page, source=SOURCE_EDITED))
+        points.append(
+            known.get((_norm(body), doc_id, page))
+            or BriefingPoint(text=body[:600], page=page, source=SOURCE_EDITED, doc_id=doc_id)
+        )
     return BriefingSection(points=points, not_found=False)
 
 
@@ -412,7 +547,7 @@ def save_section(
         raise BriefingWorkflowError("Unknown heading.", status_code=400)
     require_editable(briefing)
     summary = load_summary(briefing.content)
-    section = parse_section_text(text, summary.section(key), page_count)
+    section = parse_section_text(text, summary.section(key), page_count, members=briefing.members if getattr(briefing, "package_id", None) else None)
     if section == summary.section(key):
         return False
     setattr(summary, key, section)
@@ -486,10 +621,15 @@ def briefing_view(briefing: Optional[BoardBriefing]) -> Optional[Dict[str, Any]]
 
     state = briefing_state(briefing)
     summary = load_summary(briefing.content) if briefing.content else None
+    members = list(getattr(briefing, "members", None) or []) if getattr(briefing, "package_id", None) else []
+    labels = member_labels(members)
     return {
         "id": briefing.id,
         "doc_id": briefing.doc_id,
         "version": briefing.version,
+        "package_id": getattr(briefing, "package_id", None),
+        "package_revision": getattr(briefing, "package_revision", None),
+        "members": members,
         "state": state,
         "state_label": STATE_LABELS[state],
         "status": briefing.status,
@@ -501,8 +641,8 @@ def briefing_view(briefing: Optional[BoardBriefing]) -> Optional[Dict[str, Any]]
                 "key": key,
                 "label": label,
                 "not_found": section.not_found,
-                "points": [p.model_dump() for p in section.points],
-                "edit_text": section_to_text(section),
+                "points": [{**p.model_dump(), "label": labels.get(p.doc_id or "")} for p in section.points],
+                "edit_text": section_to_text(section, labels),
             }
             for key, label, section in (summary.sections() if summary else [])
         ],
@@ -538,17 +678,39 @@ async def current_version_number(db: AsyncSession, document: DocumentRecord) -> 
 
 
 async def get_briefing(db: AsyncSession, doc_id: str, version: int, *, for_update: bool = False) -> Optional[BoardBriefing]:
-    stmt = select(BoardBriefing).where(BoardBriefing.doc_id == doc_id, BoardBriefing.version == version)
+    stmt = select(BoardBriefing).where(
+        BoardBriefing.doc_id == doc_id, BoardBriefing.version == version, BoardBriefing.package_id.is_(None)
+    )
     if for_update:
         stmt = stmt.with_for_update()
     return (await db.execute(stmt)).scalar_one_or_none()
 
 
 async def latest_briefing(db: AsyncSession, doc_id: str, *, approved_only: bool = False) -> Optional[BoardBriefing]:
-    stmt = select(BoardBriefing).where(BoardBriefing.doc_id == doc_id)
+    stmt = select(BoardBriefing).where(BoardBriefing.doc_id == doc_id, BoardBriefing.package_id.is_(None))
     if approved_only:
         stmt = stmt.where(BoardBriefing.state == STATE_APPROVED)
     return (await db.execute(stmt.order_by(BoardBriefing.version.desc()).limit(1))).scalar_one_or_none()
+
+
+async def get_package_briefing(
+    db: AsyncSession, package_id: int, revision: int, *, for_update: bool = False
+) -> Optional[BoardBriefing]:
+    stmt = select(BoardBriefing).where(
+        BoardBriefing.package_id == package_id, BoardBriefing.package_revision == revision
+    )
+    if for_update:
+        stmt = stmt.with_for_update()
+    return (await db.execute(stmt)).scalar_one_or_none()
+
+
+async def latest_package_briefing(
+    db: AsyncSession, package_id: int, *, approved_only: bool = False
+) -> Optional[BoardBriefing]:
+    stmt = select(BoardBriefing).where(BoardBriefing.package_id == package_id)
+    if approved_only:
+        stmt = stmt.where(BoardBriefing.state == STATE_APPROVED)
+    return (await db.execute(stmt.order_by(BoardBriefing.package_revision.desc()).limit(1))).scalar_one_or_none()
 
 
 async def load_paper_pages(db: AsyncSession, document: DocumentRecord, version: int) -> List[Tuple[int, str]]:
@@ -581,16 +743,75 @@ async def request_briefing(db: AsyncSession, document: DocumentRecord, username:
         row = BoardBriefing(doc_id=document.doc_id, version=version, requested_by=username)
         db.add(row)
     else:
-        if briefing_state(row) != STATE_AI_DRAFT:
-            raise BriefingWorkflowError("This briefing is under review or approved. Return or reopen it to regenerate.")
-        if row.status == STATUS_GENERATING:
-            raise BriefingWorkflowError("A briefing is already being generated.")
-        row.requested_by = username
+        _reset_for_generation(row, username)
     row.state = STATE_AI_DRAFT
     row.status = STATUS_PENDING
     row.error = None
     await db.flush()
     return row
+
+
+def _reset_for_generation(row: BoardBriefing, username: str) -> None:
+    if briefing_state(row) != STATE_AI_DRAFT:
+        raise BriefingWorkflowError("This briefing is under review or approved. Return or reopen it to regenerate.")
+    if row.status == STATUS_GENERATING:
+        raise BriefingWorkflowError("A briefing is already being generated.")
+    row.requested_by = username
+
+
+async def request_package_briefing(
+    db: AsyncSession, package: Any, members: List[Dict[str, Any]], username: str
+) -> BoardBriefing:
+    """Create or reset the briefing for the package's current revision; ``members`` is the snapshot."""
+    memo = next((m for m in members if m.get("role") == "memo"), None)
+    if memo is None:
+        raise BriefingWorkflowError("Add the memo to the package first.", status_code=400)
+    row = await get_package_briefing(db, package.id, package.revision, for_update=True)
+    if row is None:
+        row = BoardBriefing(
+            doc_id=memo["doc_id"],
+            version=int(memo.get("version") or 1),
+            package_id=package.id,
+            package_revision=package.revision,
+            requested_by=username,
+        )
+        db.add(row)
+    else:
+        _reset_for_generation(row, username)
+        row.doc_id = memo["doc_id"]
+        row.version = int(memo.get("version") or 1)
+    row.members = members
+    row.state = STATE_AI_DRAFT
+    row.status = STATUS_PENDING
+    row.error = None
+    await db.flush()
+    return row
+
+
+async def _package_papers(db: AsyncSession, briefing: BoardBriefing) -> Tuple[List[Paper], List[DocumentRecord]]:
+    members = sorted(briefing.members or [], key=lambda m: (m.get("role") != "memo", m.get("seq") or 0))
+    ids = [str(m["doc_id"]) for m in members]
+    docs = {
+        d.doc_id: d
+        for d in (await db.execute(select(DocumentRecord).where(DocumentRecord.doc_id.in_(ids)))).scalars().all()
+    }
+    missing = [doc_id for doc_id in ids if doc_id not in docs]
+    if missing:
+        raise BriefingWorkflowError(f"Paper {', '.join(missing)} in this package no longer exists.", status_code=404)
+    papers = []
+    for member in members:
+        document = docs[str(member["doc_id"])]
+        pages = await load_paper_pages(db, document, int(member.get("version") or 1))
+        papers.append(
+            Paper(
+                pages=pages,
+                doc_id=document.doc_id,
+                label=str(member.get("label") or ""),
+                title=document.title or document.doc_id,
+                role=str(member.get("role") or "annexure"),
+            )
+        )
+    return papers, [docs[i] for i in ids]
 
 
 async def run_board_briefing(briefing_id: int, *, session_factory=None) -> bool:
@@ -616,15 +837,21 @@ async def run_board_briefing(briefing_id: int, *, session_factory=None) -> bool:
         briefing.status = STATUS_GENERATING
         await db.commit()
         try:
-            pages = await load_paper_pages(db, document, briefing.version)
-            summary, provenance = await asyncio.to_thread(
-                generate_briefing, pages, sensitivity=document.sensitivity, title=document.title or document.doc_id
-            )
+            if briefing.package_id:
+                papers, member_docs = await _package_papers(db, briefing)
+                sensitivity = ai.max_sensitivity(d.sensitivity for d in member_docs)
+                summary, provenance = await asyncio.to_thread(generate_package_briefing, papers, sensitivity=sensitivity)
+            else:
+                pages = await load_paper_pages(db, document, briefing.version)
+                summary, provenance = await asyncio.to_thread(
+                    generate_briefing, pages, sensitivity=document.sensitivity, title=document.title or document.doc_id
+                )
         except ai.EgressBlocked as exc:
             logger.warning("Briefing %s blocked by egress policy: %s", briefing_id, exc)
             briefing.status = STATUS_FAILED
+            subject = "a paper in this package" if briefing.package_id else "this paper"
             briefing.error = (
-                "AI policy does not allow this paper's sensitivity to be sent to the configured model. "
+                f"AI policy does not allow the sensitivity of {subject} to be sent to the configured model. "
                 "Route the board_brief task to a local model to brief restricted papers."
             )
             await db.commit()

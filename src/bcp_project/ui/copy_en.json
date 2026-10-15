@@ -30,6 +30,7 @@
         "manage_meetings": "Manage meetings",
         "meetings": "Meetings",
         "decisions": "Decisions",
+        "packages": "Board paper packages",
         "upload": "Upload",
         "my_uploads": "My uploads",
         "review": "Documents to check",
@@ -40,6 +41,8 @@
         "retention": "Keep & delete rules",
         "queues": "Background tasks",
         "ai": "AI settings",
+        "search_log": "Search activity",
+        "audit_log": "Audit log",
         "notifications": "Notifications",
         "appearance": "Appearance",
         "schedule": "Schedule a meeting",
@@ -509,6 +512,10 @@
         "doc_date_mismatch": {
             "label": "The date in the document doesn't match the date entered",
             "fix": "Check the document date and correct it if needed."
+        },
+        "low_metadata_confidence": {
+            "label": "Some details were filled in automatically and may be wrong",
+            "fix": "Check the highlighted fields against the document and correct them."
         }
     },
     "upload": {

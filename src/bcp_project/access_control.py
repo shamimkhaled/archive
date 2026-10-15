@@ -293,24 +293,24 @@ async def write_audit(
     actor_type: Optional[str] = None,
     tool_name: Optional[str] = None,
     commit: bool = False,
-) -> None:
+) -> AuditLog:
     from .correlation import get_correlation_id
 
-    db.add(
-        AuditLog(
-            username=username,
-            action=action,
-            resource_type=resource_type,
-            resource_id=resource_id,
-            detail=detail,
-            ip_address=ip_address,
-            correlation_id=correlation_id or get_correlation_id(),
-            actor_type=actor_type,
-            tool_name=tool_name,
-        )
+    entry = AuditLog(
+        username=username,
+        action=action,
+        resource_type=resource_type,
+        resource_id=resource_id,
+        detail=detail,
+        ip_address=ip_address,
+        correlation_id=correlation_id or get_correlation_id(),
+        actor_type=actor_type,
+        tool_name=tool_name,
     )
+    db.add(entry)
     if commit:
         await db.commit()
+    return entry
 
 
 async def has_open_pending_request(db: AsyncSession, username: str, doc_id: str) -> bool:

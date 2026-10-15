@@ -202,21 +202,25 @@ async def test_ask_withholds_restricted_evidence_from_cloud_model():
     from bcp_project.models import Role, User
     from bcp_project.policy import principal_from_user
     from bcp_project.services import ask_sonali
+    from bcp_project.services.document_query import PrincipalSearch
 
     principal = principal_from_user(User(id=1, username="admin1", hashed_password="x", role=Role.admin, is_active=True))
-    search = {"results": [{"doc_id": "SB-R", "can_view": True, "snippet": "secret", "page": 1}]}
+    search = PrincipalSearch({"results": [{"doc_id": "SB-R", "can_view": True, "snippet": "secret", "page": 1}]})
     fake_llm = MagicMock()
     with patch.object(
-        ask_sonali.document_query, "search_documents_for_principal", new_callable=AsyncMock, return_value=search
+        ask_sonali.document_query, "run_principal_search", new_callable=AsyncMock, return_value=search
     ), patch.object(
         ask_sonali, "get_sensitivity_for_docs", new_callable=AsyncMock, return_value={"SB-R": "restricted"}
     ), patch.object(ask_sonali, "get_llm_client", return_value=fake_llm), patch.object(
-        ask_sonali, "write_audit", new_callable=AsyncMock
-    ):
+        ask_sonali, "record_search", new_callable=AsyncMock
+    ) as logged:
         result = await ask_sonali.ask_sonali_for_principal(AsyncMock(), principal, "secret?")
     assert result["refused"] is True
     assert "on-premise" in result["refusal_reason"]
     fake_llm.chat_json.assert_not_called()
+    trace = logged.call_args.kwargs["ai_trace"]
+    assert trace.refused is True
+    assert [r["doc_id"] for r in trace.withheld_docs] == ["SB-R"]
 
 
 def test_physical_collection_names():

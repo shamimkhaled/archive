@@ -134,7 +134,12 @@ async def historical_references(
     try:
         result = await asyncio.wait_for(
             search_documents_for_principal(
-                db, principal_from_user(user), q, limit=limit + 5, tool_name="board_briefing_references"
+                db,
+                principal_from_user(user),
+                q,
+                limit=limit + 5,
+                tool_name="board_briefing_references",
+                channel="briefing_refs",
             ),
             timeout=REFERENCE_TIMEOUT_SECONDS,
         )

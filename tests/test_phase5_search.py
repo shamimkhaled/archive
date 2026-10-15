@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import pytest_asyncio
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -25,6 +26,7 @@ from bcp_project.search_acl import (
     search_payload,
 )
 from bcp_project.services import ask_sonali
+from bcp_project.services.document_query import PrincipalSearch
 from bcp_project.services import search as search_service
 
 DOCS = [
@@ -37,6 +39,10 @@ DOCS = [
         doc_date=date(2026, 2, 3),
         sensitivity="internal",
         current_version=1,
+        title="Crop loan circular",
+        subject="Interest rate for farmers",
+        language="en",
+        keywords=["Crop Loan", "Agriculture"],
         text="Crop loan interest rate reduced to 8 percent for farmers.",
     ),
     SimpleNamespace(
@@ -48,6 +54,10 @@ DOCS = [
         doc_date=date(2026, 3, 30),
         sensitivity="restricted",
         current_version=1,
+        title="Write-off memo",
+        subject="ঋণ অবলোপন প্রস্তাব",
+        language="bn",
+        keywords=["ঋণ অবলোপন"],
         text="Confidential crop loan write-off of Tk 2,150 crore for Hallmark Group.",
     ),
 ]
@@ -132,6 +142,148 @@ def test_metadata_filters_inside_vector_query(memory_qdrant):
     assert _query(memory_qdrant, admin, SearchFilters.from_params(date_to="2026-02-28")) == {"SB-OPEN-1"}
     assert _query(memory_qdrant, admin, SearchFilters.from_params(reference_number="SB/CR/2026/01")) == {"SB-OPEN-1"}
     assert _query(memory_qdrant, admin, SearchFilters.from_params(doc_type="memo")) == {"SB-SECRET-1"}
+
+
+def test_new_metadata_filters_inside_vector_query(memory_qdrant):
+    admin = AclScope(unrestricted=True, role="admin")
+    assert _query(memory_qdrant, admin, SearchFilters.from_params(language="bn")) == {"SB-SECRET-1"}
+    assert _query(memory_qdrant, admin, SearchFilters.from_params(language="EN")) == {"SB-OPEN-1"}
+    assert _query(memory_qdrant, admin, SearchFilters.from_params(tags="crop loan")) == {"SB-OPEN-1"}
+    assert _query(memory_qdrant, admin, SearchFilters.from_params(tags=["ঋণ অবলোপন", "unknown"])) == {"SB-SECRET-1"}
+    assert _query(memory_qdrant, admin, SearchFilters.from_params(title="circular")) == {"SB-OPEN-1"}
+    assert _query(memory_qdrant, admin, SearchFilters.from_params(subject="অবলোপন")) == {"SB-SECRET-1"}
+    member = AclScope(unrestricted=False, role="board_member")
+    assert _query(memory_qdrant, member, SearchFilters.from_params(language="bn")) == set()
+    with pytest.raises(ValueError):
+        SearchFilters.from_params(language="fr")
+    tagged = SearchFilters.from_params(tags="Crop Loan, crop-loan ,Agriculture")
+    assert tagged.tags == ("crop-loan", "agriculture") and tagged.as_dict()["tags"] == "crop-loan,agriculture"
+    assert tagged.cache_part() != SearchFilters.from_params(tags="agriculture").cache_part()
+
+
+@pytest_asyncio.fixture
+async def sql_db(tmp_path):
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+    from bcp_project.models import Base
+
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'p5.db'}")
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_new_metadata_filters_in_sql_and_tag_facets(sql_db):
+    from sqlalchemy import select
+
+    from bcp_project.models import DocumentRecord
+    from bcp_project.services.taxonomy import search_tags, set_document_tags, tag_facets
+
+    async with sql_db() as db:
+        rows = {}
+        for doc in DOCS:
+            rows[doc.doc_id] = DocumentRecord(
+                doc_id=doc.doc_id, doc_date=doc.doc_date, doc_type=doc.doc_type, keywords=[], file_location="x",
+                uploaded_by="up", sensitivity=doc.sensitivity, title=doc.title, subject=doc.subject, language=doc.language,
+            )
+            db.add(rows[doc.doc_id])
+        await db.flush()
+        await set_document_tags(db, rows["SB-OPEN-1"], ["Crop Loan", "Agriculture"], source="reviewer", confirmed=True)
+        await set_document_tags(db, rows["SB-SECRET-1"], ["ঋণ অবলোপন", "crop loan"], source="ai", confirmed=False)
+        await db.commit()
+
+        async def ids(**params):
+            conditions = SearchFilters.from_params(**params).sql_conditions()
+            return set((await db.execute(select(DocumentRecord.doc_id).where(*conditions))).scalars())
+
+        assert await ids(language="bn") == {"SB-SECRET-1"}
+        assert await ids(title="CIRCULAR") == {"SB-OPEN-1"}
+        assert await ids(subject="অবলোপন") == {"SB-SECRET-1"}
+        assert await ids(tags="crop loan") == {"SB-OPEN-1", "SB-SECRET-1"}
+        assert await ids(tags="agriculture", language="bn") == set()
+        assert await ids(subject="100%_") == set()
+        assert rows["SB-OPEN-1"].keywords == ["Crop Loan", "Agriculture"]
+
+        facets = await tag_facets(db)
+        assert facets[0] == {"slug": "crop-loan", "label": "Crop Loan", "count": 2}
+        assert {f["slug"] for f in facets} == {"crop-loan", "agriculture", "ঋণ-অবলোপন"}
+        assert [t["slug"] for t in await search_tags(db, "ঋণ")] == ["ঋণ-অবলোপন"]
+
+
+@pytest.mark.asyncio
+async def test_search_activity_records_query_filters_results_and_ai_sources(sql_db, monkeypatch):
+    from sqlalchemy import select
+
+    from bcp_project.models import AuditLog, SearchActivity
+    from bcp_project.services import document_query as dq
+    from bcp_project.services.search_log import (
+        ActivityQuery,
+        AiTrace,
+        activity_dict,
+        activity_hash,
+        list_activity,
+        purge_expired_activity,
+        record_search,
+    )
+
+    async def fake_search(db, *, acl, q, lang, filters, limit):
+        rows = [
+            {"doc_id": "SB-OPEN-1", "doc_type": "Circular", "title": "Crop loan circular", "snippet": "crop loan",
+             "score": 0.91, "source": "chunk", "page": 3, "sensitivity": "internal"},
+        ]
+        return SimpleNamespace(results=rows, mode="hybrid", cached=False, reranked=False, degraded=False)
+
+    monkeypatch.setattr(dq, "hybrid_search", fake_search)
+    member = User(id=7, username="member1", hashed_password="x", role=Role.board_member, is_active=True)
+    filters = SearchFilters.from_params(language="en", tags="Crop Loan")
+    async with sql_db() as db:
+        await dq.search_documents_for_principal(
+            db, principal_from_user(member), "crop loan rate", filters=filters, ip_address="10.0.0.9"
+        )
+        await record_search(
+            db, channel="ask", username="member1", role=Role.board_member, query="ঋণ অবলোপন কত?",
+            results=[{"doc_id": "SB-OPEN-1", "can_view": True, "page": 3}, {"doc_id": "SB-SECRET-1", "can_view": False, "page": 1, "sensitivity": "restricted"}],
+            ai_trace=AiTrace(
+                provider="local", model="qwen3",
+                source_docs=[{"doc_id": "SB-OPEN-1", "page": 3}],
+                cited_docs=[{"doc_id": "SB-OPEN-1", "page": 3}],
+                withheld_docs=[{"doc_id": "SB-SECRET-1", "page": 1}],
+            ),
+        )
+
+    async with sql_db() as db:
+        rows, total = await list_activity(db, ActivityQuery())
+        assert total == 2
+        ask, api = rows
+        assert (api.channel, api.username, api.ip_address) == ("api_v1", "member1", "10.0.0.9")
+        assert api.filters == {"language": "en", "tags": "crop-loan"} and api.mode == "hybrid"
+        assert api.result_count == 1 and api.results[0]["doc_id"] == "SB-OPEN-1"
+        assert api.results[0]["can_view"] is False and api.results[0]["page"] is None and api.redacted_count == 1
+        assert (ask.redacted_count, ask.restricted_count, ask.ai_model) == (1, 1, "qwen3")
+        assert [d["doc_id"] for d in ask.ai_withheld_docs] == ["SB-SECRET-1"]
+        assert all(r.row_sha256 == activity_hash(r) and r.audit_log_id for r in rows)
+        assert activity_dict(ask)["intact"] is True
+
+        only_secret, n = await list_activity(db, ActivityQuery.from_params(doc_id="SB-SECRET-1"))
+        assert n == 1 and only_secret[0].channel == "ask"
+        assert (await list_activity(db, ActivityQuery.from_params(q="অবলোপন")))[1] == 1
+        assert (await list_activity(db, ActivityQuery.from_params(restricted_only="1")))[1] == 2
+        assert (await list_activity(db, ActivityQuery.from_params(channel="no-such")))[1] == 2
+        audits = (await db.execute(select(AuditLog).where(AuditLog.action == "search_logged"))).scalars().all()
+        assert sorted(a.resource_id for a in audits) == sorted(str(r.id) for r in rows)
+
+        ask.query = "edited"
+        assert activity_hash(ask) != ask.row_sha256, "an edited row no longer matches its hash"
+        await db.rollback()
+
+        monkeypatch.setenv("SEARCH_LOG_RETENTION_DAYS", "30")
+        from datetime import datetime, timedelta
+
+        assert await purge_expired_activity(db, now=datetime.utcnow() + timedelta(days=31)) == 2
+        assert (await db.execute(select(SearchActivity))).scalars().all() == []
+        assert (await db.execute(select(AuditLog).where(AuditLog.action == "search_log_purge"))).scalar_one()
 
 
 def test_chunk_search_groups_per_document(memory_qdrant, monkeypatch):
@@ -230,9 +382,9 @@ async def test_ask_sonali_cites_pages_and_reports_model():
         ],
     }
     with patch(
-        "bcp_project.services.ask_sonali.document_query.search_documents_for_principal",
+        "bcp_project.services.ask_sonali.document_query.run_principal_search",
         new_callable=AsyncMock,
-        return_value=evidence,
+        return_value=PrincipalSearch(evidence, rows=evidence["results"]),
     ), patch(
         "bcp_project.services.ask_sonali.get_sensitivity_for_docs",
         new_callable=AsyncMock,
@@ -242,7 +394,7 @@ async def test_ask_sonali_cites_pages_and_reports_model():
     ), patch(
         "bcp_project.services.ask_sonali.ai.last_call",
         return_value={"provider": "openrouter", "model": "qwen/qwen3", "source": "task:ask"},
-    ), patch("bcp_project.services.ask_sonali.write_audit", new_callable=AsyncMock):
+    ), patch("bcp_project.services.ask_sonali.record_search", new_callable=AsyncMock) as logged:
         result = await ask_sonali.ask_sonali_for_principal(AsyncMock(), principal, "ICT procurement?")
 
     assert result["refused"] is False
@@ -252,3 +404,9 @@ async def test_ask_sonali_cites_pages_and_reports_model():
     assert result["evidence"][0]["url"] == "/view/SB-1?page=5"
     assert result["answered_by"] == {"provider": "openrouter", "model": "qwen/qwen3", "route": "task:ask"}
     assert "Tk 12 crore" in fake_llm.chat_json.call_args.kwargs["user"]
+    logged_kwargs = logged.call_args.kwargs
+    assert logged_kwargs["channel"] == "ask"
+    trace = logged_kwargs["ai_trace"]
+    assert [(r["doc_id"], r["page"]) for r in trace.source_docs] == [("SB-1", 5)]
+    assert [(r["doc_id"], r["page"]) for r in trace.cited_docs] == [("SB-1", 5)]
+    assert trace.model == "qwen/qwen3" and trace.refused is False

@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "macros/icons.html" import icon %}
+{% from "macros/ui.html" import tag_input, language_select %}
 
 {% block title %}Upload a document | {{ brand.product_name }}{% endblock %}
 
@@ -103,10 +104,8 @@
                 <label for="subject">Subject</label>
                 <input id="subject" type="text" name="subject" maxlength="500" autocomplete="off" />
             </div>
-            <div class="form-group">
-                <label for="keywords">Keywords</label>
-                <textarea id="keywords" name="keywords" rows="2" placeholder="Words people might search for, separated by commas"></textarea>
-            </div>
+            {{ language_select(name='language', value='', id='language') }}
+            {{ tag_input('keywords', [], id='keywords', label='Tags', hint='Words people might search for. Pick an existing tag where one fits.') }}
         </div>
     </details>
 

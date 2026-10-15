@@ -25,7 +25,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .. import ai
 from ..ai.guard import injection_signals
 from ..models import DocumentPage, DocumentRecord, DocumentVersion
-from .metadata_suggest import apply_suggestions, metadata_review_reasons
+from .metadata_suggest import apply_suggestions, low_confidence_fields, metadata_review_reasons
+from .taxonomy import add_suggested_tags
 
 logger = logging.getLogger("bcp_project.services.ingest")
 
@@ -269,7 +270,7 @@ async def _extract(db: AsyncSession, document: DocumentRecord, ver: DocumentVers
     """Parse/OCR the version, store page text and suggestions. Returns the confidence summary."""
     from ..deps import _load_stored_pdf_bytes
     from ..ocr import extract_pages, summarize_confidence
-    from .metadata_suggest import suggest_metadata
+    from .metadata_suggest import detect_language, score_fields, suggest_metadata
 
     source = ver.original_location or ver.file_location
     data = await _load_stored_pdf_bytes(source, resource_id=document.doc_id)
@@ -284,6 +285,10 @@ async def _extract(db: AsyncSession, document: DocumentRecord, ver: DocumentVers
     document.suggested_metadata = await asyncio.to_thread(
         lambda: suggest_metadata(text, sensitivity=document.sensitivity)
     )
+    detected = detect_language(text)
+    if detected and document.suggested_metadata is not None:
+        document.suggested_metadata = {**document.suggested_metadata, "language": detected}
+    document.metadata_confidence = score_fields(text, document.suggested_metadata, document, confidence["mean"])
     return confidence
 
 
@@ -322,6 +327,9 @@ async def run_document_ingest(doc_id: str, *, version: Optional[int] = None, ses
                 if confidence["needs_review"] and not reasons:
                     reasons.append("low_ocr_confidence")
                 reasons += metadata_review_reasons(document, document.suggested_metadata)
+                low_fields = low_confidence_fields(document.metadata_confidence)
+                if low_fields:
+                    document.suggested_metadata = {**(document.suggested_metadata or {}), "_low_fields": low_fields}
                 if reasons:
                     document.suggested_metadata = {**(document.suggested_metadata or {}), "_review_reasons": reasons}
                     ver.status = VERSION_PENDING_REVIEW
@@ -337,6 +345,9 @@ async def run_document_ingest(doc_id: str, *, version: Optional[int] = None, ses
                 applied = apply_suggestions(document, document.suggested_metadata)
                 if applied:
                     document.suggested_metadata = {**(document.suggested_metadata or {}), "_applied": applied}
+                    document.metadata_check_pending = True
+                if "keywords" in applied:
+                    await add_suggested_tags(db, document, document.keywords or [])
             pages = await load_pages(db, doc_id, ver.version)
             if not any((p.text or "").strip() for p in pages):
                 raise ValueError("Could not extract text from the document")
@@ -398,6 +409,20 @@ async def index_vectors(
     ]
     await asyncio.to_thread(run_chunk_index, doc_id, page_payloads, sensitivity=sensitivity)
     return "indexed"
+
+
+async def refresh_search_payload(document: DocumentRecord) -> bool:
+    """Push changed metadata onto the document's existing vectors so vector filters see it."""
+    from ..qdrant_store import make_qdrant_indexer
+    from ..search_acl import search_payload
+
+    try:
+        qdrant = make_qdrant_indexer()
+        await asyncio.to_thread(qdrant.set_search_payload, document.doc_id, search_payload(document))
+        return True
+    except Exception as exc:
+        logger.warning("Search payload refresh failed for %s (%s: %s)", document.doc_id, type(exc).__name__, exc)
+        return False
 
 
 async def backfill_pending_vectors(*, limit: int = 10, session_factory=None) -> int:
@@ -484,6 +509,7 @@ async def index_version(db: AsyncSession, document: DocumentRecord, ver: Documen
     if document.verification_status in {"pending", "rejected"}:
         document.verification_status = "approved"
     document.summary_json = {**payload, "_ai": provenance}
-    if not document.keywords:
+    if not document.keywords and payload["searchable_keywords"]:
         document.keywords = list(payload["searchable_keywords"])
+        await add_suggested_tags(db, document, document.keywords)
     await set_ingest_status(db, document, INGEST_INDEXED)

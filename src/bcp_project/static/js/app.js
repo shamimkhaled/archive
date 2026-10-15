@@ -1078,6 +1078,9 @@
           if (result.doc_date) meta.push(escapeHtml(shortDate(result.doc_date)));
           if (result.department) meta.push(escapeHtml(result.department));
           if (result.reference_number) meta.push("Ref. " + escapeHtml(result.reference_number));
+          if (result.metadata_check_pending) {
+            meta.push('<span class="status-chip status-chip-warn" title="Filled in by the AI and not yet checked by a person">Details not yet checked</span>');
+          }
           var page = parseInt(result.page, 10);
           var reasons = (Array.isArray(result.match_reasons) ? result.match_reasons : [result.source])
             .map(function (r) { return MATCH_LABELS[r]; })
@@ -1131,10 +1134,11 @@
         Array.prototype.forEach.call(selects, function (select) {
           var values = facets[select.getAttribute("data-facet")] || [];
           var wanted = select.getAttribute("data-value") || "";
-          values.forEach(function (value) {
+          values.forEach(function (entry) {
             var option = document.createElement("option");
+            var value = entry && typeof entry === "object" ? entry.value : entry;
             option.value = value;
-            option.textContent = value;
+            option.textContent = entry && typeof entry === "object" ? entry.label : entry;
             if (value === wanted) option.selected = true;
             select.appendChild(option);
           });
@@ -1152,8 +1156,8 @@
       });
   }
 
-  var FILTER_FIELDS = ["doc_type", "department", "category", "date_from", "date_to", "reference_number", "doc_id", "uploaded_by"];
-  var REFINE_FIELDS = ["doc_type", "department", "category", "date_from", "date_to", "reference_number"];
+  var FILTER_FIELDS = ["doc_type", "department", "category", "subject", "title", "language", "tags", "metadata_check", "date_from", "date_to", "reference_number", "doc_id", "uploaded_by"];
+  var REFINE_FIELDS = ["doc_type", "department", "category", "subject", "title", "language", "tags", "metadata_check", "date_from", "date_to", "reference_number"];
 
   function fieldValue(id) {
     var el = document.getElementById(id);
@@ -1516,6 +1520,81 @@
     targets.forEach(function (t) { sectionObserver.observe(t); });
   }
 
+  function initTagInputs() {
+    document.querySelectorAll("[data-tag-input]").forEach(function (root) {
+      if (root.dataset.bound) return;
+      root.dataset.bound = "1";
+      var chips = root.querySelector("[data-tag-chips]");
+      var entry = root.querySelector("[data-tag-entry]");
+      var hidden = root.querySelector("[data-tag-value]");
+      var options = entry ? document.getElementById(entry.getAttribute("list")) : null;
+      var lookup = null;
+
+      function labels() {
+        return Array.prototype.map.call(chips.querySelectorAll(".tag-chip"), function (li) {
+          return li.getAttribute("data-label") || "";
+        });
+      }
+      function sync() { hidden.value = labels().join(", "); }
+      function add(raw) {
+        var label = (raw || "").replace(/\s+/g, " ").trim().slice(0, 120);
+        if (!label) return;
+        var key = label.toLowerCase();
+        if (labels().some(function (l) { return l.toLowerCase() === key; })) return;
+        var li = document.createElement("li");
+        li.className = "tag-chip";
+        li.setAttribute("data-label", label);
+        li.innerHTML = "<span>" + escapeHtml(label) + "</span>" +
+          '<button type="button" class="tag-chip-remove" aria-label="Remove ' + escapeHtml(label) + '">&times;</button>';
+        chips.appendChild(li);
+        sync();
+      }
+      chips.addEventListener("click", function (e) {
+        var btn = e.target.closest ? e.target.closest(".tag-chip-remove") : null;
+        if (!btn) return;
+        var li = btn.closest(".tag-chip");
+        if (li) li.remove();
+        sync();
+        if (entry) entry.focus();
+      });
+      if (!entry) return;
+      entry.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === ",") {
+          e.preventDefault();
+          add(entry.value);
+          entry.value = "";
+        } else if (e.key === "Backspace" && !entry.value) {
+          var last = chips.querySelector(".tag-chip:last-child");
+          if (last) { last.remove(); sync(); }
+        }
+      });
+      entry.addEventListener("change", function () {
+        if (options && Array.prototype.some.call(options.options, function (o) { return o.value === entry.value; })) {
+          add(entry.value);
+          entry.value = "";
+        }
+      });
+      entry.addEventListener("blur", function () {
+        if (entry.value.trim()) { add(entry.value); entry.value = ""; }
+      });
+      entry.addEventListener("input", function () {
+        if (!options) return;
+        clearTimeout(lookup);
+        var q = entry.value.trim();
+        lookup = setTimeout(function () {
+          fetch("/api/tags?q=" + encodeURIComponent(q), { credentials: "same-origin", headers: { Accept: "application/json" } })
+            .then(function (r) { return r.ok ? r.json() : { tags: [] }; })
+            .then(function (data) {
+              options.innerHTML = (data.tags || []).map(function (t) {
+                return '<option value="' + escapeHtml(t.label) + '"></option>';
+              }).join("");
+            })
+            .catch(function () {});
+        }, 180);
+      });
+    });
+  }
+
   function bootPage() {
     if (window.BCPCsrf && typeof window.BCPCsrf.injectForms === "function") {
       window.BCPCsrf.injectForms();
@@ -1528,6 +1607,7 @@
     initInstallHint();
     initSearchPage();
     initSearchLang();
+    initTagInputs();
     initAppearancePage();
     updateOnlineState();
     refreshUnreadCount(false);

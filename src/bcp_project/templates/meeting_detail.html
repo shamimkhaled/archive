@@ -169,6 +169,29 @@
     {% else %}
     {{ empty_state("No papers yet", "Add the papers members will read for this meeting.") }}
     {% endif %}
+    <div class="panel-head" style="margin-top:1rem;">
+        <h4>Board paper packages</h4>
+        <a class="button button-secondary" href="/board/packages/new?meeting_id={{ meeting.id }}" data-nav>New package</a>
+    </div>
+    {% if packages %}
+    <ul class="card-list" role="list">
+        {% for pkg in packages %}
+        <li class="list-card">
+            <div class="list-card-top">
+                <h4>{{ pkg.title }}</h4>
+                <span class="status-chip status-chip-{{ 'ok' if pkg.state == 'approved' else ('neutral' if not pkg.state else 'warn') }}">{{ {'approved': 'Briefing approved', 'management_reviewed': 'Briefing checked', 'ai_draft': 'Briefing draft'}.get(pkg.state, 'No briefing yet') }}</span>
+            </div>
+            <p class="list-card-meta">{{ pkg.members }} paper{{ 's' if pkg.members != 1 else '' }}</p>
+            <div class="list-card-actions">
+                <a class="button button-secondary" href="/board/packages/{{ pkg.id }}" data-nav>Papers</a>
+                <a class="button button-secondary" href="/board/packages/{{ pkg.id }}/briefing" data-nav>Briefing</a>
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">A package groups a memo with its annexures so one briefing covers them all.</p>
+    {% endif %}
     <details class="soft-details">
         <summary>Add a paper</summary>
         <form action="/meetings/{{ meeting.id }}/documents" method="post" enctype="multipart/form-data" class="form-grid" style="margin-top:1rem;">

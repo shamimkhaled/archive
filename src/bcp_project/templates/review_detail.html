@@ -1,10 +1,10 @@
 {% extends "base.html" %}
+{% from "macros/ui.html" import tag_input, language_select, confidence_badge %}
 
 {% block title %}Check {{ document.doc_id }} | {{ brand.product_name }}{% endblock %}
 
 {% block content %}
 {% set editable = can_act and not four_eyes_problem %}
-{% set field_labels = {'title': 'Title', 'reference_number': 'Reference number', 'department': 'Department', 'subject': 'Subject', 'category': 'Category'} %}
 <div class="page-header">
     <div class="title-group">
         <h1>Check {{ metadata.title or document.doc_id }}</h1>
@@ -44,9 +44,16 @@
     <section class="panel">
         <h2>Details</h2>
         <p class="muted">These help people find the document. Correct anything that's wrong.</p>
+        {% if low_fields %}
+        <div class="alert alert-warning" role="note">
+            <span><strong>Check these first:</strong>
+            {% for f in low_fields %}{{ field_labels.get(f, f) }}{% if not loop.last %}, {% endif %}{% endfor %}.
+            The archive is less than {{ (min_confidence * 100)|round|int }}% sure about them.</span>
+        </div>
+        {% endif %}
         <div class="form-grid">
-            <div class="form-group">
-                <label for="meta_doc_type">Type of document</label>
+            <div class="form-group{% if 'doc_type' in low_fields %} is-low-confidence{% endif %}">
+                <label for="meta_doc_type">Type of document {{ confidence_badge(confidence.get('doc_type')) }}</label>
                 <input id="meta_doc_type" type="text" name="doc_type" value="{{ document.doc_type }}" maxlength="64" {% if not editable %}disabled{% endif %} />
                 {% if suggested_type and suggested_type|lower != document.doc_type|lower %}
                 <p class="field-hint suggestion">
@@ -55,9 +62,12 @@
                 </p>
                 {% endif %}
             </div>
-            {% for f in fields %}
-            <div class="form-group">
-                <label for="meta_{{ f }}">{{ field_labels.get(f, f|replace('_', ' ')|capitalize) }}</label>
+            {% for f in ordered_fields %}
+            {% if f == 'language' %}
+            {{ language_select(name='language', value=metadata.language, id='meta_language', disabled=not editable) }}
+            {% else %}
+            <div class="form-group{% if f in low_fields %} is-low-confidence{% endif %}">
+                <label for="meta_{{ f }}">{{ field_labels.get(f, f|replace('_', ' ')|capitalize) }} {{ confidence_badge(confidence.get(f)) }}</label>
                 <input id="meta_{{ f }}" type="text" name="{{ f }}" value="{{ metadata[f] }}" maxlength="500" {% if not editable %}disabled{% endif %} />
                 {% if differing_suggestions.get(f) %}
                 <p class="field-hint suggestion">
@@ -66,8 +76,12 @@
                 </p>
                 {% endif %}
             </div>
+            {% endif %}
             {% endfor %}
         </div>
+        {{ tag_input('tags', tags, id='meta_tags', label='Tags',
+                     hint='Dashed tags were suggested by the archive. Publishing confirms the tags shown here.',
+                     disabled=not editable) }}
     </section>
 
     {% for page in pages %}

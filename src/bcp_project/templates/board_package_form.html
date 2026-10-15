@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% from "macros/ui.html" import breadcrumbs %}
+
+{% block title %}New board paper package | {{ brand.product_name }}{% endblock %}
+
+{% block content %}
+{{ breadcrumbs([{'href': '/', 'label': 'Home'}, {'href': '/board/packages', 'label': 'Board paper packages'}, {'label': 'New'}]) }}
+<div class="page-header">
+    <div class="title-group">
+        <h1>New board paper package</h1>
+        <p>Start with the memo. You can add annexures and supporting papers on the next page.</p>
+    </div>
+</div>
+
+{% if error %}<div class="alert alert-error" role="alert">{{ error }}</div>{% endif %}
+
+<form method="post" action="/board/packages" class="panel form-grid">
+    <div class="form-group">
+        <label for="pkgTitle">Title</label>
+        <input id="pkgTitle" name="title" type="text" required maxlength="255" placeholder="For example: Capital injection for Sonali Exchange" />
+    </div>
+    <div class="form-group">
+        <label for="pkgMemo">Memo archive number</label>
+        <input id="pkgMemo" name="memo_doc_id" type="text" autocomplete="off" placeholder="For example: SB-2026-001" value="{{ memo }}" />
+        <p class="muted small">The main paper the Board decides on. Leave empty to add it later.</p>
+    </div>
+    <div class="form-group">
+        <label for="pkgMeeting">Board meeting (optional)</label>
+        <select id="pkgMeeting" name="meeting_id">
+            <option value="">Not linked to a meeting</option>
+            {% for m in meetings %}<option value="{{ m.id }}"{% if meeting_id == m.id %} selected{% endif %}>{{ m.title }}{% if m.scheduled_at %} · {{ m.scheduled_at | local_dt('%d %b %Y') }}{% endif %}</option>{% endfor %}
+        </select>
+    </div>
+    <div class="form-actions-row">
+        <button type="submit">Create package</button>
+        <a class="button button-ghost" href="/board/packages" data-nav>Cancel</a>
+    </div>
+</form>
+{% endblock %}

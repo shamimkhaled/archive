@@ -480,6 +480,7 @@ async def test_clean_text_pdf_auto_applies_metadata(maker, offline_pipeline, mon
     from bcp_project.models import DocumentRecord
     from bcp_project.services.ingest import run_document_ingest
 
+    monkeypatch.setenv("METADATA_FIELD_MIN_CONFIDENCE", "0.7")
     monkeypatch.setattr(
         "bcp_project.services.metadata_suggest.suggest_metadata",
         lambda text, sensitivity=None: _ai_suggestion(department="Finance", subject="Budget", doc_type="Circular", keywords=["budget"]),
@@ -491,6 +492,7 @@ async def test_clean_text_pdf_auto_applies_metadata(maker, offline_pipeline, mon
         assert doc.department == "Finance" and doc.subject == "Budget"
         assert doc.metadata_confirmed_by is None
         assert "department" in doc.suggested_metadata["_applied"]
+        assert doc.metadata_check_pending is True
 
 
 @pytest.mark.asyncio
@@ -508,6 +510,117 @@ async def test_type_mismatch_sends_clean_pdf_to_review(maker, offline_pipeline, 
         doc = (await db.execute(select(DocumentRecord).where(DocumentRecord.doc_id == "SB-2026-911"))).scalar_one()
         assert doc.suggested_metadata["_review_reasons"] == ["doc_type_mismatch"]
         assert doc.department is None
+        assert doc.metadata_check_pending is False
+
+
+def test_detect_language():
+    from bcp_project.services.metadata_suggest import detect_language
+
+    assert detect_language("Budget circular for the financial year 2026") == "en"
+    assert detect_language("২০২৬ অর্থবছরের বাজেট বিষয়ক পরিপত্র জারি করা হলো") == "bn"
+    assert detect_language("Budget circular বাজেট বিষয়ক পরিপত্র for the financial year") == "mixed"
+    assert detect_language("Ref 12") is None
+
+
+def test_score_fields_per_field_confidence(monkeypatch):
+    from bcp_project.services.metadata_suggest import low_confidence_fields, score_fields
+
+    monkeypatch.setenv("METADATA_FIELD_MIN_CONFIDENCE", "0.7")
+
+    text = "Ref No: SB/HO/2026/114\nBudget circular for the financial year 2026\nIssued by the Finance Division"
+    suggested = {
+        **_ai_suggestion(
+            reference_number="SB/HO/2026/114",
+            subject="Budget circular for the financial year 2026",
+            department="Treasury",
+            doc_date="2026-01-05",
+            doc_type="Circular",
+        ),
+        "_model_confidence": {"department": 0.5},
+    }
+    doc = SimpleNamespace(
+        title="Budget circular", reference_number=None, department=None, subject=None, category=None,
+        doc_type="Other", doc_date=date(2026, 1, 5), language=None,
+    )
+    scores = score_fields(text, suggested, doc)
+    assert scores == {
+        "title": 1.0,
+        "reference_number": 0.95,
+        "department": 0.5,
+        "subject": 0.9,
+        "doc_date": 1.0,
+        "doc_type": 0.75,
+        "language": 0.95,
+    }
+    assert low_confidence_fields(scores) == ["department"]
+    assert low_confidence_fields(scores, threshold=0.8) == ["department", "doc_type"]
+
+    blurry = score_fields(text, suggested, doc, ocr_mean=40)
+    assert blurry["subject"] == 0.74 and blurry["title"] == 1.0
+    invented = score_fields(text, {**suggested, "reference_number": "SB/HO/2026/999"}, doc)
+    assert invented["reference_number"] == 0.4
+    rules = score_fields(text, {"subject": "Budget", "_source": {"kind": "rules"}}, doc)
+    assert rules["subject"] == 0.65
+
+
+@pytest.mark.asyncio
+async def test_low_field_confidence_sends_clean_pdf_to_review_and_reviewer_confirms(maker, offline_pipeline, monkeypatch):
+    import httpx
+    from fastapi import FastAPI
+
+    from bcp_project.deps import get_current_user, get_db
+    from bcp_project.models import AuditLog, DocumentRecord, Role, User
+    from bcp_project.routers import review
+    from bcp_project.services.ingest import run_document_ingest
+    from bcp_project.services.taxonomy import document_tags
+
+    suggestion = {
+        **_ai_suggestion(department="Treasury", subject="Budget", keywords=["Budget"]),
+        "_model_confidence": {"department": 0.3},
+    }
+    monkeypatch.setattr("bcp_project.services.metadata_suggest.suggest_metadata", lambda text, sensitivity=None: suggestion)
+    await _intake(maker, text_pdf("Budget circular for the financial year 2026 issued by the Head Office"), doc_id="SB-2026-912")
+    assert await run_document_ingest("SB-2026-912", session_factory=maker) == "needs_review"
+    async with maker() as db:
+        doc = (await db.execute(select(DocumentRecord).where(DocumentRecord.doc_id == "SB-2026-912"))).scalar_one()
+        assert doc.suggested_metadata["_review_reasons"] == ["low_metadata_confidence"]
+        assert doc.suggested_metadata["_low_fields"] == ["department"]
+        assert doc.suggested_metadata["language"] == "en" and doc.metadata_confidence["language"] == 0.95
+        assert doc.department is None, "nothing is applied before a person confirms it"
+
+    reindexed = []
+
+    async def run_inline(doc_id, version):
+        reindexed.append((doc_id, version))
+
+    monkeypatch.setattr(review, "_run_inline", run_inline)
+
+    async def _db():
+        async with maker() as session:
+            yield session
+
+    app = FastAPI()
+    app.include_router(review.router)
+    app.dependency_overrides[get_current_user] = lambda: User(id=3, username="sec1", hashed_password="x", role=Role.board_secretary, is_active=True)
+    app.dependency_overrides[get_db] = _db
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://t") as client:
+        page = await client.get("/review/SB-2026-912")
+        assert page.status_code == 200 and "is-low-confidence" in page.text
+        resp = await client.post(
+            "/review/SB-2026-912/v/1/approve",
+            data={"department": "Finance Division", "subject": "বাজেট ২০২৬", "language": "bn", "tags": "Budget, বাজেট"},
+        )
+        assert resp.status_code == 303 and resp.headers["location"] == "/review?status=approved"
+    assert reindexed == [("SB-2026-912", 1)]
+
+    async with maker() as db:
+        doc = (await db.execute(select(DocumentRecord).where(DocumentRecord.doc_id == "SB-2026-912"))).scalar_one()
+        assert (doc.department, doc.subject, doc.language) == ("Finance Division", "বাজেট ২০২৬", "bn")
+        assert doc.metadata_confirmed_by == "sec1" and doc.keywords == ["Budget", "বাজেট"]
+        tags = await document_tags(db, "SB-2026-912")
+        assert [(t["slug"], t["source"], t["confirmed"]) for t in tags] == [("budget", "reviewer", True), ("বাজেট", "reviewer", True)]
+        detail = (await db.execute(select(AuditLog.detail).where(AuditLog.action == "metadata_confirm"))).scalar_one()
+        assert "low=department" in detail and "low_corrected=department" in detail
 
 
 def test_bangla_suspect_words_count_latin_junk_on_bangla_pages_only(monkeypatch):

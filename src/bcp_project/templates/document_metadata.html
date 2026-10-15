@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% from "macros/ui.html" import tag_input, language_select, confidence_badge %}
+
+{% block title %}Details of {{ document.doc_id }} | {{ brand.product_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div class="title-group">
+        <h1>Details of {{ document.title or document.doc_id }}</h1>
+        <p class="muted">
+            {{ document.doc_id }} · {{ document.sensitivity|status_label('sensitivity') }}
+            {% if document.metadata_confirmed_by %} · last confirmed by {{ document.metadata_confirmed_by }}{% if document.metadata_confirmed_at %} on {{ document.metadata_confirmed_at|local_dt }}{% endif %}{% endif %}
+        </p>
+    </div>
+    <a class="button button-secondary" href="/view/{{ document.doc_id | urlencode }}" data-nav>Open the document</a>
+</div>
+
+{% if status == 'saved' %}
+<div class="alert alert-success" role="status"><span><strong>Saved.</strong> Search uses the new details from now on.</span></div>
+{% elif status == 'confirmed' %}
+<div class="alert alert-success" role="status"><span><strong>Details confirmed.</strong> The document no longer shows as unchecked.</span></div>
+{% elif status == 'own_upload' %}
+<div class="alert alert-info" role="status"><span><strong>Your corrections are saved.</strong> You uploaded this document, so another person must confirm its details.</span></div>
+{% elif status == 'bad_date' %}
+<div class="alert alert-error" role="alert"><span>That date isn't valid. Use the date picker.</span></div>
+{% endif %}
+
+{% if check_pending %}
+<div class="alert alert-warning" role="note">
+    <span><strong>Details not yet checked.</strong>
+    {% if ai_filled %}The AI filled in {% for f in ai_filled %}{{ field_labels.get(f) or ('Tags' if f == 'keywords' else f | replace('_', ' ') | capitalize) }}{% if not loop.last %}, {% endif %}{% endfor %} when the document was archived.{% endif %}
+    Compare them with the document, correct anything wrong, then confirm.
+    {% if own_upload %}You uploaded this document, so another person must confirm it.{% endif %}</span>
+</div>
+{% endif %}
+
+{% if low_fields %}
+<div class="alert alert-warning" role="note">
+    <span><strong>Not confirmed yet:</strong>
+    {% for f in low_fields %}{{ field_labels.get(f, f) }}{% if not loop.last %}, {% endif %}{% endfor %}
+    were filled in automatically with low confidence.</span>
+</div>
+{% endif %}
+
+<form action="/documents/{{ document.doc_id | urlencode }}/metadata" method="post" class="panel"
+      {% if check_pending and not own_upload %}
+      data-confirm-title="Confirm these details are correct?"
+      data-confirm="Your name is recorded in the audit log as the person who checked them."
+      data-confirm-ok="Confirm"
+      {% else %}
+      data-confirm-title="Save these details?"
+      data-confirm="The change is recorded in the audit log with your name."
+      data-confirm-ok="Save"
+      {% endif %}>
+    <h2>Details</h2>
+    <p class="muted">Correct the details people search by. The document itself and its text are not changed.</p>
+    <div class="form-grid">
+        <div class="form-group">
+            <label for="meta_doc_type">Type of document {{ confidence_badge(confidence.get('doc_type')) }}{% if 'doc_type' in ai_filled %} <span class="status-chip status-chip-info">Filled in by AI</span>{% endif %}</label>
+            <input id="meta_doc_type" type="text" name="doc_type" value="{{ document.doc_type }}" maxlength="64" required />
+        </div>
+        <div class="form-group{% if 'doc_date' in low_fields %} is-low-confidence{% endif %}">
+            <label for="meta_doc_date">Document date {{ confidence_badge(confidence.get('doc_date')) }}</label>
+            <input id="meta_doc_date" type="date" name="doc_date" value="{{ document.doc_date.isoformat() if document.doc_date else '' }}" required />
+        </div>
+        {% for f in ordered_fields %}
+        {% if f == 'language' %}
+        {{ language_select(name='language', value=metadata.language, id='meta_language') }}
+        {% else %}
+        <div class="form-group{% if f in low_fields %} is-low-confidence{% endif %}">
+            <label for="meta_{{ f }}">{{ field_labels.get(f, f) }} {{ confidence_badge(confidence.get(f)) }}{% if f in ai_filled %} <span class="status-chip status-chip-info">Filled in by AI</span>{% endif %}</label>
+            <input id="meta_{{ f }}" type="text" name="{{ f }}" value="{{ metadata[f] }}" maxlength="500" />
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+    {{ tag_input('tags', tags, id='meta_tags', label='Tags', hint='Saving confirms every tag shown here.') }}
+    <div class="action-bar">
+        <a class="button button-secondary" href="/view/{{ document.doc_id | urlencode }}" data-nav>Cancel</a>
+        <button type="submit" class="button">{% if check_pending and not own_upload %}Confirm details{% else %}Save details{% endif %}</button>
+    </div>
+</form>
+{% endblock %}

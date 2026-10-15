@@ -153,6 +153,13 @@ def safe_next(value: Optional[str]) -> Optional[str]:
     return value[:500]
 
 
+def spreadsheet_safe(value):
+    """A CSV cell that Excel/LibreOffice won't run as a formula (OWASP CSV injection)."""
+    if isinstance(value, str) and value[:1] in ("=", "+", "-", "@", "\t", "\r"):
+        return "'" + value
+    return value
+
+
 def client_ip(request: Request) -> Optional[str]:
     """Client address as seen by the outermost trusted proxy.
 

@@ -299,12 +299,12 @@ async def maker(tmp_path):
     await engine.dispose()
 
 
-async def _seed_paper(db, doc_id="MEMO-42", **kw):
+async def _seed_paper(db, doc_id="MEMO-42", *, pages=PAGES, title="Capital injection for Sonali Exchange", **kw):
     from bcp_project.models import DocumentPage, DocumentVersion
 
-    db.add(_doc(doc_id, title="Capital injection for Sonali Exchange", **kw))
+    db.add(_doc(doc_id, title=title, page_count=len(pages), **kw))
     db.add(DocumentVersion(doc_id=doc_id, version=1, file_location="x", status="approved", created_by="sec"))
-    for number, text in PAGES:
+    for number, text in pages:
         db.add(DocumentPage(doc_id=doc_id, version=1, page_number=number, text=text))
 
 
@@ -361,7 +361,7 @@ async def test_generate_review_approve_routes_and_member_visibility(maker, model
     approved = data["briefing"]
     assert approved["state"] == "approved" and approved["state_label"] != draft["state_label"]
     cite = next(s for s in approved["sections"] if s["key"] == "proposal")["points"][0]
-    assert cite["url"] == "/view/MEMO-42?page=3"
+    assert cite["url"] == "/view/MEMO-42?page=3&hl=capital%20injection%20of%20USD%205%20million"
 
     async with maker() as db:
         with pytest.raises(HTTPException) as no_access:
@@ -463,3 +463,233 @@ async def test_restricted_paper_gives_no_history_to_unauthorized_reader(maker, m
         related = await related_decisions(db, member, "capital injection for Sonali Exchange in the US")
         assert [e["minutes_doc_id"] for e in related] == ["MIN-2"]
         assert await decision_register(db, member, q="no such topic") == []
+
+
+# --- Board paper packages (memo + annexures briefed together) -----------------------------
+
+ANNEX_PAGES = [
+    (1, "Annexure A: audited accounts show a net loss of USD 1.2 million in 2025."),
+    (2, "Annexure A: the turnaround plan targets break-even by 2027."),
+]
+
+
+def _package_answer(user):
+    """Each window answers for its own paper; one quote per paper actually comes from the other paper."""
+    out = {key: [] for key in HEADINGS}
+    if "[A1 · Page" in user:
+        out["financial_implications"] = [{"text": "Net loss of USD 1.2 million", "page": 1, "quote": "net loss of USD 1.2 million"}]
+        out["risks"] = [{"text": "Memo quote on the annexure", "page": 1, "quote": "capital injection of USD 5 million"}]
+    elif "[M · Page" in user:
+        out["proposal"] = [{"text": "Inject USD 5 million", "page": 3, "quote": "capital injection of USD 5 million"}]
+        out["risks"] = [{"text": "Annexure quote on the memo", "page": 2, "quote": "turnaround plan targets break-even"}]
+    return out
+
+
+def test_package_points_are_grounded_on_their_own_paper(model):
+    from bcp_project.services.briefing import Paper, generate_package_briefing
+
+    model.map_answer = _package_answer
+    papers = [
+        Paper(pages=PAGES, doc_id="MEMO-42", label="M", title="Memo 42", role="memo"),
+        Paper(pages=ANNEX_PAGES, doc_id="ANNEX-1", label="A1", title="Audited accounts", role="annexure"),
+    ]
+    summary, provenance = generate_package_briefing(papers, sensitivity="internal")
+    assert [(p.doc_id, p.page) for p in summary.proposal.points] == [("MEMO-42", 3)]
+    assert [(p.doc_id, p.page) for p in summary.financial_implications.points] == [("ANNEX-1", 1)]
+    assert summary.risks.not_found, "a quote is only evidence on the paper it came from"
+    assert provenance["citations"] == {"proposed": 4, "dropped_ungrounded": 2}
+    assert [p["label"] for p in provenance["papers"]] == ["M", "A1"]
+    assert any("[A1 · Page 1]" in call for call in model.map_calls)
+    assert not any("[M · Page" in call and "[A1 · Page" in call for call in model.map_calls), "windows never mix papers"
+
+
+def test_window_budget_reads_every_paper():
+    from bcp_project.services.briefing import _allocate_windows
+
+    assert _allocate_windows([10], 8) == [8]
+    assert _allocate_windows([10, 3, 2], 8) == [4, 2, 2]
+    assert _allocate_windows([1, 5], 8) == [1, 5]
+    alloc = _allocate_windows([5, 5, 5, 5], 2)
+    assert all(n >= 1 for n in alloc) and alloc[0] >= sum(alloc[1:])
+
+
+def test_package_section_editing_uses_paper_labels():
+    from bcp_project.services.briefing import (
+        BriefingPoint,
+        BriefingSection,
+        BriefingWorkflowError,
+        member_labels,
+        parse_section_text,
+        section_to_text,
+    )
+
+    members = [
+        {"doc_id": "MEMO-42", "label": "M", "role": "memo", "page_count": 7},
+        {"doc_id": "ANNEX-1", "label": "A1", "role": "annexure", "page_count": 2},
+    ]
+    existing = BriefingSection(
+        points=[BriefingPoint(text="Net loss", page=1, quote="net loss of USD 1.2 million", doc_id="ANNEX-1")],
+        not_found=False,
+    )
+    assert section_to_text(existing, member_labels(members)) == "- Net loss [A1 p. 1]"
+    parsed = parse_section_text(
+        "- Net loss [A1 p. 1]\n- Inject USD 5 million [p. 3]\n- Break-even by 2027 [A1 · পৃ. ২]",
+        existing, None, members=members,
+    )
+    assert [(p.doc_id, p.page, p.quote) for p in parsed.points] == [
+        ("ANNEX-1", 1, "net loss of USD 1.2 million"),
+        ("MEMO-42", 3, None),
+        ("ANNEX-1", 2, None),
+    ]
+    for bad in ("- Loss [A2 p. 1]", "- Loss [A1 p. 3]"):
+        with pytest.raises(BriefingWorkflowError):
+            parse_section_text(bad, existing, None, members=members)
+    with pytest.raises(BriefingWorkflowError):
+        parse_section_text("- Loss [A1 p. 1]", BriefingSection(points=[], not_found=True), 7)
+
+
+@pytest.mark.asyncio
+async def test_package_routes_brief_memo_with_annexures_and_hide_unopenable_papers(maker, model, monkeypatch):
+    from fastapi import BackgroundTasks
+    from fastapi.exceptions import HTTPException
+
+    from bcp_project.models import AuditLog, BoardBriefing, BoardMeeting
+    from bcp_project.routers import briefings as routes
+    from bcp_project.services.board_packages import meeting_packages_view
+    from bcp_project.services.briefing import run_board_briefing
+
+    model.map_answer = _package_answer
+    monkeypatch.setenv("BRIEFING_FOUR_EYES", "1")
+    monkeypatch.setattr(routes, "job_queue_enabled", lambda: False)
+    published = []
+    monkeypatch.setattr("bcp_project.ports.events.publish_event", lambda n, p: published.append(p) or True)
+    monkeypatch.setattr(routes, "historical_references", _no_refs)
+
+    async with maker() as db:
+        await _seed_paper(db)
+        await _seed_paper(db, "ANNEX-1", pages=ANNEX_PAGES, title="Audited accounts")
+        db.add(_grant("member", "MEMO-42"))
+        db.add(BoardMeeting(id=5, title="Board 5", scheduled_at=datetime(2026, 10, 20), created_by="sec"))
+        await db.commit()
+
+    sec, gm, member = _user("sec"), _user("gm"), _user("member", "board_member")
+    async with maker() as db:
+        created = await routes.create_package_route(
+            _request(), title="Capital injection pack", meeting_id="5", memo_doc_id="MEMO-42", current_user=sec, db=db
+        )
+    assert created.headers["location"] == "/board/packages/1?status=created"
+    async with maker() as db:
+        added = await routes.add_package_member(_request(), 1, doc_id="ANNEX-1", role="annexure", current_user=sec, db=db)
+    assert added.headers["location"].endswith("status=saved")
+    async with maker() as db:
+        dup = await routes.add_package_member(_request(), 1, doc_id="ANNEX-1", role="annexure", current_user=sec, db=db)
+    assert "error=" in dup.headers["location"]
+
+    tasks = BackgroundTasks()
+    async with maker() as db:
+        resp = await routes.package_generate_route(_request(), 1, tasks, current_user=sec, db=db)
+    assert "briefing_generating" in resp.headers["location"] and len(tasks.tasks) == 1
+    async with maker() as db:
+        row = (await db.execute(select(BoardBriefing))).scalar_one()
+    assert (row.doc_id, row.version, row.package_id, row.package_revision) == ("MEMO-42", 1, 1, 2)
+    assert [m["label"] for m in row.members] == ["M", "A1"]
+    assert await run_board_briefing(row.id, session_factory=maker)
+
+    async with maker() as db:
+        single = await routes.generate_briefing_route(_request(), "MEMO-42", BackgroundTasks(), current_user=sec, db=db)
+    assert "briefing_generating" in single.headers["location"], "a package briefing does not block the memo's own briefing"
+
+    async with maker() as db:
+        data = json.loads((await routes.package_briefing_api(_request(), 1, refs=True, current_user=sec, db=db)).body)
+    sections = {s["key"]: s for s in data["briefing"]["sections"]}
+    annex_point = sections["financial_implications"]["points"][0]
+    assert annex_point["label"] == "A1" and annex_point["doc_id"] == "ANNEX-1"
+    assert annex_point["url"] == "/view/ANNEX-1?page=1&hl=net%20loss%20of%20USD%201.2%20million"
+    assert [a["key"] for a in data["attention"]] == ["financial_implications"]
+    assert [m["label"] for m in data["members"]] == ["M", "A1"] and data["stale"] is False
+
+    async with maker() as db:
+        await routes.package_review(_request(), 1, current_user=gm, db=db)
+    async with maker() as db:
+        ok = await routes.package_approve(_request(), 1, current_user=sec, db=db)
+    assert "briefing_approved" in ok.headers["location"]
+    assert published[-1]["package_id"] == 1 and published[-1]["package_revision"] == 2
+
+    async with maker() as db:
+        data = json.loads((await routes.package_briefing_api(_request(), 1, refs=True, current_user=member, db=db)).body)
+    sections = {s["key"]: s for s in data["briefing"]["sections"]}
+    assert sections["proposal"]["points"][0]["doc_id"] == "MEMO-42"
+    assert sections["financial_implications"]["points"] == [] and sections["financial_implications"]["hidden"] == 1
+    assert data["hidden_points"] == 1
+    assert data["members"][1]["doc_id"] is None and data["members"][1]["title"] is None
+    async with maker() as db:
+        with pytest.raises(HTTPException) as no_memo:
+            await routes.package_briefing_api(_request(), 1, current_user=_user("outsider", "board_member"), db=db)
+        assert no_memo.value.status_code == 403
+        assert [p["approved"] for p in await meeting_packages_view(db, 5, approved_only=True)] == [True]
+
+    async with maker() as db:
+        await routes.remove_package_member(_request(), 1, "ANNEX-1", current_user=sec, db=db)
+    async with maker() as db:
+        data = json.loads((await routes.package_briefing_api(_request(), 1, refs=True, current_user=sec, db=db)).body)
+    assert data["stale"] is True and data["current_version"] == 3
+    async with maker() as db:
+        data = json.loads((await routes.package_briefing_api(_request(), 1, current_user=member, db=db)).body)
+    assert data["briefing"]["state"] == "approved", "readers keep the approved revision until a new one is approved"
+
+    async with maker() as db:
+        await routes.package_generate_route(_request(), 1, BackgroundTasks(), current_user=sec, db=db)
+    async with maker() as db:
+        revisions = sorted(
+            r for (r,) in (await db.execute(select(BoardBriefing.package_revision).where(BoardBriefing.package_id == 1))).all()
+        )
+        actions = set((await db.execute(select(AuditLog.action))).scalars().all())
+    assert revisions == [2, 3]
+    assert {
+        "board_package_create", "board_package_member_add", "board_package_member_remove",
+        "briefing_generate", "briefing_review", "briefing_approve",
+    } <= actions
+
+
+def test_briefing_headings_match_the_report_in_order():
+    from bcp_project.services.briefing import ATTENTION_KEYS, BRIEFING_HEADINGS as SERVICE_HEADINGS, HEADING_LABELS
+
+    assert [key for key, _ in SERVICE_HEADINGS] == list(HEADINGS)
+    assert [label for _, label in SERVICE_HEADINGS] == [
+        "Subject",
+        "Background",
+        "Proposal",
+        "Financial implications",
+        "Risks",
+        "Regulatory considerations",
+        "Management recommendation",
+        "Required Board decision",
+    ]
+    assert set(ATTENTION_KEYS) <= set(HEADING_LABELS)
+
+
+@pytest.mark.asyncio
+async def test_viewer_offers_briefing_for_board_paper_types(maker):
+    from bcp_project.document_types import is_board_paper_type
+    from bcp_project.models import DocumentRecord
+    from bcp_project.routers.documents import _viewer_briefing_url
+
+    assert is_board_paper_type("board  paper") and is_board_paper_type("Memo") and not is_board_paper_type("Letter")
+    async with maker() as db:
+        await _seed_paper(db)
+        await _seed_paper(db, "LETTER-1", doc_type="Letter")
+        await db.commit()
+        memo = (await db.execute(select(DocumentRecord).where(DocumentRecord.doc_id == "MEMO-42"))).scalar_one()
+        letter = (await db.execute(select(DocumentRecord).where(DocumentRecord.doc_id == "LETTER-1"))).scalar_one()
+        sec, member = _user("sec"), _user("member", "board_member")
+        assert await _viewer_briefing_url(db, sec, memo) == "/documents/MEMO-42/briefing"
+        assert await _viewer_briefing_url(db, sec, letter) is None
+        assert await _viewer_briefing_url(db, member, memo) is None, "no approved briefing yet"
+        assert await _viewer_briefing_url(db, _user("up", "uploader"), memo) is None
+
+        db.add(_ready_briefing(doc_id="LETTER-1"))
+        db.add(_ready_briefing(state="approved", approved_by="sec2", sha256="0" * 64))
+        await db.commit()
+        assert await _viewer_briefing_url(db, sec, letter) == "/documents/LETTER-1/briefing"
+        assert await _viewer_briefing_url(db, member, letter) is None, "drafts stay with organizers"
+        assert await _viewer_briefing_url(db, member, memo) == "/documents/MEMO-42/briefing"

@@ -19,7 +19,8 @@ from ..ports.loan_hr import get_hr_port, get_loan_port
 from ..ports.registry import get_registry
 from ..search_acl import SearchFilters
 from ..service_auth import authenticate_api_v1_principal
-from ..services import ask_sonali, customer_query, document_query, hitl
+from ..access_control import write_audit
+from ..services import ask_sonali, customer_query, document_query, hitl, search_log
 from ..services.connector_sync import pull_document_source
 
 router = APIRouter(prefix="/api/v1", tags=["api-v1"])
@@ -41,6 +42,11 @@ async def v1_search_documents(
     reference_number: Optional[str] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
+    subject: Optional[str] = None,
+    title: Optional[str] = None,
+    language: Optional[str] = None,
+    tags: Optional[str] = Query(None, description="Comma-separated tag slugs; any of them matches"),
+    metadata_check: Optional[str] = Query(None, description="checked | unchecked (AI-filled details not yet confirmed)"),
     principal: Principal = Depends(get_principal),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
@@ -52,6 +58,11 @@ async def v1_search_documents(
             reference_number=reference_number,
             date_from=date_from,
             date_to=date_to,
+            subject=subject,
+            title=title,
+            language=language,
+            tags=tags,
+            metadata_check=metadata_check,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -148,6 +159,45 @@ async def v1_invoke_mcp_tool(
 async def v1_metrics(principal: Principal = Depends(get_principal)) -> Any:
     require_scope(principal, Scope.audit_read)
     return snapshot_metrics()
+
+
+@router.get("/audit/search-activity")
+async def v1_search_activity(
+    request: Request,
+    since_id: int = Query(0, ge=0, description="Return rows with id greater than this, oldest first"),
+    limit: int = Query(200, ge=1, le=1000),
+    username: Optional[str] = None,
+    channel: Optional[str] = None,
+    doc_id: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    principal: Principal = Depends(get_principal),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """Search activity for SIEM pulls; page forward with ``next_since_id``."""
+    require_scope(principal, Scope.audit_read)
+    try:
+        query = search_log.ActivityQuery.from_params(
+            username=username, channel=channel, doc_id=doc_id, date_from=date_from, date_to=date_to
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    rows = await search_log.activity_since(db, query, since_id=since_id, limit=limit)
+    titles = await search_log.titles_for(db, rows)
+    await write_audit(
+        db,
+        username=principal.username_for_grants or principal.actor_id,
+        action="search_log_export",
+        resource_type="search_activity",
+        detail=f"api_v1 since_id={since_id} rows={len(rows)}",
+        ip_address=_client_ip(request),
+        actor_type=principal.actor_type,
+        commit=True,
+    )
+    return {
+        "items": [search_log.activity_dict(row, titles) for row in rows],
+        "next_since_id": rows[-1].id if rows else since_id,
+    }
 
 
 @router.get("/integrations/health")

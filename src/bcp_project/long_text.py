@@ -47,9 +47,10 @@ def page_windows(pages: Iterable[Page], max_chars: int) -> List[List[Page]]:
     return windows
 
 
-def render_window(window: Sequence[Page]) -> str:
-    """Window text with page markers the model can cite: ``[Page 3]``."""
-    return "\n\n".join(f"[Page {number}]\n{text}" for number, text in window)
+def render_window(window: Sequence[Page], label: str = "") -> str:
+    """Window text with page markers the model can cite: ``[Page 3]``, or ``[A1 · Page 3]`` in a package."""
+    prefix = f"{label} · " if label else ""
+    return "\n\n".join(f"[{prefix}Page {number}]\n{text}" for number, text in window)
 
 
 def sample_windows(windows: List[List[Page]], limit: int) -> List[List[Page]]:

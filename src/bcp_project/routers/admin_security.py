@@ -44,23 +44,28 @@ async def api_security_status(
     return await audit_status(db)
 
 
+async def verify_and_record(db: AsyncSession, request: Request, user: User) -> Dict[str, Any]:
+    """Recompute every sealed row's hash and walk the chain from genesis (read-only, may take seconds)."""
+    result = await verify_chain(db)
+    await write_audit(
+        db,
+        username=user.username,
+        action="audit_chain_verified" if result.get("ok") else "audit_chain_broken",
+        resource_type="audit_log",
+        resource_id=str(result.get("broken_at") or result.get("tip") or "")[:64],
+        detail=str(result.get("reason") or f"linked={result.get('linked')}")[:500],
+        ip_address=_client_ip(request),
+        actor_type="user",
+        commit=True,
+    )
+    return result
+
+
 @router.post("/api/admin/audit/verify")
 async def api_verify_audit_chain(
     request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Dict[str, Any]:
-    """Recompute every sealed row's hash and walk the chain from genesis (read-only, may take seconds)."""
     require_role(current_user, [Role.admin])
-    result = await verify_chain(db)
-    await write_audit(
-        db,
-        username=current_user.username,
-        action="audit_chain_verified" if result.get("ok") else "audit_chain_broken",
-        resource_type="audit_log",
-        resource_id=str(result.get("broken_at") or result.get("tip") or "")[:64],
-        detail=str(result.get("reason") or f"linked={result.get('linked')}")[:500],
-        ip_address=_client_ip(request),
-        commit=True,
-    )
-    return result
+    return await verify_and_record(db, request, current_user)

@@ -14,7 +14,7 @@
 
         <div class="viewer-title-block">
             <h1 class="viewer-doc-title" title="{{ page_title }}">{{ page_title }}</h1>
-            <div class="secure-note">{{ page_subtitle }}</div>
+            <div class="secure-note">{{ page_subtitle }}{% if metadata_unchecked %} <span class="status-chip status-chip-warn" title="The title, type and other details were filled in by the AI and nobody has checked them yet">Details not yet checked</span>{% endif %}</div>
         </div>
 
         <div class="viewer-controls">
@@ -27,6 +27,12 @@
             {% endif %}
             {% if versions_url %}
             <a class="button button-secondary" href="{{ versions_url }}" title="Earlier versions of this document">Versions</a>
+            {% endif %}
+            {% if metadata_url %}
+            <a class="button button-secondary" href="{{ metadata_url }}" title="{% if metadata_unchecked %}Check the details the AI filled in{% else %}Correct the title, reference, department, tags and other details{% endif %}">{% if metadata_unchecked %}Check details{% else %}Details{% endif %}</a>
+            {% endif %}
+            {% if briefing_url %}
+            <a class="button button-secondary" href="{{ briefing_url }}" title="Subject, risks, financial implications and the decision required, with page references">Board briefing</a>
             {% endif %}
         </div>
     </header>

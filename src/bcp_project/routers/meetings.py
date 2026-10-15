@@ -56,6 +56,7 @@ from ..models import (
 )
 from ..notify import notify_meeting_email
 from ..diarization import speaker_labels
+from ..services.board_packages import meeting_packages_view
 from ..services.minutes import (
     ACTION_STATUSES,
     MINUTES_DRAFT,
@@ -272,6 +273,7 @@ async def meeting_detail(
             "meeting": meeting,
             "documents": documents,
             "archive_status": archive_status,
+            "packages": await meeting_packages_view(db, meeting_id),
             "invitations": invitations,
             "attendance": attendance,
             "status": status,

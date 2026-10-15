@@ -16,6 +16,45 @@
 <div class="alert alert-info" role="status"><span><strong>Sent back.</strong> It won't appear in Search. The uploader can see your note in My uploads.</span></div>
 {% endif %}
 
+{% if can_confirm_details %}
+<nav class="section-tabs" aria-label="Which list">
+    <a href="/review" data-nav{% if list_view == 'publish' %} class="is-active" aria-current="page"{% endif %}>Before publishing ({{ items|length }})</a>
+    <a href="/review?list=details" data-nav{% if list_view == 'details' %} class="is-active" aria-current="page"{% endif %}>Details to confirm ({{ details|length }})</a>
+</nav>
+{% endif %}
+
+{% if list_view == 'details' %}
+<p class="muted">Already in Search. The AI filled in some of their details (title, department, type and so on) and nobody has checked them yet. Open each one, compare with the document and confirm.</p>
+{% if details %}
+<ul class="card-list" role="list">
+    {% for d in details %}
+    {% set is_mine = four_eyes and d.uploaded_by == user.username %}
+    <li class="list-card">
+        <div class="list-card-top">
+            <h3>{{ d.title or d.doc_id }}</h3>
+            {% if is_mine %}<span class="status-chip status-chip-neutral">You uploaded this</span>
+            {% elif d.low_fields %}<span class="status-chip status-chip-warn">Some details uncertain</span>
+            {% else %}<span class="status-chip status-chip-info">Not yet checked</span>{% endif %}
+        </div>
+        <p class="list-card-meta">
+            {{ d.doc_id }} · {{ d.doc_type }} · {{ d.sensitivity|status_label('sensitivity') }}
+            · uploaded by {{ d.uploaded_by }} on {{ d.uploaded_at|local_dt }}
+        </p>
+        {% if d.ai_filled %}<p>Filled in by the AI: {{ d.ai_filled|join(', ') }}</p>{% endif %}
+        {% if d.low_fields %}<p class="muted">Lower confidence: {{ d.low_fields|join(', ') }}</p>{% endif %}
+        <div class="list-card-actions">
+            <a class="button{% if is_mine %} button-secondary{% endif %}" href="/documents/{{ d.doc_id | urlencode }}/metadata" data-nav>{% if is_mine %}Look at it{% else %}Check the details{% endif %}</a>
+        </div>
+    </li>
+    {% endfor %}
+</ul>
+{% else %}
+<div class="empty-state panel">
+    <p><strong>All details are checked.</strong></p>
+    <p class="muted">Documents whose details were filled in by the AI appear here until someone confirms them.</p>
+</div>
+{% endif %}
+{% else %}
 {% set show = request.query_params.get('show', '') %}
 {% set mine = items|selectattr('uploaded_by', 'equalto', user.username)|list %}
 {% set others = items|rejectattr('uploaded_by', 'equalto', user.username)|list %}
@@ -24,6 +63,14 @@
     <a href="/review" data-nav{% if show not in ('mine', 'others') %} class="is-active" aria-current="true"{% endif %}>All ({{ items|length }})</a>
     <a href="/review?show=others" data-nav{% if show == 'others' %} class="is-active" aria-current="true"{% endif %}>Ones you can check ({{ others|length }})</a>
     <a href="/review?show=mine" data-nav{% if show == 'mine' %} class="is-active" aria-current="true"{% endif %}>Uploaded by you ({{ mine|length }})</a>
+</nav>
+{% endif %}
+{% if reason_counts %}
+<nav class="chip-row review-reason-filter" aria-label="Filter by reason">
+    <a class="chip-button{% if not reason %} is-active{% endif %}" href="/review" data-nav{% if not reason %} aria-current="true"{% endif %}>Any reason</a>
+    {% for code, n in reason_counts.items() %}
+    <a class="chip-button{% if reason == code %} is-active{% endif %}" href="/review?reason={{ code }}" data-nav{% if reason == code %} aria-current="true"{% endif %}>{{ code|reason_label }} ({{ n }})</a>
+    {% endfor %}
 </nav>
 {% endif %}
 {% set shown = mine if show == 'mine' else (others if show == 'others' else items) %}
@@ -66,5 +113,6 @@
     <p><strong>Nothing to check right now.</strong></p>
     <p class="muted">New uploads that need a person to look at them will appear here.</p>
 </div>
+{% endif %}
 {% endif %}
 {% endblock %}

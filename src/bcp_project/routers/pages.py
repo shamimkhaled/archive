@@ -64,6 +64,11 @@ async def read_root(
             "href": "/review",
         })
         todo.append({
+            "count": await count(select(func.count()).select_from(DocumentRecord).where(DocumentRecord.metadata_check_pending.is_(True))),
+            "label": "documents with details filled in by the AI to confirm",
+            "href": "/review?list=details",
+        })
+        todo.append({
             "count": await count(
                 select(func.count()).select_from(DocumentAccessRequest).where(DocumentAccessRequest.status == AccessRequestStatus.pending)
             ),

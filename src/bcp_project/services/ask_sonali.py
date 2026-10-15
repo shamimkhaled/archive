@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException, status
@@ -10,12 +11,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .. import ai
 from ..ai.guard import with_rules, wrap_untrusted
-from ..access_control import get_sensitivity_for_docs, write_audit
+from ..access_control import get_sensitivity_for_docs
 from ..observability import Timer, incr
 from ..policy import Principal, Scope, require_scope
 from ..ports.adapters import get_llm_client
 from . import document_query
 from .search import _excerpt, _terms, citation_url, grounded_passages
+from .search_log import AiTrace, record_search
 
 logger = logging.getLogger("bcp_project.services.ask_sonali")
 
@@ -117,16 +119,29 @@ async def ask_sonali_for_principal(
     if not q:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="question required")
 
-    with Timer("ask_sonali"):
-        search = await document_query.search_documents_for_principal(
+    started = time.perf_counter()
+    tool = tool_name or "ask_sonali"
+
+    async def log_ask(trace: AiTrace) -> None:
+        await record_search(
             db,
-            principal,
-            q,
-            lang=lang,
-            limit=limit,
+            channel="ask",
+            query=q,
+            results=found.rows,
+            tool_name=tool,
             ip_address=ip_address,
-            tool_name=tool_name or "ask_sonali",
+            lang=found.lang,
+            mode=found.mode,
+            cached=found.cached,
+            degraded=found.degraded,
+            latency_ms=int((time.perf_counter() - started) * 1000),
+            ai_trace=trace,
+            **document_query.principal_log_identity(principal),
         )
+
+    with Timer("ask_sonali"):
+        found = await document_query.run_principal_search(db, principal, q, lang=lang, limit=limit)
+        search = found.response
         evidence = _evidence_rows(search)
         levels = await get_sensitivity_for_docs(db, {str(r.get("doc_id") or "") for r in evidence})
         held_back = [r for r in evidence if not ai.chat_allowed("ask", levels.get(str(r.get("doc_id"))))]
@@ -147,17 +162,7 @@ async def ask_sonali_for_principal(
                 "sources_considered": 0,
                 "query": q,
             }
-            await write_audit(
-                db,
-                username=principal.username_for_grants or principal.actor_id,
-                action="ask_sonali",
-                resource_type="ai",
-                detail=f"refused=no_source q={q[:120]}",
-                ip_address=ip_address,
-                actor_type=principal.actor_type,
-                tool_name=tool_name or "ask_sonali",
-                commit=True,
-            )
+            await log_ask(AiTrace(refused=True, refusal_reason=payload["refusal_reason"], withheld_docs=held_back))
             return payload
 
         acl = await document_query.acl_scope_for_principal(db, principal)
@@ -200,6 +205,14 @@ async def ask_sonali_for_principal(
             model_out = _extractive_answer(sources, q)
             if model_out is None:
                 logger.exception("Ask Sonali LLM failed")
+                await log_ask(
+                    AiTrace(
+                        refused=True,
+                        refusal_reason=f"Model unavailable: {type(exc).__name__}",
+                        source_docs=sources,
+                        withheld_docs=held_back,
+                    )
+                )
                 raise HTTPException(
                     status_code=status.HTTP_502_BAD_GATEWAY,
                     detail=f"Ask Sonali model unavailable: {str(exc)[:160]}",
@@ -269,20 +282,16 @@ async def ask_sonali_for_principal(
             "human_in_the_loop": True,
             "disclaimer": "AI support only — humans retain final decision authority.",
         }
-        answered_by = "extractive" if fallback else f"{call.get('provider')}/{call.get('model')}"
-        await write_audit(
-            db,
-            username=principal.username_for_grants or principal.actor_id,
-            action="ask_sonali",
-            resource_type="ai",
-            detail=(
-                f"refused={refused} cites={len(citations)} sources={len(sources)} "
-                f"model={answered_by} q={q[:120]}"
-            ),
-            ip_address=ip_address,
-            actor_type=principal.actor_type,
-            tool_name=tool_name or "ask_sonali",
-            commit=True,
+        await log_ask(
+            AiTrace(
+                provider="extractive" if fallback else call.get("provider"),
+                model="extractive" if fallback else call.get("model"),
+                refused=refused,
+                refusal_reason=refusal_reason,
+                source_docs=sources,
+                cited_docs=citations,
+                withheld_docs=held_back,
+            )
         )
         incr("ask_sonali_answers", labels={"outcome": "refused" if refused else "answered"})
         return result

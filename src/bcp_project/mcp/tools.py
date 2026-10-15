@@ -31,6 +31,10 @@ TOOL_DEFINITIONS = [
                 "reference_number": {"type": "string"},
                 "date_from": {"type": "string", "format": "date"},
                 "date_to": {"type": "string", "format": "date"},
+                "subject": {"type": "string", "description": "Words that must appear in the subject"},
+                "title": {"type": "string", "description": "Words that must appear in the title"},
+                "language": {"type": "string", "enum": ["en", "bn", "mixed"]},
+                "tags": {"type": "array", "items": {"type": "string"}, "description": "Tag slugs or labels; any match"},
             },
             "required": ["q"],
         },
@@ -188,7 +192,10 @@ async def invoke_tool(
     if name == "search_documents":
         try:
             filters = SearchFilters.from_params(
-                **{key: args.get(key) for key in ("department", "category", "doc_type", "reference_number", "date_from", "date_to")}
+                **{key: args.get(key) for key in (
+                    "department", "category", "doc_type", "reference_number", "date_from", "date_to",
+                    "subject", "title", "language", "tags",
+                )}
             )
         except ValueError as exc:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc

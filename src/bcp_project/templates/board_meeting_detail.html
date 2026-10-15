@@ -120,6 +120,23 @@
     {% else %}
     {{ empty_state("No papers yet", "The organizer hasn't shared any papers for this meeting yet.") }}
     {% endif %}
+    {% if packages %}
+    <h3>Briefings covering a memo and its annexures</h3>
+    <div class="card-list">
+        {% for pkg in packages %}
+        <article class="list-card">
+            <div class="list-card-top">
+                <h4>{{ pkg.title }}</h4>
+                <span class="status-chip status-chip-ok">Briefing ready</span>
+            </div>
+            <p class="list-card-meta">{{ pkg.members }} paper{{ 's' if pkg.members != 1 else '' }}</p>
+            <div class="list-card-actions">
+                <a class="button button-secondary" href="/board/packages/{{ pkg.id }}/briefing" data-nav>Read the briefing</a>
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+    {% endif %}
 </section>
 
 {% if minutes_viewable %}

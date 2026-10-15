@@ -76,6 +76,33 @@ def create_table_if_missing(table: str, *columns: sa.SchemaItem, indexes: Sequen
         create_index_if_missing(name, table, cols)
 
 
+def has_unique_constraint(table: str, name: str) -> bool:
+    if not has_table(table):
+        return False
+    return any(uc.get("name") == name for uc in _inspector().get_unique_constraints(table))
+
+
+def drop_unique_if_present(table: str, name: str) -> None:
+    """SQLite cannot drop a constraint in place, so it rebuilds the table in batch mode."""
+    if not has_unique_constraint(table, name):
+        return
+    if is_postgres():
+        op.drop_constraint(name, table, type_="unique")
+    else:
+        with op.batch_alter_table(table, recreate="always") as batch:
+            batch.drop_constraint(name, type_="unique")
+    _changed()
+
+
+def create_partial_index_if_missing(
+    index: str, table: str, columns: Sequence[str], where: str, *, unique: bool = False
+) -> None:
+    if has_table(table) and not has_index(table, index):
+        clause = sa.text(where)
+        op.create_index(index, table, list(columns), unique=unique, postgresql_where=clause, sqlite_where=clause)
+        _changed()
+
+
 def drop_column_if_present(table: str, column: str) -> None:
     if has_column(table, column):
         op.drop_column(table, column)

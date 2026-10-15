@@ -32,6 +32,7 @@ from bcp_project.ports.loan_hr import (
 )
 from bcp_project.ports.registry import get_registry, reset_registry_for_tests
 from bcp_project.services import ask_sonali, hitl
+from bcp_project.services.document_query import PrincipalSearch
 
 
 def _user(role: Role = Role.admin, username: str = "admin1") -> User:
@@ -125,11 +126,11 @@ async def test_ask_sonali_refuses_without_sources():
     principal = principal_from_user(_user(Role.board_member))
     db = AsyncMock()
     with patch(
-        "bcp_project.services.ask_sonali.document_query.search_documents_for_principal",
+        "bcp_project.services.ask_sonali.document_query.run_principal_search",
         new_callable=AsyncMock,
-        return_value={"results": [{"doc_id": "X", "can_view": False}]},
+        return_value=PrincipalSearch({"results": [{"doc_id": "X", "can_view": False}]}),
     ), patch(
-        "bcp_project.services.ask_sonali.write_audit",
+        "bcp_project.services.ask_sonali.record_search",
         new_callable=AsyncMock,
     ):
         result = await ask_sonali.ask_sonali_for_principal(db, principal, "What is policy X?")
@@ -160,9 +161,9 @@ async def test_ask_sonali_enforces_citations():
         "citations": [],  # missing → must refuse
     }
     with patch(
-        "bcp_project.services.ask_sonali.document_query.search_documents_for_principal",
+        "bcp_project.services.ask_sonali.document_query.run_principal_search",
         new_callable=AsyncMock,
-        return_value=evidence_search,
+        return_value=PrincipalSearch(evidence_search),
     ), patch(
         "bcp_project.services.ask_sonali.get_sensitivity_for_docs",
         new_callable=AsyncMock,
@@ -175,7 +176,7 @@ async def test_ask_sonali_enforces_citations():
         new_callable=AsyncMock,
         return_value=[],
     ), patch(
-        "bcp_project.services.ask_sonali.write_audit",
+        "bcp_project.services.ask_sonali.record_search",
         new_callable=AsyncMock,
     ):
         result = await ask_sonali.ask_sonali_for_principal(db, principal, "ICT procurement?")

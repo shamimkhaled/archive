@@ -7,8 +7,10 @@ from . import (
     access,
     admin,
     admin_ai,
+    admin_audit,
     admin_queues,
     admin_retention,
+    admin_search_activity,
     admin_security,
     api_v1,
     ask,
@@ -38,6 +40,8 @@ def include_routers(app: FastAPI) -> None:
     app.include_router(admin_ai.router)
     app.include_router(admin_retention.router)
     app.include_router(admin_security.router)
+    app.include_router(admin_search_activity.router)
+    app.include_router(admin_audit.router)
     app.include_router(access.router)
     app.include_router(meetings.router)
     app.include_router(meeting_minutes.router)

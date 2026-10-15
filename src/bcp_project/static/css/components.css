@@ -1734,3 +1734,129 @@ button.link:hover { color: var(--bcg); }
     border-top: 0;
   }
 }
+
+/* ---------- Tags and metadata confidence ---------- */
+.tag-chips { list-style: none; margin: 0 0 var(--space-2); padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.tag-chips:empty { display: none; }
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 32px;
+  padding: 0 var(--space-1) 0 var(--space-3);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  font-size: var(--fs-sm);
+}
+.tag-chip.is-suggested { border-style: dashed; background: var(--info-soft); }
+.tag-chip-note { font-size: 0.75rem; color: var(--text-secondary); }
+.tag-chip-remove {
+  min-width: 28px;
+  min-height: 28px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.tag-chip-remove:hover { background: var(--neutral-soft); color: var(--text); }
+.tag-list { display: flex; flex-wrap: wrap; gap: var(--space-1); list-style: none; margin: 0; padding: 0; }
+
+.confidence-badge {
+  display: inline-block;
+  margin-left: var(--space-2);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  font-size: 0.75rem;
+  font-weight: 600;
+  vertical-align: middle;
+}
+.confidence-badge.is-high { background: var(--ok-soft); color: var(--ok); border-color: var(--ok-border); }
+.confidence-badge.is-medium { background: var(--info-soft); color: var(--info); border-color: var(--info-border); }
+.confidence-badge.is-low { background: var(--warn-soft); color: var(--warn); border-color: var(--warn-border); }
+.form-group.is-low-confidence input,
+.form-group.is-low-confidence select,
+.form-group.is-low-confidence textarea { border-color: var(--warn); box-shadow: 0 0 0 1px var(--warn-border); }
+
+/* Search activity log */
+.activity-list .soft-details h4 {
+  margin: 0.75rem 0 0.25rem;
+  font-size: 0.9rem;
+}
+.activity-docs {
+  margin: 0;
+  padding-left: 1.25rem;
+  display: grid;
+  gap: 0.25rem;
+  overflow-wrap: anywhere;
+}
+ul.activity-docs {
+  list-style: disc;
+}
+.activity-pager {
+  justify-content: center;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+/* Briefings: risk headings, the key-risks strip, and package paper labels */
+.briefing .briefing-section.briefing-section--attention {
+  border-left: 4px solid var(--danger);
+  background: linear-gradient(90deg, var(--danger-soft), transparent 40%);
+}
+.briefing-attention-icon,
+.key-risks-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 1.4em;
+  height: 1.4em;
+  border-radius: 50%;
+  background: var(--danger);
+  color: var(--surface, #fff);
+  font-size: 0.8em;
+  font-weight: 700;
+  vertical-align: 0.1em;
+}
+.key-risks {
+  border: 1px solid var(--danger-border);
+  border-left: 4px solid var(--danger);
+  background: var(--danger-soft);
+}
+.key-risks .key-risks-heading {
+  margin: 0.75rem 0 0.25rem;
+  font-size: 0.95rem;
+}
+.key-risks .key-risks-heading a {
+  color: inherit;
+}
+.paper-chip {
+  display: inline-block;
+  min-width: 2em;
+  padding: 0.05em 0.45em;
+  margin-right: 0.35em;
+  border: 1px solid var(--info-border);
+  border-radius: 999px;
+  background: var(--info-soft);
+  color: var(--info);
+  font-size: 0.8em;
+  font-weight: 600;
+  text-align: center;
+}
+.package-member-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+  overflow-wrap: anywhere;
+}
+.package-member-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}

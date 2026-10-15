@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% from "macros/ui.html" import breadcrumbs, empty_state %}
+
+{% block title %}Audit log | {{ brand.product_name }}{% endblock %}
+
+{% block content %}
+{{ breadcrumbs([{'href': '/', 'label': 'Home'}, {'label': 'Audit log'}]) }}
+<div class="page-header">
+    <div class="title-group">
+        <h1>Audit log</h1>
+        <p>Every sign-in, upload, view, download, approval and setting change: who did it, to what, and when. Entries are chained together so that any change or removal shows up when the log is checked.</p>
+    </div>
+    <a class="button button-secondary" href="/admin/audit.csv{% if params %}?{{ params | urlencode }}{% endif %}" download>Download as spreadsheet (CSV)</a>
+</div>
+
+<section class="panel" aria-labelledby="chainHeading">
+    <h2 id="chainHeading">Is the log intact?</h2>
+    {% if last_check %}
+        {% if last_check.action == 'audit_chain_verified' %}
+        <div class="alert alert-success" role="status">
+            Checked {{ last_check.created_at | local_dt }} by {{ last_check.username }}: every sealed entry is unchanged and in place{% if last_check.detail and last_check.detail.startswith('linked=') %} ({{ last_check.detail[7:] }} entries){% endif %}.
+        </div>
+        {% else %}
+        <div class="alert alert-error" role="alert">
+            Checked {{ last_check.created_at | local_dt }} by {{ last_check.username }}: the log has been tampered with.
+            {% if last_check.resource_id %}The first problem is at entry {{ last_check.resource_id }}.{% endif %}
+            {% if last_check.detail %}Reason: {{ last_check.detail }}.{% endif %}
+            Report this to Information Security.
+        </div>
+        {% endif %}
+    {% else %}
+    <p class="muted">The log has not been checked yet.</p>
+    {% endif %}
+    <ul class="stat-row">
+        <li class="stat-tile"><strong>{{ status.audit_rows }}</strong><span>Entries in total</span></li>
+        <li class="stat-tile">
+            <strong>{{ status.unsealed_rows }}</strong><span>Waiting to be sealed</span>
+            {% if status.oldest_unsealed_at %}<span class="muted">Oldest from {{ status.oldest_unsealed_at | local_dt }}</span>{% endif %}
+        </li>
+        <li class="stat-tile">
+            <strong>{{ 'On' if status.siem.enabled else 'Off' }}</strong><span>Copy to security monitoring (SIEM)</span>
+            {% if status.siem.cursor %}<span class="muted">Sent up to entry {{ status.siem.cursor.last_id }}</span>{% endif %}
+        </li>
+    </ul>
+    <p class="muted">New entries are sealed into the chain a few seconds after they are written (at least {{ seal_delay }} seconds). Checking reads the whole log and may take a little while.</p>
+    <form action="/admin/audit/verify" method="post" class="form-actions-row"
+          data-confirm-title="Check the whole audit log now?" data-confirm="Every sealed entry is re-checked. The check itself is recorded in the log." data-confirm-ok="Check now">
+        <button type="submit" class="button button-primary">Check the log now</button>
+    </form>
+</section>
+
+<form method="get" action="/admin/audit" class="panel search-filters" role="search" aria-label="Filter the audit log">
+    <div class="form-grid">
+        <div class="form-group">
+            <label for="al_username">Person (username)</label>
+            <input id="al_username" name="username" type="text" autocomplete="off" value="{{ query.username }}" />
+        </div>
+        <div class="form-group">
+            <label for="al_action">What they did</label>
+            <select id="al_action" name="action">
+                <option value="">Anything</option>
+                {% for a in actions %}<option value="{{ a }}"{% if query.action == a %} selected{% endif %}>{{ a | replace('_', ' ') | capitalize }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="al_rtype">Kind of record</label>
+            <select id="al_rtype" name="resource_type">
+                <option value="">Any</option>
+                {% for r in resource_types %}<option value="{{ r }}"{% if query.resource_type == r %} selected{% endif %}>{{ r | replace('_', ' ') | capitalize }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="al_rid">Record (archive number, meeting number or username)</label>
+            <input id="al_rid" name="resource_id" type="text" autocomplete="off" placeholder="For example: SB-2026-001" value="{{ query.resource_id }}" />
+        </div>
+        <div class="form-group">
+            <label for="al_q">Words in the details</label>
+            <input id="al_q" name="q" type="text" autocomplete="off" value="{{ query.q }}" />
+        </div>
+        <div class="form-group">
+            <label for="al_actor">Done by</label>
+            <select id="al_actor" name="actor_type">
+                <option value="">Anyone</option>
+                {% for key, label in actor_types.items() %}<option value="{{ key }}"{% if query.actor_type == key %} selected{% endif %}>{{ label }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="al_from">From date</label>
+            <input id="al_from" name="date_from" type="date" value="{{ query.date_from.isoformat() if query.date_from else '' }}" />
+        </div>
+        <div class="form-group">
+            <label for="al_to">To date</label>
+            <input id="al_to" name="date_to" type="date" value="{{ query.date_to.isoformat() if query.date_to else '' }}" />
+        </div>
+    </div>
+    {% if query.correlation_id %}<input type="hidden" name="correlation_id" value="{{ query.correlation_id }}" />{% endif %}
+    <div class="form-actions-row">
+        <button type="submit" class="button button-primary">Show</button>
+        {% if params %}<a href="/admin/audit" class="button button-ghost" data-nav>Clear</a>{% endif %}
+    </div>
+</form>
+
+<p class="status-line">
+    {{ total }} entr{{ 'ies' if total != 1 else 'y' }}{% if params %} match{{ '' if total != 1 else 'es' }}{% endif %}.
+    {% if query.correlation_id %}Showing one request only.{% endif %}
+</p>
+
+{% if entries %}
+<ul class="card-list activity-list">
+    {% for e in entries %}
+    <li class="list-card">
+        <div class="list-card-top">
+            <h3>{{ e.action_label }}</h3>
+            {% if e.intact == false %}<span class="status-chip status-chip-danger">Changed after sealing</span>
+            {% elif e.sealed %}<span class="status-chip status-chip-ok">Sealed</span>
+            {% else %}<span class="status-chip status-chip-neutral">Not sealed yet</span>{% endif %}
+        </div>
+        <p class="list-card-meta">
+            <a href="/admin/audit?username={{ e.username | urlencode }}" data-nav>{{ e.username }}</a>
+            {% if e.actor_type and e.actor_type != 'user' %}({{ actor_types.get(e.actor_type, e.actor_type) }}){% endif %}
+            · {{ e.created | local_dt }}
+            · {{ e.resource_type | replace('_', ' ') }}
+            {% if e.resource_id %}
+                {% if e.resource_href %}<a href="{{ e.resource_href }}" data-nav><span class="mono">{{ e.resource_id }}</span></a>
+                {% else %}<span class="mono">{{ e.resource_id }}</span>{% endif %}
+            {% endif %}
+        </p>
+        {% if e.detail %}<p>{{ e.detail[:300] }}{% if e.detail | length > 300 %}…{% endif %}</p>{% endif %}
+        <details class="soft-details">
+            <summary>Details</summary>
+            {% if e.detail and e.detail | length > 300 %}<p>{{ e.detail }}</p>{% endif %}
+            <p>
+                {% if e.resource_id %}<a href="/admin/audit?resource_type={{ e.resource_type | urlencode }}&resource_id={{ e.resource_id | urlencode }}" data-nav>Everything done to this record</a>{% endif %}
+                {% if e.correlation_id %}{% if e.resource_id %} · {% endif %}<a href="/admin/audit?correlation_id={{ e.correlation_id | urlencode }}" data-nav>Everything in the same request</a>{% endif %}
+            </p>
+            <p class="mono small muted">
+                Entry {{ e.id }} · {{ e.action }} · {{ e.ip_address or 'no address' }}{% if e.tool_name %} · {{ e.tool_name }}{% endif %}{% if e.correlation_id %} · request {{ e.correlation_id }}{% endif %}<br>
+                {% if e.row_hash %}sha256 {{ e.row_hash }}{% else %}Not sealed yet{% endif %}
+            </p>
+        </details>
+    </li>
+    {% endfor %}
+</ul>
+{% if pages > 1 %}
+<nav class="form-actions-row activity-pager" aria-label="Pages">
+    {% set base = params | urlencode %}
+    {% if page > 1 %}<a class="button button-secondary" href="/admin/audit?{{ base }}{{ '&' if base else '' }}page={{ page - 1 }}" data-nav>Newer</a>{% endif %}
+    <span class="muted">Page {{ page }} of {{ pages }}</span>
+    {% if page < pages %}<a class="button button-secondary" href="/admin/audit?{{ base }}{{ '&' if base else '' }}page={{ page + 1 }}" data-nav>Older</a>{% endif %}
+</nav>
+{% endif %}
+{% else %}
+{{ empty_state('Nothing logged yet' if not params else 'No matching entries', 'Actions appear here as soon as they happen.' if not params else 'Try fewer filters or a wider date range.') }}
+{% endif %}
+{% endblock %}

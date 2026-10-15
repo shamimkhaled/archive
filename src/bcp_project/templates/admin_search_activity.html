@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% from "macros/ui.html" import breadcrumbs, empty_state %}
+
+{% block title %}Search activity | {{ brand.product_name }}{% endblock %}
+
+{% macro doc_refs(refs, empty='None') -%}
+{% if refs %}
+<ul class="activity-docs">
+    {% for ref in refs %}
+    <li><a href="/view/{{ ref.doc_id }}{% if ref.page %}?page={{ ref.page }}{% endif %}" data-nav><span class="mono">{{ ref.doc_id }}</span>{% if ref.page %} · page {{ ref.page }}{% endif %}</a>{% if ref.title %} <span class="muted">{{ ref.title }}</span>{% endif %}</li>
+    {% endfor %}
+</ul>
+{% else %}<p class="muted">{{ empty }}</p>{% endif %}
+{%- endmacro %}
+
+{% block content %}
+{{ breadcrumbs([{'href': '/', 'label': 'Home'}, {'label': 'Search activity'}]) }}
+<div class="page-header">
+    <div class="title-group">
+        <h1>Search activity</h1>
+        <p>Every archive search and Ask Sonali question: who asked, what they looked for, what they were shown, and which papers the AI answer used. Entries cannot be changed or removed.</p>
+    </div>
+    <a class="button button-secondary" href="/admin/search-activity.csv{% if params %}?{{ params | urlencode }}{% endif %}" download>Download as spreadsheet (CSV)</a>
+</div>
+
+<form method="get" action="/admin/search-activity" class="panel search-filters" role="search" aria-label="Filter search activity">
+    <div class="form-grid">
+        <div class="form-group">
+            <label for="sa_username">Person (username)</label>
+            <input id="sa_username" name="username" type="text" autocomplete="off" value="{{ query.username }}" />
+        </div>
+        <div class="form-group">
+            <label for="sa_channel">Where</label>
+            <select id="sa_channel" name="channel">
+                <option value="">Anywhere</option>
+                {% for key, label in channels.items() %}<option value="{{ key }}"{% if query.channel == key %} selected{% endif %}>{{ label }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="sa_q">Words searched for</label>
+            <input id="sa_q" name="q" type="text" autocomplete="off" value="{{ query.q }}" />
+        </div>
+        <div class="form-group">
+            <label for="sa_doc">Archive number shown or used</label>
+            <input id="sa_doc" name="doc_id" type="text" autocomplete="off" placeholder="For example: SB-2026-001" value="{{ query.doc_id }}" />
+        </div>
+        <div class="form-group">
+            <label for="sa_from">From date</label>
+            <input id="sa_from" name="date_from" type="date" value="{{ query.date_from.isoformat() if query.date_from else '' }}" />
+        </div>
+        <div class="form-group">
+            <label for="sa_to">To date</label>
+            <input id="sa_to" name="date_to" type="date" value="{{ query.date_to.isoformat() if query.date_to else '' }}" />
+        </div>
+    </div>
+    <div class="checkbox-list">
+        <label class="checkbox-item"><input type="checkbox" name="refused_only" value="1"{% if query.refused_only %} checked{% endif %} /> Only AI answers that were refused</label>
+        <label class="checkbox-item"><input type="checkbox" name="restricted_only" value="1"{% if query.restricted_only %} checked{% endif %} /> Only searches that touched restricted papers</label>
+    </div>
+    <div class="form-actions-row">
+        <button type="submit" class="button button-primary">Show</button>
+        {% if params %}<a href="/admin/search-activity" class="button button-ghost" data-nav>Clear</a>{% endif %}
+    </div>
+</form>
+
+<p class="status-line">
+    {{ total }} entr{{ 'ies' if total != 1 else 'y' }}{% if params %} match{{ '' if total != 1 else 'es' }}{% endif %}.
+    {% if retention_days %}Entries are kept for {{ retention_days }} days.{% else %}Entries are kept until the retention period is set.{% endif %}
+</p>
+
+{% if entries %}
+<ul class="card-list activity-list">
+    {% for e in entries %}
+    <li class="list-card">
+        <div class="list-card-top">
+            <h3>{% if e.query %}“{{ e.query[:160] }}{% if e.query | length > 160 %}…{% endif %}”{% else %}<span class="muted">Filters only</span>{% endif %}</h3>
+            <span class="status-chip status-chip-{{ 'info' if e.channel == 'ask' else 'neutral' }}">{{ e.channel_label }}</span>
+        </div>
+        <p class="list-card-meta">
+            {{ e.username }}{% if e.role %} ({{ e.role | replace('_', ' ') }}){% endif %}
+            · {{ e.created | local_dt }}
+            · {{ e.result_count }} result{{ 's' if e.result_count != 1 else '' }}
+            {% if e.redacted_count %}· {{ e.redacted_count }} not openable by them{% endif %}
+            {% if e.restricted_count %}· <span class="status-chip status-chip-warn">{{ e.restricted_count }} restricted</span>{% endif %}
+            {% if e.ai %}
+                · {% if e.ai.refused %}<span class="status-chip status-chip-warn">AI refused</span>{% else %}AI answered with {{ e.ai.cited_docs | length }} citation{{ 's' if e.ai.cited_docs | length != 1 else '' }}{% endif %}
+            {% endif %}
+            {% if e.intact == false %}· <span class="status-chip status-chip-danger">Changed after logging</span>{% endif %}
+        </p>
+        <details class="soft-details">
+            <summary>Details</summary>
+            {% if e.filters %}
+            <h4>Filters</h4>
+            <p class="chip-row">{% for k, v in e.filters.items() %}<span class="tag-chip">{{ k | replace('_', ' ') }}: {{ v }}</span>{% endfor %}</p>
+            {% endif %}
+            <h4>Results shown, in order</h4>
+            {% if e.results %}
+            <ol class="activity-docs">
+                {% for r in e.results %}
+                <li><a href="/view/{{ r.doc_id }}{% if r.page %}?page={{ r.page }}{% endif %}" data-nav><span class="mono">{{ r.doc_id }}</span></a>{% if r.title %} <span class="muted">{{ r.title }}</span>{% endif %}{% if r.page %} · page {{ r.page }}{% endif %}{% if not r.can_view %} · <em>listed without access</em>{% endif %}</li>
+                {% endfor %}
+            </ol>
+            {% else %}<p class="muted">Nothing was found.</p>{% endif %}
+            {% if e.ai %}
+            <h4>Passages given to the AI</h4>
+            {{ doc_refs(e.ai.source_docs) }}
+            <h4>Cited in the answer</h4>
+            {{ doc_refs(e.ai.cited_docs, 'No citations.') }}
+            {% if e.ai.withheld_docs %}
+            <h4>Withheld from the AI (classified for on-premise AI only)</h4>
+            {{ doc_refs(e.ai.withheld_docs) }}
+            {% endif %}
+            {% if e.ai.refusal_reason %}<p><strong>Why it refused:</strong> {{ e.ai.refusal_reason }}</p>{% endif %}
+            {% if e.ai.model %}<p class="muted">Answered by {{ e.ai.provider or '' }} {{ e.ai.model }}</p>{% endif %}
+            {% endif %}
+            <p class="mono small muted">
+                Entry {{ e.id }} · audit {{ e.audit_log_id or '—' }} · {{ e.ip_address or 'no address' }}{% if e.tool_name %} · {{ e.tool_name }}{% endif %}{% if e.latency_ms is not none %} · {{ e.latency_ms }} ms{% endif %}<br>
+                sha256 {{ e.row_sha256 }}
+            </p>
+        </details>
+    </li>
+    {% endfor %}
+</ul>
+{% if pages > 1 %}
+<nav class="form-actions-row activity-pager" aria-label="Pages">
+    {% set base = params | urlencode %}
+    {% if page > 1 %}<a class="button button-secondary" href="/admin/search-activity?{{ base }}{{ '&' if base else '' }}page={{ page - 1 }}" data-nav>Newer</a>{% endif %}
+    <span class="muted">Page {{ page }} of {{ pages }}</span>
+    {% if page < pages %}<a class="button button-secondary" href="/admin/search-activity?{{ base }}{{ '&' if base else '' }}page={{ page + 1 }}" data-nav>Older</a>{% endif %}
+</nav>
+{% endif %}
+{% else %}
+{{ empty_state('Nothing logged yet' if not params else 'No matching entries', 'Searches and Ask Sonali questions appear here as soon as they are made.' if not params else 'Try fewer filters or a wider date range.') }}
+{% endif %}
+{% endblock %}

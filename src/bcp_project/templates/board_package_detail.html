@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% from "macros/ui.html" import breadcrumbs %}
+
+{% block title %}{{ package.title }} | {{ brand.product_name }}{% endblock %}
+
+{% block content %}
+{{ breadcrumbs([{'href': '/', 'label': 'Home'}, {'href': '/board/packages', 'label': 'Board paper packages'}, {'label': package.title}]) }}
+<div class="page-header">
+    <div class="title-group">
+        <h1>{{ package.title }}</h1>
+        <p>Revision {{ package.revision }}{% if meeting %} · for <a href="/meetings/{{ meeting.id }}" data-nav>{{ meeting.title }}</a>{% endif %}</p>
+    </div>
+    <a class="button" href="/board/packages/{{ package.id }}/briefing" data-nav>{{ 'Open the briefing' if briefing else 'Write the briefing' }}</a>
+</div>
+
+{% if status == 'created' %}<div class="alert alert-success" role="status">Package created. Add the annexures and supporting papers below.</div>
+{% elif status == 'saved' %}<div class="alert alert-success" role="status">Saved.</div>{% endif %}
+{% if error %}<div class="alert alert-error" role="alert">{{ error }}</div>{% endif %}
+{% if stale %}<div class="alert alert-error" role="note">The papers have changed since the last briefing (revision {{ briefing.package_revision }}). Write a new draft so the briefing covers them.</div>{% endif %}
+
+<section class="panel">
+    <h2>Papers</h2>
+    {% if items %}
+    <ul class="card-list">
+        {% for item in items %}
+        {% set d = docs.get(item.doc_id) %}
+        <li class="list-card">
+            <div class="list-card-top">
+                <h3><span class="paper-chip">{{ item.label }}</span> {% if d %}<a href="/view/{{ item.doc_id }}" data-nav>{{ d.title or item.doc_id }}</a>{% else %}{{ item.doc_id }} <span class="muted">(missing)</span>{% endif %}</h3>
+                <span class="status-chip status-chip-{{ 'info' if item.role == 'memo' else 'neutral' }}">{{ role_labels.get(item.role, item.role) }}</span>
+            </div>
+            <p class="list-card-meta"><span class="mono">{{ item.doc_id }}</span>{% if d and d.page_count %} · {{ d.page_count }} pages{% endif %}{% if d and d.sensitivity == 'restricted' %} · <span class="status-chip status-chip-warn">Restricted</span>{% endif %}</p>
+            <div class="package-member-actions">
+                {% if item.role != 'memo' %}
+                <form method="post" action="/board/packages/{{ package.id }}/members/{{ item.doc_id }}/move" class="inline-form">
+                    <input type="hidden" name="direction" value="up" />
+                    <button type="submit" class="button button-secondary" aria-label="Move {{ item.label }} up">Move up</button>
+                </form>
+                <form method="post" action="/board/packages/{{ package.id }}/members/{{ item.doc_id }}/move" class="inline-form">
+                    <input type="hidden" name="direction" value="down" />
+                    <button type="submit" class="button button-secondary" aria-label="Move {{ item.label }} down">Move down</button>
+                </form>
+                {% endif %}
+                <form method="post" action="/board/packages/{{ package.id }}/members/{{ item.doc_id }}/remove" class="inline-form"
+                      data-confirm="The briefing will need a new draft to reflect this change." data-confirm-title="Remove {{ item.label }}?" data-confirm-ok="Remove" data-confirm-danger>
+                    <button type="submit" class="button button-ghost">Remove</button>
+                </form>
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">No papers yet. Add the memo first.</p>
+    {% endif %}
+</section>
+
+<section class="panel">
+    <h2>Add a paper</h2>
+    <form method="post" action="/board/packages/{{ package.id }}/members" class="form-grid">
+        <div class="form-group">
+            <label for="addDoc">Archive number</label>
+            <input id="addDoc" name="doc_id" type="text" required autocomplete="off" placeholder="For example: SB-2026-014" />
+        </div>
+        <div class="form-group">
+            <label for="addRole">It is</label>
+            <select id="addRole" name="role">
+                {% for r in roles %}<option value="{{ r }}"{% if (r == 'memo' and not package.memo_doc_id) or (r == 'annexure' and package.memo_doc_id) %} selected{% endif %}>{{ role_labels[r] }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="form-actions-row"><button type="submit">Add</button></div>
+    </form>
+
+    {% if pack %}
+    <h3>From the meeting pack</h3>
+    <ul class="package-member-list">
+        {% for p in pack %}
+        <li>
+            <form method="post" action="/board/packages/{{ package.id }}/members" class="inline-form">
+                <input type="hidden" name="doc_id" value="{{ p.doc_id }}" />
+                <input type="hidden" name="role" value="{{ 'memo' if not package.memo_doc_id else 'annexure' }}" />
+                <button type="submit" class="button button-secondary">Add</button>
+                {{ p.title }} <span class="mono muted">{{ p.doc_id }}</span>
+            </form>
+        </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+
+    {% if suggestions %}
+    <h3>Papers with a matching reference number</h3>
+    <ul class="package-member-list">
+        {% for d in suggestions %}
+        <li>
+            <form method="post" action="/board/packages/{{ package.id }}/members" class="inline-form">
+                <input type="hidden" name="doc_id" value="{{ d.doc_id }}" />
+                <input type="hidden" name="role" value="annexure" />
+                <button type="submit" class="button button-secondary">Add as annexure</button>
+                {{ d.title or d.doc_id }} <span class="mono muted">{{ d.reference_number }}</span>
+            </form>
+        </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+</section>
+
+<details class="panel soft-details">
+    <summary>Rename or link to a meeting</summary>
+    <form method="post" action="/board/packages/{{ package.id }}" class="form-grid">
+        <div class="form-group">
+            <label for="pkgTitle">Title</label>
+            <input id="pkgTitle" name="title" type="text" required maxlength="255" value="{{ package.title }}" />
+        </div>
+        <div class="form-group">
+            <label for="pkgMeeting">Board meeting</label>
+            <select id="pkgMeeting" name="meeting_id">
+                <option value="">Not linked to a meeting</option>
+                {% for m in meetings %}<option value="{{ m.id }}"{% if package.meeting_id == m.id %} selected{% endif %}>{{ m.title }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="form-actions-row"><button type="submit" class="button-secondary">Save</button></div>
+    </form>
+</details>
+{% endblock %}

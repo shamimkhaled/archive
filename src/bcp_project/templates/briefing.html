@@ -1,16 +1,38 @@
 {% extends "base.html" %}
 
-{% block title %}Briefing · {{ document.title or document.doc_id }} | {{ brand.product_name }}{% endblock %}
+{% block title %}Briefing · {{ subject_title }} | {{ brand.product_name }}{% endblock %}
 
 {% block content %}
 {% set b = briefing %}
 <div class="page-header">
     <div class="title-group">
         <h1>Briefing for the Board</h1>
-        <p>{{ document.title or document.doc_id }}{% if b %} · <span class="muted">paper version {{ b.version }}</span>{% endif %}</p>
+        {% if subject_kind == 'package' %}
+        <p>{{ subject_title }} · <span class="muted">package of {{ members | length }} paper{{ 's' if members | length != 1 else '' }}{% if b %}, revision {{ b.package_revision }}{% endif %}</span></p>
+        {% else %}
+        <p>{{ subject_title }}{% if b %} · <span class="muted">paper version {{ b.version }}</span>{% endif %}</p>
+        {% endif %}
     </div>
-    <div><a class="button button-secondary" href="{{ paper_url }}">Open the paper</a></div>
+    <div class="form-actions-row" style="gap:0.5rem; flex-wrap:wrap;">
+        {% if subject_kind == 'package' and is_organizer %}<a class="button button-secondary" href="/board/packages/{{ package.id }}" data-nav>Papers in this package</a>{% endif %}
+        {% if paper_url %}<a class="button button-secondary" href="{{ paper_url }}">Open the {{ 'memo' if subject_kind == 'package' else 'paper' }}</a>{% endif %}
+    </div>
 </div>
+
+{% if subject_kind == 'package' and members %}
+<section class="panel package-members" aria-label="Papers in this package">
+    <h2>Papers covered</h2>
+    <ul class="package-member-list">
+        {% for m in members %}
+        <li>
+            <span class="paper-chip" title="{{ m.role_label }}">{{ m.label }}</span>
+            {% if m.url %}<a href="{{ m.url }}">{{ m.title }}</a> <span class="muted">· {{ m.role_label }}{% if m.version %} · version {{ m.version }}{% endif %}</span>
+            {% else %}<span class="muted">{{ m.role_label }} · restricted, you can't open it</span>{% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+</section>
+{% endif %}
 
 {% if status == 'briefing_generating' %}
 <div class="alert alert-success" role="status">The AI has started reading the paper. This page updates by itself when the draft is ready.</div>
@@ -29,7 +51,9 @@
 {% elif status == 'briefing_four_eyes' %}
 <div class="alert alert-error" role="alert">A different person must approve. The approver can't be the person who checked it or who last edited it.</div>
 {% elif status == 'briefing_input' %}
-<div class="alert alert-error" role="alert">Not saved. Each point must end with the page it comes from, like <code>[p. 3]</code>, or write <code>[not found]</code>. Sending back or reopening needs a short note.</div>
+<div class="alert alert-error" role="alert">Not saved. Each point must end with the page it comes from, like <code>[p. 3]</code>{% if subject_kind == 'package' %} or <code>[A1 p. 3]</code>{% endif %}, or write <code>[not found]</code>. Sending back or reopening needs a short note.</div>
+{% elif status == 'briefing_failed' %}
+<div class="alert alert-error" role="alert">The briefing couldn't be started. Check that every paper in the package still exists and has text.</div>
 {% elif status == 'briefing_locked' %}
 <div class="alert alert-error" role="alert">That step isn't possible right now. Refresh the page to see the latest state.</div>
 {% endif %}
@@ -38,8 +62,12 @@
 <section class="panel">
     {% if is_organizer %}
     <h2>No briefing yet</h2>
+    {% if subject_kind == 'package' %}
+    <p>The AI reads the memo and every annexure and supporting paper, and drafts the eight Board headings. Every point shows the paper and page it came from. Board members see nothing until management has checked the draft and it is approved.</p>
+    {% else %}
     <p>The AI reads the whole paper and drafts the eight Board headings. Every point shows the page it came from. Board members see nothing until management has checked the draft and it is approved.</p>
-    <form action="/documents/{{ document.doc_id }}/briefing/generate" method="post">
+    {% endif %}
+    <form action="{{ base }}/generate" method="post">
         <button type="submit">Write an AI draft</button>
     </form>
     {% else %}
@@ -63,12 +91,19 @@
 </div>
 
 {% if stale %}
+{% if subject_kind == 'package' %}
+<div class="alert alert-error" role="note">The papers in this package have changed since this briefing was written (a paper was added, removed, reordered or has a new version).{% if is_organizer %} Write a new draft to cover the current papers.{% endif %}</div>
+{% else %}
 <div class="alert alert-error" role="note">This briefing is for version {{ b.version }} of the paper, but the paper is now at version {{ current_version }}.{% if is_organizer %} Write a new draft for the latest version.{% endif %}</div>
+{% endif %}
+{% endif %}
+{% if hidden_points %}
+<div class="alert alert-info" role="note">{{ hidden_points }} point{{ 's are' if hidden_points != 1 else ' is' }} hidden because {{ 'they come' if hidden_points != 1 else 'it comes' }} from a restricted annexure you can't open.</div>
 {% endif %}
 {% if b.review_note and is_organizer %}<div class="alert alert-error" role="note"><strong>Note:</strong> {{ b.review_note }}</div>{% endif %}
 
 {% if b.status in ['pending', 'generating'] %}
-<section class="panel" id="briefingProgress" data-briefing-status="{{ b.status }}" data-poll-url="/api/documents/{{ document.doc_id | urlencode }}/briefing">
+<section class="panel" id="briefingProgress" data-briefing-status="{{ b.status }}" data-poll-url="{{ poll_url }}">
     <div class="status-line" role="status">
         <span class="inline-spinner" aria-hidden="true"></span>
         <span id="briefingProgressText">The AI is reading the paper and writing the draft. Long papers can take a few minutes. You can leave this page and come back.</span>
@@ -84,26 +119,51 @@
     <details class="tech-details"><summary>Technical details</summary><p class="mono">{{ b.error }}</p></details>
     {% endif %}
     {% if is_organizer and b.state == 'ai_draft' %}
-    <form action="/documents/{{ document.doc_id }}/briefing/generate" method="post"><button type="submit">Try again</button></form>
+    <form action="{{ base }}/generate" method="post"><button type="submit">Try again</button></form>
     {% endif %}
 </section>
 {% else %}
 
+{% if attention %}
+<section class="panel key-risks" aria-labelledby="keyRisksTitle">
+    <div class="panel-head">
+        <h2 id="keyRisksTitle"><span class="key-risks-icon" aria-hidden="true">!</span> Key risks for the Board</h2>
+    </div>
+    <p class="muted">Risks, money and regulatory points{% if subject_kind == 'package' %} from every paper in the package{% endif %}. Each link opens the page with the text highlighted.</p>
+    {% for group in attention %}
+    <h3 class="key-risks-heading"><a href="#{{ group.key }}">{{ group.label }}</a></h3>
+    <ul class="briefing-points">
+        {% for p in group.points %}
+        <li>
+            {% if p.label %}<span class="paper-chip" title="Paper {{ p.label }}">{{ p.label }}</span>{% endif %}
+            {{ p.text }}
+            <a class="briefing-cite" href="{{ p.url }}" title="Open at page {{ p.page }} with the quote highlighted">page {{ p.page }}</a>
+        </li>
+        {% endfor %}
+    </ul>
+    {% endfor %}
+</section>
+{% endif %}
+
 <article class="briefing is-{{ b.state }}">
     {% for s in b.sections %}
-    <section class="panel briefing-section" id="{{ s.key }}">
+    {% set attention_section = s.key in ['risks', 'financial_implications', 'regulatory_considerations'] %}
+    <section class="panel briefing-section{% if attention_section %} briefing-section--attention{% endif %}" id="{{ s.key }}">
         <div class="panel-head">
-            <h2>{{ s.label }}</h2>
-            {% if s.not_found %}<span class="badge">Not in the paper</span>{% endif %}
+            <h2>{% if attention_section %}<span class="briefing-attention-icon" aria-hidden="true">!</span> {% endif %}{{ s.label }}</h2>
+            {% if s.not_found %}<span class="badge">Not in the {{ 'papers' if subject_kind == 'package' else 'paper' }}</span>{% endif %}
         </div>
         {% if s.not_found %}
-        <p class="muted">The paper doesn't cover this.</p>
+        <p class="muted">The {{ "papers don't" if subject_kind == 'package' else "paper doesn't" }} cover this.</p>
+        {% elif not s.points %}
+        <p class="muted">Every point here comes from a restricted annexure you can't open.</p>
         {% else %}
         <ul class="briefing-points">
             {% for p in s.points %}
             <li>
+                {% if p.label %}<span class="paper-chip" title="Paper {{ p.label }}">{{ p.label }}</span>{% endif %}
                 {{ p.text }}
-                <a class="briefing-cite" href="{{ p.url }}" title="Open the paper at page {{ p.page }}">page {{ p.page }}</a>
+                <a class="briefing-cite" href="{{ p.url }}" title="Open at page {{ p.page }} with the quote highlighted">page {{ p.page }}</a>
                 {% if p.source == 'edited' %}<span class="badge">edited</span>{% endif %}
                 {% if p.quote %}<details class="briefing-quote"><summary>What the paper says</summary><blockquote>{{ p.quote }}</blockquote></details>{% endif %}
             </li>
@@ -113,8 +173,12 @@
         {% if is_organizer and b.state == 'ai_draft' %}
         <details class="briefing-edit">
             <summary>Edit “{{ s.label }}”</summary>
-            <form action="/documents/{{ document.doc_id }}/briefing/sections/{{ s.key }}" method="post" class="form-grid">
+            <form action="{{ base }}/sections/{{ s.key }}" method="post" class="form-grid">
+                {% if subject_kind == 'package' %}
+                <label for="edit-{{ s.key }}" class="muted">One point per line, ending with its paper and page, for example <code>- Capital need is BDT 500 crore [A1 p. 4]</code>. A page without a paper label means the memo. Write <code>[not found]</code> if none of the papers cover it.</label>
+                {% else %}
                 <label for="edit-{{ s.key }}" class="muted">One point per line, ending with its page, for example <code>- Capital need is BDT 500 crore [p. 4]</code>. Write <code>[not found]</code> if the paper doesn't cover it.</label>
+                {% endif %}
                 <textarea id="edit-{{ s.key }}" name="text" rows="5">{{ s.edit_text }}</textarea>
                 <div><button type="submit" class="button-secondary">Save changes</button></div>
             </form>
@@ -129,12 +193,12 @@
     <h2>Next step</h2>
     <div class="form-actions-row" style="gap:0.75rem; flex-wrap:wrap;">
         {% if b.state == 'ai_draft' %}
-        <form action="/documents/{{ document.doc_id }}/briefing/review" method="post"
+        <form action="{{ base }}/review" method="post"
               data-confirm="Have you checked every point against its page? After this, the briefing waits for approval."
               data-confirm-title="Mark as checked?" data-confirm-ok="Mark as checked">
             <button type="submit">Mark as checked by management</button>
         </form>
-        <form action="/documents/{{ document.doc_id }}/briefing/generate" method="post"
+        <form action="{{ base }}/generate" method="post"
               data-confirm="The AI will write a new draft and replace the current one, including your edits."
               data-confirm-title="Write a new draft?" data-confirm-ok="Write a new draft" data-confirm-danger>
             <button type="submit" class="button-secondary">Write a new AI draft</button>
@@ -143,19 +207,19 @@
         {% if approval_blocker %}
         <p class="muted">{{ approval_blocker }}</p>
         {% else %}
-        <form action="/documents/{{ document.doc_id }}/briefing/approve" method="post"
+        <form action="{{ base }}/approve" method="post"
               data-confirm="Board members who can open this paper will be able to read this briefing."
               data-confirm-title="Approve for the Board?" data-confirm-ok="Approve">
             <button type="submit">Approve for the Board</button>
         </form>
         {% endif %}
-        <form action="/documents/{{ document.doc_id }}/briefing/return" method="post" class="inline-form">
+        <form action="{{ base }}/return" method="post" class="inline-form">
             <label class="visually-hidden" for="returnNote">What needs to change</label>
             <input id="returnNote" type="text" name="note" required minlength="3" maxlength="1000" placeholder="What needs to change?">
             <button type="submit" class="button-secondary">Send back as a draft</button>
         </form>
         {% elif b.state == 'approved' and can_amend %}
-        <form action="/documents/{{ document.doc_id }}/briefing/reopen" method="post" class="inline-form"
+        <form action="{{ base }}/reopen" method="post" class="inline-form"
               data-confirm="Board members will stop seeing this briefing until it is approved again."
               data-confirm-title="Reopen as a draft?" data-confirm-ok="Reopen" data-confirm-danger>
             <label class="visually-hidden" for="reopenReason">Why reopen it</label>

@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import unicodedata
 from datetime import date
 from typing import Any, Dict, List, Optional
 
@@ -18,15 +19,21 @@ from ..ui import reason_label
 
 logger = logging.getLogger("bcp_project.services.metadata_suggest")
 
-FIELDS = ("title", "reference_number", "department", "subject", "category", "doc_date", "doc_type", "keywords")
+FIELDS = ("title", "reference_number", "department", "subject", "category", "doc_date", "doc_type", "keywords", "language")
 APPLY_FIELDS = ("title", "reference_number", "department", "subject", "category")
+# Fields whose confidence can send a version to review; keywords and language never block on their own.
+SCORED_FIELDS = ("title", "reference_number", "department", "subject", "category", "doc_date", "doc_type")
+VERBATIM_FIELDS = ("title", "reference_number", "subject")
+LANGUAGES = ("en", "bn", "mixed")
 MAX_CHARS = 12000
 UNCLASSIFIED_TYPES = {"", "other"}
 
 SYSTEM = (
     "You index records for Sonali Bank PLC's archive. Read the document text (English, Bangla, or both) "
     "and return JSON with exactly these keys: title, reference_number, department, subject, category, "
-    "doc_date (YYYY-MM-DD or empty), doc_type, keywords (list of up to 12 strings, English and Bangla). "
+    "doc_date (YYYY-MM-DD or empty), doc_type, keywords (list of up to 12 strings, English and Bangla), "
+    "language (en, bn, or mixed), confidence (object mapping each of title, reference_number, department, "
+    "subject, category, doc_date, doc_type to a number from 0 to 1: how sure you are the text states it). "
     f"doc_type must be one of: {', '.join(DEFAULT_DOCUMENT_TYPES)}. "
     "Use empty strings when the text does not state a value. Copy reference numbers exactly as written. "
     "Do not guess."
@@ -49,8 +56,128 @@ def _clean(payload: Dict[str, Any]) -> Dict[str, Any]:
         value = payload.get(key)
         if key == "keywords":
             out[key] = [str(v).strip() for v in (value or []) if str(v).strip()][:12] if isinstance(value, list) else []
+        elif key == "language":
+            lang = str(value or "").strip().lower()
+            out[key] = lang if lang in LANGUAGES else ""
         else:
             out[key] = str(value or "").strip()[:300]
+    raw = payload.get("confidence")
+    if isinstance(raw, dict):
+        scores = {}
+        for key in SCORED_FIELDS:
+            try:
+                scores[key] = max(0.0, min(1.0, float(raw.get(key))))
+            except (TypeError, ValueError):
+                continue
+        if scores:
+            out["_model_confidence"] = scores
+    return out
+
+
+_BANGLA_LETTER = re.compile(r"[\u0980-\u09FF]")
+
+
+def detect_language(text: str) -> Optional[str]:
+    """``bn`` or ``en`` when at least 85% of letters are that script, ``mixed`` otherwise; None without letters."""
+    letters = [c for c in (text or "") if c.isalpha()]
+    if len(letters) < 20:
+        return None
+    bangla = sum(1 for c in letters if _BANGLA_LETTER.match(c)) / len(letters)
+    if bangla >= 0.85:
+        return "bn"
+    if bangla <= 0.15:
+        return "en"
+    return "mixed"
+
+
+def _flat(text: str) -> str:
+    return " ".join(unicodedata.normalize("NFC", text or "").split()).casefold()
+
+
+def _date_on_page(value: date, flat: str) -> bool:
+    forms = {
+        value.isoformat(),
+        value.strftime("%d/%m/%Y"),
+        value.strftime("%d-%m-%Y"),
+        value.strftime("%d.%m.%Y"),
+        f"{value.day} {value.strftime('%B')} {value.year}".casefold(),
+        f"{value.strftime('%B')} {value.day}, {value.year}".casefold(),
+        f"{value.day:02d} {value.strftime('%B')} {value.year}".casefold(),
+    }
+    return any(form.casefold() in flat for form in forms)
+
+
+def field_min_confidence() -> float:
+    try:
+        return float(os.getenv("METADATA_FIELD_MIN_CONFIDENCE") or 0.7)
+    except ValueError:
+        return 0.7
+
+
+def score_fields(
+    text: str, suggested: Optional[Dict[str, Any]], document: Any, ocr_mean: Optional[float] = None
+) -> Dict[str, float]:
+    """Confidence per metadata field for the value the archive will keep.
+
+    A value a person entered scores 1.0. A suggested value starts from the model's own score (0.75
+    when it gave none, 0.5 for the rules fallback), gains when it is found verbatim in the text and
+    loses when a value that must be copied exactly is not, then is scaled by OCR quality.
+    """
+    suggested = suggested or {}
+    source = (suggested.get("_source") or {}).get("kind")
+    model = suggested.get("_model_confidence") or {}
+    flat = _flat(text)
+    ocr_factor = 1.0 if ocr_mean is None else 0.7 + 0.3 * max(0.0, min(1.0, float(ocr_mean) / 100.0))
+    scores: Dict[str, float] = {}
+    for field in SCORED_FIELDS:
+        entered = getattr(document, field, None)
+        if field == "doc_type" and normalize_document_type(entered or "").casefold() in UNCLASSIFIED_TYPES:
+            entered = None
+        value = suggested.get(field)
+        if entered and field != "doc_date":
+            scores[field] = 1.0
+            continue
+        if field == "doc_date":
+            found = _parse_date(value)
+            if entered and (not found or found == entered):
+                scores[field] = 1.0
+                continue
+            if found is None:
+                continue
+            score = float(model.get(field, 0.75 if source == "ai" else 0.5))
+            score += 0.15 if _date_on_page(found, flat) else -0.1
+            if entered and found != entered:
+                score = min(score, 0.3)
+            scores[field] = round(max(0.0, min(1.0, score * ocr_factor)), 2)
+            continue
+        if not value:
+            continue
+        score = float(model.get(field, 0.75 if source == "ai" else 0.5))
+        if field == "reference_number" and value == regex_reference(text):
+            score = max(score, 0.95)
+        elif field in VERBATIM_FIELDS:
+            if _flat(value) in flat:
+                score += 0.15
+            elif field == "reference_number":
+                score = min(score, 0.4)
+            else:
+                score -= 0.1
+        scores[field] = round(max(0.0, min(1.0, score * ocr_factor)), 2)
+    language = getattr(document, "language", None)
+    if language:
+        scores["language"] = 1.0
+    elif detect_language(text):
+        scores["language"] = 0.95
+    return scores
+
+
+def low_confidence_fields(confidence: Optional[Dict[str, Any]], threshold: Optional[float] = None) -> List[str]:
+    limit = field_min_confidence() if threshold is None else threshold
+    out = []
+    for field in SCORED_FIELDS:
+        value = (confidence or {}).get(field)
+        if isinstance(value, (int, float)) and value < limit:
+            out.append(field)
     return out
 
 
@@ -116,6 +243,10 @@ def metadata_review_reasons(document: Any, suggested: Optional[Dict[str, Any]]) 
     entered = getattr(document, "doc_date", None)
     if found and entered and found != entered:
         reasons.append("doc_date_mismatch")
+    flagged = {"title": "missing_title", "doc_type": "doc_type_mismatch", "doc_date": "doc_date_mismatch"}
+    low = [f for f in low_confidence_fields(getattr(document, "metadata_confidence", None)) if flagged.get(f) not in reasons]
+    if low:
+        reasons.append("low_metadata_confidence")
     return reasons
 
 
@@ -136,6 +267,10 @@ def apply_suggestions(document: Any, suggested: Optional[Dict[str, Any]]) -> Lis
     if keywords and not document.keywords:
         document.keywords = keywords
         applied.append("keywords")
+    language = suggested.get("language")
+    if language in LANGUAGES and not getattr(document, "language", None):
+        document.language = language
+        applied.append("language")
     return applied
 
 
@@ -146,5 +281,6 @@ REASON_CODES = (
     "missing_title",
     "doc_type_mismatch",
     "doc_date_mismatch",
+    "low_metadata_confidence",
 )
 REASON_LABELS = {code: reason_label(code) for code in REASON_CODES}

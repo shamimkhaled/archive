@@ -31,6 +31,7 @@ from .meeting_common import (
     _require_invited_or_404,
     _stream_meeting_document,
 )
+from ..services.board_packages import meeting_packages_view
 
 logger = logging.getLogger("bcp_project.routers.board")
 router = APIRouter()
@@ -89,7 +90,9 @@ async def board_meeting_detail(
             (
                 await db.execute(
                     select(BoardBriefing.doc_id).where(
-                        BoardBriefing.doc_id.in_(archive_ids), BoardBriefing.state == STATE_APPROVED
+                        BoardBriefing.doc_id.in_(archive_ids),
+                        BoardBriefing.state == STATE_APPROVED,
+                        BoardBriefing.package_id.is_(None),
                     )
                 )
             ).scalars()
@@ -107,6 +110,7 @@ async def board_meeting_detail(
             "meeting": meeting,
             "documents": documents,
             "briefed_doc_ids": briefed,
+            "packages": await meeting_packages_view(db, meeting_id, approved_only=True),
             "my_attendance": my_attendance,
             "status": status,
             "minutes_doc_id": minutes_doc_id,

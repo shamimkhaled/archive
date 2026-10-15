@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import time
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException, status
@@ -27,6 +29,7 @@ from ..policy import (
 )
 from ..search_acl import SERVICE_ROLE, AclScope, SearchFilters, acl_scope_for_user
 from .search import hybrid_search
+from .search_log import record_search
 
 logger = logging.getLogger("bcp_project.services.document_query")
 
@@ -68,7 +71,18 @@ async def acl_scope_for_principal(db: AsyncSession, principal: Principal) -> Acl
     return AclScope(unrestricted=False, role=SERVICE_ROLE)
 
 
-async def search_documents_for_principal(
+@dataclass
+class PrincipalSearch:
+    response: Dict[str, Any]
+    rows: List[Dict[str, Any]] = field(default_factory=list)
+    lang: Optional[str] = None
+    filters: Optional[SearchFilters] = None
+    mode: Optional[str] = None
+    cached: bool = False
+    degraded: bool = False
+
+
+async def run_principal_search(
     db: AsyncSession,
     principal: Principal,
     q: str,
@@ -76,9 +90,8 @@ async def search_documents_for_principal(
     lang: Optional[str] = None,
     limit: int = 20,
     filters: Optional[SearchFilters] = None,
-    ip_address: Optional[str] = None,
-    tool_name: Optional[str] = None,
-) -> Dict[str, Any]:
+) -> PrincipalSearch:
+    """Search under the principal's ACL; ``rows`` keeps the internal fields the activity log needs."""
     require_scope(principal, Scope.docs_search)
     assert_can_use_document_tools(principal)
     q = (q or "").strip()
@@ -86,7 +99,7 @@ async def search_documents_for_principal(
     if lang_hint not in (None, "en", "bn", "any"):
         lang_hint = None
     if not q:
-        return {"results": [], "count": 0, "query": q, "mode": "hybrid"}
+        return PrincipalSearch({"results": [], "count": 0, "query": q, "mode": "hybrid"}, lang=lang_hint, filters=filters)
 
     with Timer("api_v1.search"):
         acl = await acl_scope_for_principal(db, principal)
@@ -102,9 +115,8 @@ async def search_documents_for_principal(
             ]
 
         public = [_public_result_row(r) for r in enriched]
-        await _audit_search(db, principal, q, len(public), ip_address, tool_name)
         incr("api_v1.search.ok")
-        return {
+        response = {
             "results": public[:limit],
             "count": min(len(public), limit),
             "query": q,
@@ -112,27 +124,57 @@ async def search_documents_for_principal(
             "cached": outcome.cached,
             "reranked": outcome.reranked,
         }
+        return PrincipalSearch(
+            response,
+            rows=enriched[:limit],
+            lang=lang_hint,
+            filters=filters,
+            mode=outcome.mode,
+            cached=outcome.cached,
+            degraded=bool(getattr(outcome, "degraded", False)),
+        )
 
 
-async def _audit_search(
+def principal_log_identity(principal: Principal) -> Dict[str, Any]:
+    return {
+        "username": principal.username_for_grants or principal.actor_id,
+        "actor_type": principal.actor_type,
+        "role": principal.role,
+    }
+
+
+async def search_documents_for_principal(
     db: AsyncSession,
     principal: Principal,
     q: str,
-    count: int,
-    ip_address: Optional[str],
-    tool_name: Optional[str],
-) -> None:
-    await write_audit(
-        db,
-        username=principal.username_for_grants or principal.actor_id,
-        action="api_search",
-        resource_type="document",
-        detail=f"q={q[:120]} count={count} actor={principal.actor_type}",
-        ip_address=ip_address,
-        actor_type=principal.actor_type,
-        tool_name=tool_name,
-        commit=True,
-    )
+    *,
+    lang: Optional[str] = None,
+    limit: int = 20,
+    filters: Optional[SearchFilters] = None,
+    ip_address: Optional[str] = None,
+    tool_name: Optional[str] = None,
+    log_activity: bool = True,
+    channel: Optional[str] = None,
+) -> Dict[str, Any]:
+    started = time.perf_counter()
+    found = await run_principal_search(db, principal, q, lang=lang, limit=limit, filters=filters)
+    if log_activity and found.response.get("query"):
+        await record_search(
+            db,
+            channel=channel or ("mcp" if tool_name else "api_v1"),
+            query=found.response["query"],
+            results=found.rows,
+            tool_name=tool_name,
+            ip_address=ip_address,
+            lang=found.lang,
+            filters=filters.as_dict() if filters else None,
+            mode=found.mode,
+            cached=found.cached,
+            degraded=found.degraded,
+            latency_ms=int((time.perf_counter() - started) * 1000),
+            **principal_log_identity(principal),
+        )
+    return found.response
 
 
 async def get_document_metadata_for_principal(

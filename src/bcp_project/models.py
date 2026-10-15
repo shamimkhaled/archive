@@ -2,7 +2,7 @@ from datetime import date, datetime
 from enum import Enum
 from typing import List, Optional
 
-from sqlalchemy import BigInteger, Boolean, Column, false, Date, DateTime, Enum as SQLEnum, Float, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy import BigInteger, Boolean, Column, false, Date, DateTime, Enum as SQLEnum, Float, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint, text as sql_text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -98,6 +98,10 @@ class DocumentRecord(Base):
     department: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
     subject: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     category: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+    # en | bn | mixed, detected from page text and editable by the reviewer.
+    language: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)
+    # Field name -> 0..1 for the extracted metadata (see services.metadata_suggest.score_fields).
+    metadata_confidence: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     ocr_confidence: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     verification_status: Mapped[str] = mapped_column(
         String(16), nullable=False, default="not_required", server_default="not_required"
@@ -105,6 +109,10 @@ class DocumentRecord(Base):
     suggested_metadata: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     metadata_confirmed_by: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     metadata_confirmed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    # The AI filled in fields that no person has confirmed yet (cleared on confirm or edit).
+    metadata_check_pending: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false(), index=True
+    )
     reviewed_by: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     current_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
@@ -128,7 +136,41 @@ class DocumentRecord(Base):
         Index("ix_documents_category", "category"),
         Index("ix_documents_verification_status", "verification_status"),
         Index("ix_documents_meeting_id", "meeting_id"),
+        Index("ix_documents_language", "language"),
     )
+
+
+class Tag(Base):
+    """Controlled vocabulary for document tags. ``kind`` separates free keywords from curated topics."""
+
+    __tablename__ = "tags"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    slug: Mapped[str] = mapped_column(String(96), unique=True, nullable=False)
+    label_en: Mapped[str] = mapped_column(String(120), nullable=False)
+    label_bn: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False, default="keyword", server_default="keyword")
+    parent_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("tags.id"), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_by: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class DocumentTag(Base):
+    """A tag on a document. AI tags stay unconfirmed until a reviewer approves the metadata."""
+
+    __tablename__ = "document_tags"
+    __table_args__ = (
+        UniqueConstraint("doc_id", "tag_id", name="uq_document_tag"),
+        Index("ix_document_tags_tag_id", "tag_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    doc_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    tag_id: Mapped[int] = mapped_column(Integer, ForeignKey("tags.id"), nullable=False)
+    source: Mapped[str] = mapped_column(String(16), nullable=False, default="ai", server_default="ai")
+    confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
 class DocumentVersion(Base):
@@ -290,6 +332,52 @@ class AuditLog(Base):
     row_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
 
+class SearchActivity(Base):
+    """One row per search or Ask Sonali question: what was asked, what came back, what the AI used.
+
+    Append-only on Postgres; ``audit_log_id`` may be filled once, linking the hash-chained audit row.
+    """
+
+    __tablename__ = "search_activity"
+    __table_args__ = (
+        Index("ix_search_activity_user_created", "username", "created_at"),
+        Index("ix_search_activity_channel_created", "channel", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    username: Mapped[str] = mapped_column(String(64), nullable=False)
+    actor_type: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    role: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    channel: Mapped[str] = mapped_column(String(24), nullable=False)
+    tool_name: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    ip_address: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    correlation_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    query: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    lang: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)
+    filters: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    mode: Mapped[Optional[str]] = mapped_column(String(24), nullable=True)
+    cached: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    degraded: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    latency_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    result_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    viewable_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    redacted_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    restricted_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    results: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    # Space-delimited doc_ids from results and AI sources, so "who saw this document" is a LIKE.
+    doc_ids: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    ai_provider: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    ai_model: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    ai_refused: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    ai_refusal_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    ai_source_docs: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    ai_cited_docs: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    ai_withheld_docs: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    row_sha256: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    audit_log_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+
 class IntegrationCursor(Base):
     """High-water mark for outbound integrations such as the SIEM forwarder."""
 
@@ -422,7 +510,18 @@ class BoardBriefing(Base):
     """Board-paper briefing for one document version: eight cited headings and a review state."""
 
     __tablename__ = "board_briefings"
-    __table_args__ = (UniqueConstraint("doc_id", "version", name="uq_board_briefing_doc_version"),)
+    __table_args__ = (
+        # One single-paper briefing per document version; package briefings key on the package instead.
+        Index(
+            "uq_board_briefing_single_doc_version",
+            "doc_id",
+            "version",
+            unique=True,
+            sqlite_where=sql_text("package_id IS NULL"),
+            postgresql_where=sql_text("package_id IS NULL"),
+        ),
+        Index("uq_board_briefing_package_revision", "package_id", "package_revision", unique=True),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     doc_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
@@ -446,6 +545,40 @@ class BoardBriefing(Base):
     review_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     sha256: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    # Set for a package briefing: doc_id/version then name the memo, members snapshots every paper.
+    package_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("board_paper_packages.id"), nullable=True)
+    package_revision: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    members: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+
+
+class BoardPaperPackage(Base):
+    """A memo with its annexures and supporting papers, briefed together as one Board item."""
+
+    __tablename__ = "board_paper_packages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    memo_doc_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True, index=True)
+    meeting_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("board_meetings.id"), nullable=True, index=True)
+    # Bumped whenever membership or a member's approved version changes; older briefings go stale.
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    created_by: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
+class BoardPaperPackageItem(Base):
+    __tablename__ = "board_paper_package_items"
+    __table_args__ = (UniqueConstraint("package_id", "doc_id", name="uq_package_item_doc"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    package_id: Mapped[int] = mapped_column(Integer, ForeignKey("board_paper_packages.id"), nullable=False, index=True)
+    doc_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    role: Mapped[str] = mapped_column(String(16), nullable=False, default="annexure")  # memo | annexure | supporting
+    label: Mapped[str] = mapped_column(String(8), nullable=False)  # M, A1, A2, S1
+    seq: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    added_by: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    added_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
 class NotificationEvent(Base):
