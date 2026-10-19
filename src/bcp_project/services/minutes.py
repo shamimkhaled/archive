@@ -194,6 +194,8 @@ async def archive_approved_minutes(db: AsyncSession, meeting: BoardMeeting, *, a
             approved_by=approved_by,
             approved_at=approved_at,
             sha256=meeting.minutes_sha256 or body_sha256(meeting.minutes_draft or ""),
+            meeting_id=meeting.id,
+            doc_number=meeting.minutes_doc_id or f"MIN-{meeting.id}",
         )
     )
     upload = validate_upload(pdf)

@@ -24,11 +24,13 @@ from ..models import BoardMeeting, MeetingRecord
 logger = logging.getLogger("bcp_project.services.meeting_records")
 
 KIND_RECORDING = "recording"
+KIND_VIDEO = "video"
 KIND_TRANSCRIPT = "transcript"
 KIND_MINUTES_DRAFT = "minutes_draft"
 KIND_MINUTES_APPROVED = "minutes_approved"
 KIND_LABELS = {
-    KIND_RECORDING: "Recording",
+    KIND_RECORDING: "Recording (audio)",
+    KIND_VIDEO: "Recording (video)",
     KIND_TRANSCRIPT: "Transcript",
     KIND_MINUTES_DRAFT: "Draft minutes",
     KIND_MINUTES_APPROVED: "Approved minutes",
@@ -45,6 +47,12 @@ RECORDING_TYPES = {
     ".webm": "video/webm",
     ".mkv": "video/x-matroska",
 }
+VIDEO_EXTENSIONS = frozenset({".mp4", ".webm", ".mkv"})
+
+
+def recording_kind(extension: str) -> str:
+    """Requirement 3.2: archive video as an explicit linked record type when accepted."""
+    return KIND_VIDEO if (extension or "").lower() in VIDEO_EXTENSIONS else KIND_RECORDING
 
 
 def _key(meeting_id: int, kind: str, version: int, sha256: str, extension: str) -> str:
@@ -107,18 +115,19 @@ async def seal_bytes(
 async def seal_recording(db: AsyncSession, meeting_id: int, path: Path, *, created_by: str, filename: Optional[str] = None):
     """Seal the original recording file (uploaded file or merged live session), streamed from disk."""
     digest = await asyncio.to_thread(sha256_file, path)
-    existing = await _find(db, meeting_id, KIND_RECORDING, sha256=digest)
+    extension = path.suffix.lower() or ".bin"
+    kind = recording_kind(extension)
+    existing = await _find(db, meeting_id, kind, sha256=digest)
     if existing is not None:
         return existing
-    extension = path.suffix.lower() or ".bin"
     content_type = RECORDING_TYPES.get(extension, "application/octet-stream")
-    version = await _next_version(db, meeting_id, KIND_RECORDING)
+    version = await _next_version(db, meeting_id, kind)
     location = await asyncio.to_thread(
-        store_file_write_once, path, _key(meeting_id, KIND_RECORDING, version, digest, extension), content_type=content_type, sha256=digest
+        store_file_write_once, path, _key(meeting_id, kind, version, digest, extension), content_type=content_type, sha256=digest
     )
     row = MeetingRecord(
         meeting_id=meeting_id,
-        kind=KIND_RECORDING,
+        kind=kind,
         version=version,
         file_location=location,
         sha256=digest,
@@ -219,6 +228,8 @@ async def archive_transcript(db: AsyncSession, meeting: BoardMeeting, *, approve
             approved_at=approved_at,
             sha256=text_sha,
             label="Meeting transcript",
+            meeting_id=meeting.id,
+            doc_number=f"TRN-{meeting.id}",
         )
     )
     upload = validate_upload(pdf)
@@ -284,4 +295,33 @@ def record_payload(row: MeetingRecord) -> Dict[str, Any]:
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "download_url": f"/meetings/{row.meeting_id}/records/{row.id}/file",
         "view_url": f"/view/{row.archive_doc_id}" if row.archive_doc_id else None,
+    }
+
+
+async def latest_record(db: AsyncSession, meeting_id: int, kind: str) -> Optional[MeetingRecord]:
+    rows = await db.execute(
+        select(MeetingRecord)
+        .where(MeetingRecord.meeting_id == meeting_id, MeetingRecord.kind == kind)
+        .order_by(MeetingRecord.version.desc())
+        .limit(1)
+    )
+    return rows.scalar_one_or_none()
+
+
+def unified_minutes_diff(*, sealed_draft: str, current: str, from_label: str, to_label: str) -> Dict[str, Any]:
+    """AI-draft vs approved (or current) provenance diff for the minutes editor."""
+    import difflib
+
+    left = (sealed_draft or "").splitlines()
+    right = (current or "").splitlines()
+    lines = list(
+        difflib.unified_diff(left, right, fromfile=from_label, tofile=to_label, lineterm="")
+    )
+    return {
+        "from_label": from_label,
+        "to_label": to_label,
+        "changed": bool(lines),
+        "unified": "\n".join(lines) if lines else "",
+        "from_chars": len(sealed_draft or ""),
+        "to_chars": len(current or ""),
     }

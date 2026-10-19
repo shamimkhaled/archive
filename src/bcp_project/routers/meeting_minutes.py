@@ -51,11 +51,14 @@ from ..services.minutes import (
 )
 from ..services.meeting_records import (
     KIND_MINUTES_APPROVED,
+    KIND_MINUTES_DRAFT,
     archive_transcript,
+    latest_record,
     link_archive_document,
     list_records,
     record_payload,
     seal_minutes_draft,
+    unified_minutes_diff,
 )
 from .meeting_common import _meeting_transcription_status
 
@@ -621,6 +624,101 @@ async def api_meeting_records(
     if await db.get(BoardMeeting, meeting_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
     return {"records": [record_payload(row) for row in await list_records(db, meeting_id)]}
+
+
+@router.get("/api/meetings/{meeting_id}/minutes/provenance")
+async def api_minutes_provenance(
+    meeting_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """AI-draft (sealed on submit) vs current/approved body, plus reviewer timestamps."""
+    from ..deps import _load_stored_pdf_bytes
+
+    require_meeting_organizer(current_user)
+    meeting = await db.get(BoardMeeting, meeting_id)
+    if meeting is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
+    draft_row = await latest_record(db, meeting_id, KIND_MINUTES_DRAFT)
+    sealed = ""
+    if draft_row and draft_row.file_location:
+        try:
+            sealed = (await _load_stored_pdf_bytes(draft_row.file_location, resource_id=f"draft-{meeting_id}")).decode(
+                "utf-8", errors="replace"
+            )
+        except Exception:
+            logger.exception("Could not load sealed draft for meeting %s", meeting_id)
+    current = meeting.minutes_draft or ""
+    state = minutes_state(meeting)
+    to_label = "approved" if state == "approved" else "current draft"
+    diff = unified_minutes_diff(
+        sealed_draft=sealed,
+        current=current,
+        from_label=f"ai-draft-v{draft_row.version if draft_row else 0}",
+        to_label=to_label,
+    )
+    return {
+        "minutes_source": meeting.minutes_source,
+        "minutes_state": state,
+        "ai_generated": (meeting.minutes_source or "") in {"llm", "template"},
+        "submitted_by": meeting.minutes_submitted_by,
+        "submitted_at": meeting.minutes_submitted_at.isoformat() if meeting.minutes_submitted_at else None,
+        "approved_by": meeting.minutes_approved_by,
+        "approved_at": meeting.minutes_approved_at.isoformat() if meeting.minutes_approved_at else None,
+        "edited_by": meeting.minutes_edited_by,
+        "sealed_draft": record_payload(draft_row) if draft_row else None,
+        "diff": diff if sealed else None,
+    }
+
+
+@router.get("/meetings/{meeting_id}/minutes/draft.pdf")
+async def export_draft_minutes_pdf(
+    request: Request,
+    meeting_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """Export the current draft as a PDF watermarked AI-GENERATED DRAFT — NOT APPROVED."""
+    from ..minutes_pdf import render_minutes_pdf
+    from ..pdf_watermark import stamp_pdf_bytes
+    from ..services.minutes import body_sha256
+
+    require_meeting_organizer(current_user)
+    meeting = await db.get(BoardMeeting, meeting_id)
+    if meeting is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
+    body = meeting.minutes_draft or ""
+    if not body.strip():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No draft minutes to export")
+    now = datetime.utcnow()
+    actor = current_user.username
+    pdf, _pages = await asyncio.to_thread(
+        lambda: render_minutes_pdf(
+            title=meeting.title,
+            body_md=body,
+            meeting_date=meeting.scheduled_at,
+            location=meeting.location,
+            version=int(meeting.minutes_version or 1),
+            approved_by=actor,
+            approved_at=now,
+            sha256=body_sha256(body),
+            label="AI-generated draft — not approved",
+            meeting_id=meeting.id,
+            doc_number=f"MIN-{meeting.id}",
+        )
+    )
+    stamped = await asyncio.to_thread(stamp_pdf_bytes, pdf, "AI-GENERATED DRAFT — NOT APPROVED")
+    await _audit(db, request, current_user, "minutes_draft_export", meeting_id, f"bytes={len(stamped)}")
+    await db.commit()
+    return Response(
+        content=stamped,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="minutes-draft-MTG-{meeting_id}-v{int(meeting.minutes_version or 1)}.pdf"',
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @router.get("/meetings/{meeting_id}/records/{record_id}/file")

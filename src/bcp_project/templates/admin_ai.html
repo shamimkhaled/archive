@@ -122,6 +122,25 @@
 </section>
 
 <section class="panel">
+    <h2>Speech-to-text</h2>
+    {% set stt = ov.stt %}
+    {% if not stt or not stt.enabled %}
+    <p class="muted">Off (AI_STT_PROVIDER=none). Meeting recordings will not be transcribed.</p>
+    {% else %}
+    <p>
+        {% if stt.ready %}<span class="status-chip status-chip-ok">Ready</span>{% else %}<span class="status-chip status-chip-warn">Needs attention</span>{% endif %}
+        <span class="muted">{{ stt.provider }} · {{ stt.model }}</span>
+    </p>
+    {% for issue in stt.issues %}<div class="banner error">{{ issue }}</div>{% endfor %}
+    <details class="tech-details">
+        <summary>How to deploy</summary>
+        <p class="muted small">Worker image: <code>pip install -r requirements-worker.txt</code> and <code>ffmpeg</code>. For on-prem GPU Speaches: set <code>AI_STT_PROVIDER=local</code>, <code>LOCAL_STT_BASE_URL</code>, and <code>AI_STT_MODEL</code> (see <code>deploy/onprem/ai.env.example</code>). Check with <code>PYTHONPATH=src python scripts/local_ai_check.py</code>.</p>
+        <p class="mono small">{{ stt.detail }}</p>
+    </details>
+    {% endif %}
+</section>
+
+<section class="panel">
     <h2>Telling speakers apart</h2>
     {% set dz = ov.diarization %}
     {% if not dz.enabled %}

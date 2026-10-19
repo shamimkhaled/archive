@@ -19,6 +19,7 @@ from ..dummy_transcription import TRANSCRIPTION_LIVE, TRANSCRIPTION_PROCESSING, 
 from ..meeting_audio import (
     chunk_path,
     list_chunk_paths,
+    materialize_chunks_through,
     merge_chunks,
     normalize_recording,
     recording_path,
@@ -91,22 +92,25 @@ def _is_system_segment(seg: Dict[str, Any]) -> bool:
 
 
 async def run_meeting_chunk_stt(meeting_id: int, seq: int) -> int:
-    """Phase B: transcribe one uploaded chunk and publish live captions."""
+    """Phase B: transcribe live captions for chunks ``0..seq``.
+
+    Later MediaRecorder WebM blobs are not standalone files; we rebuild a playable
+    prefix, remux to WAV when possible, and replace live segments with absolute times.
+    """
     mid = int(meeting_id)
     sequence = int(seq)
     if not whisper_available():
         return 0
 
-    path = chunk_path(mid, sequence)
-    if not path.exists() or path.stat().st_size == 0:
+    path = await asyncio.to_thread(materialize_chunks_through, mid, sequence)
+    if path is None or not path.exists() or path.stat().st_size == 0:
         return 0
 
-    part = transcribe_audio_file(path)
+    part = await asyncio.to_thread(transcribe_audio_file, path)
     usable = [dict(seg) for seg in part if not _is_system_segment(seg) and (seg.get("text") or "").strip()]
     if not usable:
         return 0
 
-    offset = sequence * CHUNK_DURATION_HINT
     published = 0
     async with get_session() as session:
         result = await session.execute(select(BoardMeeting).where(BoardMeeting.id == mid))
@@ -117,16 +121,19 @@ async def run_meeting_chunk_stt(meeting_id: int, seq: int) -> int:
         if status not in {TRANSCRIPTION_LIVE, TRANSCRIPTION_PROCESSING}:
             return 0
 
-        existing = [s for s in list(meeting.transcription_json or []) if not _is_system_segment(s)]
-        next_id = max([int(s.get("id") or 0) for s in existing] + [0]) + 1
+        # Keep only non-live, non-system rows; live captions are rebuilt from the full prefix.
+        kept = [
+            s
+            for s in list(meeting.transcription_json or [])
+            if not _is_system_segment(s) and not s.get("live")
+        ]
+        next_id = max([int(s.get("id") or 0) for s in kept] + [0]) + 1
         started = meeting.transcription_started_at
         new_rows: List[Dict[str, Any]] = []
         for seg in usable:
             item = dict(seg)
-            t0_local = float(item.get("t0") or 0)
-            t1_local = float(item.get("t1") or t0_local)
-            item["t0"] = round(t0_local + offset, 2)
-            item["t1"] = round(t1_local + offset, 2)
+            item["t0"] = round(float(item.get("t0") or 0), 2)
+            item["t1"] = round(float(item.get("t1") or item["t0"]), 2)
             item["id"] = next_id
             item["seq"] = sequence
             item["live"] = status == TRANSCRIPTION_LIVE
@@ -139,7 +146,7 @@ async def run_meeting_chunk_stt(meeting_id: int, seq: int) -> int:
             next_id += 1
             new_rows.append(item)
 
-        meeting.transcription_json = existing + new_rows
+        meeting.transcription_json = kept + new_rows
         flag_modified(meeting, "transcription_json")
         await session.commit()
 
@@ -149,7 +156,7 @@ async def run_meeting_chunk_stt(meeting_id: int, seq: int) -> int:
             {"type": "segment", "segment": row, "status": TRANSCRIPTION_LIVE},
         )
         published += 1
-    logger.info("Meeting %s live STT seq=%s published=%s", mid, sequence, published)
+    logger.info("Meeting %s live STT seq=%s published=%s path=%s", mid, sequence, published, path.name)
     return published
 
 
@@ -247,31 +254,29 @@ async def run_meeting_transcribe(meeting_id: int, source: str | None = None) -> 
         audio_path = await asyncio.to_thread(normalize_recording, mid, recording)
     else:
         chunks = list_chunk_paths(mid)
-        merged = merge_chunks(mid)
+        merged = await asyncio.to_thread(merge_chunks, mid)
         audio_path = merged or (session_audio_path(mid) if session_audio_path(mid).exists() else None)
-        original = audio_path
+        # Seal the MediaRecorder WebM (or merged webm), not necessarily the WAV used for STT.
+        webm = session_audio_path(mid)
+        original = webm if webm.exists() else audio_path
 
-    if audio_path is None and chunks:
-        raw_segments: List[Dict[str, Any]] = []
-        offset = 0.0
-        for chunk in chunks:
-            part = transcribe_audio_file(chunk)
-            local_end = 0.0
-            for seg in part:
-                item = dict(seg)
-                if _is_system_segment(item):
-                    raw_segments.append(item)
-                    continue
-                t0_local = float(item.get("t0") or 0)
-                t1_local = float(item.get("t1") or t0_local)
-                item["t0"] = round(t0_local + offset, 2)
-                item["t1"] = round(t1_local + offset, 2)
-                local_end = max(local_end, t1_local)
-                raw_segments.append(item)
-            offset += max(local_end, CHUNK_DURATION_HINT)
-        segments_raw = raw_segments
-    elif audio_path is not None:
-        segments_raw = transcribe_audio_file(audio_path)
+    if audio_path is not None:
+        segments_raw = await asyncio.to_thread(transcribe_audio_file, audio_path)
+    elif chunks:
+        # Last-resort: rebuild a playable prefix of every chunk and transcribe once.
+        playable = await asyncio.to_thread(materialize_chunks_through, mid, len(chunks) - 1)
+        if playable is not None:
+            segments_raw = await asyncio.to_thread(transcribe_audio_file, playable)
+            original = original or playable
+        else:
+            segments_raw = [
+                {
+                    "id": 1,
+                    "speaker": "System",
+                    "text": "Audio chunks could not be decoded. Install ffmpeg and try recording again.",
+                    "dummy": False,
+                }
+            ]
     else:
         segments_raw = [
             {

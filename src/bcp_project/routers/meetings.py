@@ -39,7 +39,14 @@ from ..jobs.handlers import (
     run_meeting_transcribe,
 )
 from ..jobs.queue import enqueue_job, job_queue_enabled
-from ..meeting_audio import clear_meeting_audio, list_chunk_paths, recording_max_bytes, recording_path, save_chunk
+from ..meeting_audio import (
+    clear_meeting_audio,
+    list_chunk_paths,
+    recording_max_bytes,
+    recording_path,
+    save_chunk,
+    save_client_session,
+)
 from ..minutes_draft import (
     MINUTES_OFF,
     MINUTES_PENDING,
@@ -57,6 +64,7 @@ from ..models import (
 from ..notify import notify_meeting_email
 from ..diarization import speaker_labels
 from ..services.board_packages import meeting_packages_view
+from ..services.meeting_records import list_records, record_payload
 from ..services.minutes import (
     ACTION_STATUSES,
     MINUTES_DRAFT,
@@ -264,6 +272,9 @@ async def meeting_detail(
     transcript_segments = list(meeting.transcription_json or [])
     items = await list_minutes_items(db, meeting_id)
     recording = recording_path(meeting_id)
+    sealed = [record_payload(row) for row in await list_records(db, meeting_id)]
+    # Invitation + attendance lists for mapping diarized "Speaker N" labels to names.
+    name_suggestions = sorted({inv["username"] for inv in invitations} | set(attendance.keys()))
 
     return templates.TemplateResponse(
         request,
@@ -284,6 +295,8 @@ async def meeting_detail(
             "actions": items["actions"],
             "action_statuses": ACTION_STATUSES,
             "speakers": speaker_labels(transcript_segments),
+            "speaker_name_suggestions": name_suggestions,
+            "sealed_records": sealed,
             "recording_name": meeting.recording_filename if recording else None,
             "recording_max_mb": recording_max_bytes() // (1024 * 1024),
             "can_amend": current_user.role == Role.admin,
@@ -417,6 +430,31 @@ async def upload_transcription_chunk(
             "live_stt": True,
         }
     )
+
+
+@router.post("/api/meetings/{meeting_id}/transcription/session")
+async def upload_transcription_session(
+    meeting_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    session: UploadFile = File(...),
+) -> JSONResponse:
+    """Browser-assembled MediaRecorder blob (``new Blob(parts)``) for final STT.
+
+    Chunk uploads alone are WebM Cluster fragments; the full Blob is what the browser
+    plays and what Whisper must decode.
+    """
+    require_meeting_organizer(current_user)
+    meeting = await _load_meeting_or_404(meeting_id, db)
+    status_now = _meeting_transcription_status(meeting)
+    if status_now not in {TRANSCRIPTION_LIVE, TRANSCRIPTION_PROCESSING}:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Transcription is not active")
+    data = await session.read()
+    try:
+        path = save_client_session(meeting_id, data)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return JSONResponse({"ok": True, "bytes": len(data), "path": path.name})
 
 
 @router.post("/meetings/{meeting_id}/transcription/stop")

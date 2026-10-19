@@ -14,6 +14,7 @@ pip-wheel-metadata/
 
 # Virtual environments
 .venv/
+.venv-worker/
 venv/
 env/
 .python-version

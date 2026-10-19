@@ -144,6 +144,9 @@
   var stopping = false;
   var socket = null;
   var pollTimer = null;
+  /** Every MediaRecorder part, kept so we can upload one playable Blob on stop. */
+  var parts = [];
+  var recorderMime = "";
 
   function setMic(text, tone) {
     if (!micStatus) return;
@@ -290,6 +293,30 @@
     });
   }
 
+  /** Full assembled recording — required for final Whisper (fragments alone decode ~5s). */
+  function uploadSessionBlob() {
+    if (!parts.length) return Promise.resolve();
+    var mime = recorderMime || (parts[0] && parts[0].type) || "audio/webm";
+    var full = new Blob(parts, { type: mime });
+    if (!full.size) return Promise.resolve();
+    var body = new FormData();
+    body.append("session", full, "session.webm");
+    return fetch("/api/meetings/" + encodeURIComponent(meetingId) + "/transcription/session", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: csrfHeaders(),
+      body: body,
+    }).then(function (res) {
+      if (res.status === 401) {
+        var err = new Error("signed out");
+        err.signedOut = true;
+        throw err;
+      }
+      if (!res.ok) throw new Error("session upload failed");
+      return res.json();
+    });
+  }
+
   /** Upload one part, retrying with a short wait; a part that still fails is kept for "Try again". */
   function uploadBlob(blob, sequence) {
     if (!blob || !blob.size) return Promise.resolve();
@@ -369,10 +396,13 @@
           return;
         }
         mediaStream = stream;
+        parts = [];
         var mime = pickMime();
+        recorderMime = mime || "";
         mediaRecorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
         mediaRecorder.addEventListener("dataavailable", function (event) {
           if (!event.data || !event.data.size) return;
+          parts.push(event.data);
           var thisSeq = seq;
           seq += 1;
           uploadBlob(event.data, thisSeq);
@@ -424,15 +454,24 @@
         });
       })
       .then(function (go) {
-        if (go) {
-          submitStop();
-          return;
+        if (!go) {
+          if (stopBtn) {
+            stopBtn.disabled = false;
+            stopBtn.textContent = "Stop and save";
+          }
+          setMic("Recording stopped. Press Try again to send the missing parts, then Stop and save.", "error");
+          return null;
         }
-        if (stopBtn) {
-          stopBtn.disabled = false;
-          stopBtn.textContent = "Stop and save";
-        }
-        setMic("Recording stopped. Press Try again to send the missing parts, then Stop and save.", "error");
+        if (stopBtn) stopBtn.textContent = "Uploading the full recording…";
+        setMic("Uploading the full recording for transcription…");
+        return uploadSessionBlob().then(function () { return true; }).catch(function (err) {
+          console.warn(err);
+          // Still stop — server can fall back to chunk concat.
+          return true;
+        });
+      })
+      .then(function (go) {
+        if (go) submitStop();
       });
   }
 

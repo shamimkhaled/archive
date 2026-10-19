@@ -13,7 +13,10 @@ logger = logging.getLogger("bcp_project.asr")
 
 
 def _model_name() -> str:
-    return (os.getenv("WHISPER_MODEL") or "base").strip() or "base"
+    # Prefer the routed model so worker env (AI_STT_MODEL) and WHISPER_MODEL stay in sync.
+    return (
+        (os.getenv("AI_STT_MODEL") or os.getenv("WHISPER_MODEL") or "small").strip() or "small"
+    )
 
 
 def _device() -> str:
@@ -40,6 +43,35 @@ def whisper_available() -> bool:
             return True
         except ImportError:
             return False
+
+
+def stt_status() -> Dict[str, Any]:
+    """Configuration check for the admin page and /readyz. Loads no model."""
+    from .ai.providers import provider_configured
+    from .ai.routing import stt_route
+
+    route = stt_route()
+    issues: List[str] = []
+    detail = route.model
+    if route.provider == "none":
+        issues.append("AI_STT_PROVIDER=none (speech-to-text disabled)")
+    elif route.provider == "local_whisper":
+        if not whisper_available():
+            issues.append("faster-whisper (or openai-whisper) is not installed on this process")
+        detail = f"{route.model} on {_device()}"
+    elif route.provider == "local":
+        if not provider_configured("local", "stt"):
+            issues.append("LOCAL_STT_BASE_URL (or LOCAL_LLM_BASE_URL) is not set")
+    elif not provider_configured(route.provider, "stt"):
+        issues.append(f"{route.provider} credentials are not configured")
+    return {
+        "provider": route.provider,
+        "model": route.model,
+        "enabled": route.provider != "none",
+        "detail": detail,
+        "ready": route.provider != "none" and not issues,
+        "issues": issues,
+    }
 
 
 def _language(language: Optional[str]) -> Optional[str]:

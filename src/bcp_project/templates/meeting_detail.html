@@ -371,12 +371,17 @@
         <details class="speaker-names"{% if minutes_state == 'draft' %} open{% endif %}>
             <summary>Who was speaking ({{ speakers | length }})</summary>
             {% if minutes_state == 'draft' %}
-            <p class="muted small">The AI tells voices apart but doesn't know names. Type each person's name so the minutes use it.</p>
+            <p class="muted small">The AI tells voices apart but doesn't know names. Type each person's name from the invitation or attendance list so the minutes use it.</p>
+            {% if speaker_name_suggestions %}
+            <datalist id="speaker-name-suggestions">
+                {% for name in speaker_name_suggestions %}<option value="{{ name }}"></option>{% endfor %}
+            </datalist>
+            {% endif %}
             <form action="/meetings/{{ meeting.id }}/speakers" method="post" class="form-grid">
                 {% for sp in speakers %}
                 <div class="form-group">
                     <label for="speaker-{{ loop.index }}">{{ sp.label }} · spoke {{ sp.segments }} time{{ 's' if sp.segments != 1 else '' }}</label>
-                    <input id="speaker-{{ loop.index }}" type="text" name="name_{{ sp.label }}" value="{{ (meeting.speaker_map or {}).get(sp.label, '') }}" placeholder="{{ sp.name }}" maxlength="80">
+                    <input id="speaker-{{ loop.index }}" type="text" name="name_{{ sp.label }}" value="{{ (meeting.speaker_map or {}).get(sp.label, '') }}" placeholder="{{ sp.name }}" maxlength="80"{% if speaker_name_suggestions %} list="speaker-name-suggestions"{% endif %}>
                 </div>
                 {% endfor %}
                 <div><button type="submit" class="button-secondary">Save names</button></div>
@@ -407,9 +412,23 @@
     {% if minutes_state == 'approved' %}
     <p class="muted" style="margin-top:0;">Approved by {{ wf.approved_by }}{% if wf.approved_at %} on {{ wf.approved_at | local_dt }}{% endif %}. They can't be changed.{% if wf.doc_id %} <a href="/view/{{ wf.doc_id }}">Open the archived copy</a>.{% endif %}</p>
     {% elif minutes_state == 'in_review' %}
-    <p class="muted" style="margin-top:0;">Sent for approval by {{ wf.submitted_by }}{% if wf.submitted_at %} on {{ wf.submitted_at | local_dt }}{% endif %}. They can't be changed while they wait.{% if wf.four_eyes %} A different person must approve.{% endif %}</p>
+    <div class="banner warn" role="status"><strong>In review — not yet approved.</strong> Sent by {{ wf.submitted_by }}{% if wf.submitted_at %} on {{ wf.submitted_at | local_dt }}{% endif %}.{% if wf.four_eyes %} A different person must approve.{% endif %}</div>
     {% else %}
     <p class="muted" style="margin-top:0;">The AI writes a first draft from the recording. Check and correct it, then send it for approval. Only approved minutes go into the archive.</p>
+    {% endif %}
+
+    {% if mv.body_md and minutes_state != 'approved' and (mv.source == 'llm' or mv.source == 'template' or meeting.minutes_source in ['llm', 'template']) %}
+    <div class="banner warn" role="status">
+        <strong>AI-generated draft — not approved.</strong>
+        {% if mv.source == 'template' or meeting.minutes_source == 'template' %}
+        Built from a template fallback (no LLM). Edit before circulation.
+        {% else %}
+        Produced by the minutes model. Edit before circulation. Exports carry an AI-generated watermark.
+        {% endif %}
+        {% if meeting.minutes_edited_by %} Last edited by {{ meeting.minutes_edited_by }}.{% endif %}
+    </div>
+    {% elif mv.body_md and meeting.minutes_source == 'edited' and minutes_state != 'approved' %}
+    <div class="banner info" role="status"><strong>Human-edited draft.</strong> Originally AI-assisted; a secretary has changed the text.{% if meeting.minutes_edited_by %} Last edited by {{ meeting.minutes_edited_by }}.{% endif %}</div>
     {% endif %}
 
     {% if mv.generating %}
@@ -417,6 +436,9 @@
     {% elif mv.body_md and wf.locked %}
     <pre class="minutes-draft minutes-locked" aria-label="Minutes (can't be changed)">{{ meeting.minutes_draft }}</pre>
     <div class="form-actions-row" style="margin-top:0.75rem; gap:0.75rem; flex-wrap:wrap;">
+        {% if minutes_state != 'approved' %}
+        <a class="button button-secondary" href="/meetings/{{ meeting.id }}/minutes/draft.pdf">Download draft PDF (watermarked)</a>
+        {% endif %}
         {% if minutes_state == 'in_review' %}
         {% if wf.approve_blocker %}
         <p class="muted">{{ wf.approve_blocker }}</p>
@@ -449,6 +471,7 @@
         </div>
         <div class="form-actions-row">
             <button type="submit">Save changes</button>
+            <a class="button button-secondary" href="/meetings/{{ meeting.id }}/minutes/draft.pdf">Download draft PDF (watermarked)</a>
         </div>
     </form>
     <div class="form-actions-row" style="margin-top:0.75rem; gap:0.75rem; flex-wrap:wrap;">
@@ -469,7 +492,67 @@
     </form>
     {% endif %}
     {% endif %}
+
+    {% if minutes_state == 'approved' or sealed_records %}
+    <details class="more-details" id="minutes-provenance" style="margin-top:1rem;" open>
+        <summary>AI draft vs approved (provenance)</summary>
+        <p class="muted small">The sealed draft is the text at submit time. After approval, only the approved PDF is indexed.</p>
+        <p class="muted small">
+            {% if wf.submitted_by %}Submitted by {{ wf.submitted_by }}{% if wf.submitted_at %} on {{ wf.submitted_at | local_dt }}{% endif %}.{% endif %}
+            {% if wf.approved_by %} Approved by {{ wf.approved_by }}{% if wf.approved_at %} on {{ wf.approved_at | local_dt }}{% endif %}.{% endif %}
+        </p>
+        <pre id="minutes-diff" class="minutes-draft" aria-label="Draft vs approved diff" hidden></pre>
+        <p id="minutes-diff-empty" class="muted small">Loading provenance…</p>
+    </details>
+    <script>
+    (function () {
+      var pre = document.getElementById("minutes-diff");
+      var empty = document.getElementById("minutes-diff-empty");
+      if (!pre) return;
+      fetch("/api/meetings/{{ meeting.id }}/minutes/provenance", { credentials: "same-origin", headers: { "Accept": "application/json" } })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          var diff = data && data.diff;
+          if (diff && diff.unified) {
+            pre.hidden = false;
+            pre.textContent = diff.unified;
+            if (empty) empty.hidden = true;
+          } else if (empty) {
+            empty.textContent = diff && !diff.changed
+              ? "Sealed draft and current text match."
+              : "No sealed draft yet — send for approval to create one.";
+          }
+        })
+        .catch(function () { if (empty) empty.textContent = "Could not load provenance."; });
+    })();
+    </script>
+    {% endif %}
 </section>
+
+{% if sealed_records %}
+<section class="panel" id="sealed-records">
+    <div class="panel-head">
+        <h3>Linked meeting records</h3>
+        <span class="muted">{{ sealed_records | length }} sealed artifact{{ 's' if sealed_records | length != 1 else '' }}</span>
+    </div>
+    <p class="muted" style="margin-top:0;">Audio or video, transcript, each draft-minutes version, and approved minutes — write-once with SHA-256.</p>
+    <ul class="card-list" role="list">
+        {% for r in sealed_records %}
+        <li class="list-card">
+            <div class="list-card-top">
+                <p><strong>{{ r.label }}</strong> · v{{ r.version }}</p>
+                <span class="status-chip status-chip-neutral">{{ r.kind }}</span>
+            </div>
+            <p class="list-card-meta mono small">SHA-256 {{ r.sha256[:16] }}…{% if r.created_by %} · {{ r.created_by }}{% endif %}{% if r.created_at %} · {{ r.created_at }}{% endif %}</p>
+            <div class="list-card-actions">
+                <a class="button button-secondary" href="{{ r.download_url }}">Download</a>
+                {% if r.view_url %}<a class="button button-secondary" href="{{ r.view_url }}" data-nav>Open in archive</a>{% endif %}
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
+</section>
+{% endif %}
 
 {% set items_open = not wf.locked %}
 <section class="panel" id="decisions">

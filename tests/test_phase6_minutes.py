@@ -116,6 +116,47 @@ def test_minutes_pdf_escapes_markup():
     assert "<script>alert(1)</script> & co" in pages[0]
 
 
+def test_minutes_pdf_bank_template_letterhead_and_signatures(monkeypatch):
+    from bcp_project.minutes_pdf import render_minutes_pdf
+    from bcp_project.minutes_template import load_minutes_template
+
+    monkeypatch.setenv("MINUTES_TEMPLATE_LANG", "en")
+    monkeypatch.setenv("MINUTES_SHOW_SIGNATURES", "1")
+    monkeypatch.setenv("MINUTES_SHOW_LOGO", "1")
+    monkeypatch.setenv("MINUTES_HEADER_EN", "Sonali Bank PLC — Test Minutes")
+    monkeypatch.setenv("MINUTES_DOC_NUMBER_FMT", "MIN-{meeting_id}")
+    tmpl = load_minutes_template()
+    assert tmpl.lang == "en" and tmpl.header_en.startswith("Sonali Bank")
+    pdf, pages = render_minutes_pdf(
+        title="Board 99",
+        body_md="# Decisions\n\n- Approve the policy.",
+        meeting_date=datetime(2026, 10, 1, 10),
+        location="HQ",
+        version=3,
+        approved_by="chair",
+        approved_at=datetime(2026, 10, 2, 9),
+        sha256="b" * 64,
+        meeting_id=99,
+        template=tmpl,
+    )
+    assert pdf.startswith(b"%PDF")
+    text = " ".join(pages)
+    assert "Sonali Bank PLC — Test Minutes" in text
+    assert "Document no. MIN-99" in text
+    assert "Chairperson" in text
+    assert "Approved by chair" in text
+
+
+def test_minutes_template_bn_numbering(monkeypatch):
+    from bcp_project.minutes_template import format_doc_number, load_minutes_template
+
+    monkeypatch.setenv("MINUTES_TEMPLATE_LANG", "bn")
+    monkeypatch.setenv("MINUTES_DOC_NUMBER_FMT", "SB-{year}-MIN-{meeting_id}")
+    tmpl = load_minutes_template()
+    assert tmpl.prefer_bn and "সোনালী" in tmpl.header_bn
+    assert format_doc_number(meeting_id=7, version=1, meeting_date_year=2026) == "SB-2026-MIN-7"
+
+
 # --- Workflow --------------------------------------------------------------------------
 
 def test_edit_marks_source_edited_and_lock_blocks_changes(monkeypatch):
@@ -520,6 +561,25 @@ def test_sniff_recording_by_magic_bytes():
     assert sniff_recording(b"OggS\x00") == ".ogg"
     assert sniff_recording(b"%PDF-1.7") is None
     assert sniff_recording(b"MZ\x90\x00") is None
+
+
+def test_recording_kind_splits_video_from_audio():
+    from bcp_project.services.meeting_records import KIND_RECORDING, KIND_VIDEO, recording_kind
+
+    assert recording_kind(".wav") == KIND_RECORDING
+    assert recording_kind(".mp3") == KIND_RECORDING
+    assert recording_kind(".mp4") == KIND_VIDEO
+    assert recording_kind(".webm") == KIND_VIDEO
+    assert recording_kind(".mkv") == KIND_VIDEO
+
+
+def test_unified_minutes_diff_marks_changes():
+    from bcp_project.services.meeting_records import unified_minutes_diff
+
+    same = unified_minutes_diff(sealed_draft="A\nB", current="A\nB", from_label="draft", to_label="approved")
+    assert same["changed"] is False and same["unified"] == ""
+    changed = unified_minutes_diff(sealed_draft="A\nB", current="A\nC", from_label="draft", to_label="approved")
+    assert changed["changed"] is True and "-B" in changed["unified"] and "+C" in changed["unified"]
 
 
 @pytest.mark.asyncio

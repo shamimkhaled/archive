@@ -119,7 +119,11 @@ def stt_route() -> Route:
     raw = (_env("AI_STT_PROVIDER") or "local_whisper").lower()
     provider = "openai" if raw == "openai_whisper" else raw
     if provider == "local_whisper":
+        # Align with asr._model_name: WHISPER_MODEL / AI_STT_MODEL, default small.
         model = _env("AI_STT_MODEL") or _env("WHISPER_MODEL") or "small"
+    elif provider == "local":
+        # On-prem Speaches / faster-whisper server (see deploy/onprem/ai.env.example).
+        model = _env("AI_STT_MODEL") or _env("WHISPER_MODEL") or "Systran/faster-whisper-large-v3"
     else:
         model = _env("AI_STT_MODEL") or "whisper-1"
     return Route(task="stt", provider=provider, model=model)

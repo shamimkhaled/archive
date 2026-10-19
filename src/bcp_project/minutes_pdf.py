@@ -172,8 +172,10 @@ def render_minutes_pdf(**kwargs) -> Tuple[bytes, List[str]]:
     """Return (pdf_bytes, page_texts) where ``page_texts[i]`` is the text on page i+1.
 
     Keyword arguments: title, body_md, meeting_date, location, version, approved_by,
-    approved_at, sha256, and optionally label (footer wording, e.g. "Meeting transcript"). Shaped Bangla is tried first; if shaping fails on some input the
-    PDF is rendered unshaped rather than blocking approval.
+    approved_at, sha256, and optionally label (footer wording), meeting_id / doc_number
+    (letterhead numbering), and template (MinutesTemplate override). Shaped Bangla is
+    tried first; if shaping fails on some input the PDF is rendered unshaped rather than
+    blocking approval.
     """
     if _can_shape():
         try:
@@ -195,18 +197,28 @@ def _render(
     approved_at: datetime,
     sha256: str,
     label: str = "Approved minutes",
+    meeting_id: Optional[int] = None,
+    doc_number: Optional[str] = None,
+    template=None,
 ) -> Tuple[bytes, List[str]]:
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.lib.units import mm
-    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+    from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
+    from .minutes_template import format_doc_number, load_minutes_template
+
+    tmpl = template or load_minutes_template()
     styles = getSampleStyleSheet()
     body = ParagraphStyle("mbody", parent=styles["BodyText"], fontSize=10.5, leading=15)
     bullet = ParagraphStyle("mbullet", parent=body, leftIndent=12, bulletIndent=2)
     heads = {1: styles["Title"], 2: styles["Heading2"], 3: styles["Heading3"]}
     cell = ParagraphStyle("mcell", parent=body, fontSize=9.5, leading=12)
+    brand_line = ParagraphStyle(
+        "mbrand", parent=styles["Heading2"], fontSize=12, leading=15, spaceAfter=2, alignment=1
+    )
+    meta = ParagraphStyle("mmeta", parent=body, fontSize=9, leading=12, textColor=colors.HexColor("#333333"))
 
     page_texts: Dict[int, List[str]] = {}
 
@@ -262,9 +274,36 @@ def _render(
         canvas.drawRightString(A4[0] - 18 * mm, 10 * mm, f"Page {doc.page}")
         canvas.restoreState()
 
+    story = []
+    # --- Organisational letterhead (logo, bilingual header, document number) ---
+    if tmpl.show_logo and tmpl.logo_path is not None:
+        try:
+            story.append(Image(str(tmpl.logo_path), width=22 * mm, height=22 * mm, kind="proportional"))
+            story.append(Spacer(1, 4))
+        except Exception:
+            logger.exception("Minutes logo could not be embedded from %s", tmpl.logo_path)
+    if tmpl.lang in {"en", "both"}:
+        story.append(para(tmpl.header_en, brand_line))
+    if tmpl.lang in {"bn", "both"}:
+        story.append(para(tmpl.header_bn, brand_line))
+    number = doc_number or format_doc_number(
+        meeting_id=meeting_id,
+        version=version,
+        meeting_date_year=meeting_date.year if meeting_date else None,
+    )
+    if tmpl.prefer_bn:
+        number_line = f"নথি নং {number} · সংস্করণ {version}"
+    elif tmpl.bilingual:
+        number_line = f"Document no. / নথি নং {number} · Version / সংস্করণ {version}"
+    else:
+        number_line = f"Document no. {number} · Version {version}"
+    story.append(para(number_line, meta))
+    story.append(Spacer(1, 8))
+
     when = meeting_date.strftime("%d %b %Y, %H:%M UTC") if meeting_date else "—"
     header = f"Meeting: {title} · {when} · {location or '—'}"
-    story = [para(header, body), Spacer(1, 6)]
+    story.append(para(header, body))
+    story.append(Spacer(1, 6))
 
     lines = (body_md or "").replace("\r\n", "\n").split("\n")
     i = 0
@@ -282,7 +321,7 @@ def _render(
                     rows.append(cells)
                 i += 1
             # One Table per row so a page break never drops a row's text from the index.
-            width = max(len(r) for r in rows)
+            width = max(len(r) for r in rows) if rows else 1
             col = (A4[0] - 36 * mm) / width
             for n, r in enumerate(rows):
                 cells = r + [""] * (width - len(r))
@@ -303,6 +342,32 @@ def _render(
         else:
             story.append(para(stripped, body))
         i += 1
+
+    if tmpl.show_signatures and label.startswith("Approved"):
+        story.append(Spacer(1, 16))
+        if tmpl.prefer_bn:
+            sig_title = "স্বাক্ষর"
+            roles = tmpl.signature_bn
+        elif tmpl.bilingual:
+            sig_title = "Signatures / স্বাক্ষর"
+            bn = list(tmpl.signature_bn) + [""] * len(tmpl.signature_en)
+            roles = tuple(f"{en} / {bn[i]}" if bn[i] else en for i, en in enumerate(tmpl.signature_en))
+        else:
+            sig_title = "Signatures"
+            roles = tmpl.signature_en
+        story.append(para(sig_title, heads[2]))
+        sig_paras = [para(f"________________________  {role}  Date: ________", meta) for role in roles]
+        if sig_paras:
+            col_w = (A4[0] - 36 * mm) / max(len(sig_paras), 1)
+            sig_table = Table([sig_paras], colWidths=[col_w] * len(sig_paras), hAlign="LEFT")
+            sig_table.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 2)]))
+            story.append(tagged(sig_table, " | ".join(roles)))
+        story.append(
+            tagged(
+                para(f"Approved by {approved_by} on {approved_at.strftime('%Y-%m-%d %H:%M')} UTC", meta),
+                f"Approved by {approved_by}",
+            )
+        )
 
     buffer = io.BytesIO()
     doc = _Doc(
